@@ -1,6 +1,29 @@
 # ADR-004 — RAG stack: EmbeddingGemma + sqlite-vec, corpus prebuilt & bundled
 
-**Status:** Accepted · **Date:** 2026-07-04
+**Status:** Accepted · **Date:** 2026-07-04 · **Revisit flagged:** 2026-07-05
+
+> **Update (2026-07-05):** While wiring the generation spike we found `flutter_gemma` now
+> ships its **own** on-device RAG stack — **EmbeddingGemma embeddings** (`flutter_gemma_embeddings`)
+> plus a vector store (`flutter_gemma_rag_qdrant` = qdrant-edge, or `flutter_gemma_rag_sqlite`).
+> This could replace our hand-rolled `sqlite-vec` wiring and give us EmbeddingGemma query
+> embedding in the same runtime as generation. **Caveat:** those embeddings run via LiteRT FFI
+> = **arm64-only** (won't run on the x86_64 emulator), and we still prefer to **prebuild the
+> corpus off-device** (Docling + captioning + embeddings) regardless. Decision to adopt
+> `flutter_gemma_rag_sqlite` vs. raw `sqlite-vec` is **deferred to the RAG milestone on real
+> hardware**; the "prebuilt, bundled corpus" principle below is unchanged either way.
+
+> **Build-stage decisions (2026-07-05, implemented in `pipeline/src/build_db.py`):**
+> - **Embedder = `bge-small-en-v1.5`** (ungated, 384-dim, English) via **fastembed/ONNX**
+>   (no torch) — chosen over gated EmbeddingGemma to avoid HF-token/license friction. The
+>   on-device query embedder (arm64, later) must match this model.
+> - **Vector store = plain SQLite + brute-force cosine**, NOT the sqlite-vec extension. At
+>   134 chunks × 384-dim, brute-force is instant and needs no native extension on-device —
+>   simplest robust path. Embeddings stored as float32 BLOBs in a `chunks` table; the built
+>   `curriculum.db` (~520 KB) is bundled at `app/assets/rag/curriculum.db`.
+> - **Retrieval validated off-device**: sample science queries return the correct
+>   chapter/section at 0.76–0.85 cosine. `block_type` metadata lets generation prefer
+>   `content` over `exercise` chunks.
+> - On-device query embedding + wiring remains for the arm64-device phase.
 
 ## Context
 

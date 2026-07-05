@@ -1,6 +1,34 @@
 # ADR-005 — PDF preprocessing: watermark cleanup → Docling OCR → VLM captioning → SLO chunking
 
-**Status:** Accepted · **Date:** 2026-07-04
+**Status:** Accepted · **Date:** 2026-07-04 · **POC-validated:** 2026-07-05
+
+> **POC results (2026-07-05, `pipeline/poc/watermark_ocr_poc.py`):** Tesseract OCR on the
+> scanned pages produces **clean, accurate body text** on the tested pages (10, 18, 20, 21, 30).
+> Findings that shape the full pipeline:
+> - **The watermark does not pollute OCR** — 0 "web version"/"not for sale" hits in raw *or*
+>   cleaned text; it's too faint for Tesseract to read. So watermark removal is **only needed
+>   for figure crops** (so the VLM captioner isn't confused), not for text. Downgraded from a
+>   blocking step to a figure-crop-only step.
+> - **Figures inject noise** — diagram labels get interleaved into body text. Confirms figures
+>   must be **detected and excluded** from text, then routed to VLM captioning.
+> - **Structure is regular** — bold headings, numbered sections, and **color-coded boxes**
+>   (Do-you-know / Inquiry / Activity / Key-Points) — ideal for block typing.
+> - **Decision confirmed: use Docling** (heavier but layout-aware) for structure + reading
+>   order + figure regions, **configured to use Tesseract as its OCR engine** (validated above,
+>   lighter than Docling's default EasyOCR). Runtime ≈ **47 s/page** (~2 h for the full book) →
+>   run as a background batch. Docling test (pages 10–12) cleanly detected 5 headings + 10
+>   figures separated from text.
+>
+> **Watermark — known limitation (pixel sampling, 2026-07-05):** the watermark strokes are
+> **neutral grey with values that overlap black text** (watermark V≈75–199 vs text V≈10–106,
+> both saturation≈1). They differ only in shape/position, so **simple thresholding cannot fully
+> remove the watermark without eroding text.** We therefore: (a) apply a **conservative
+> color-preserving lift** (low-saturation, mid/high-value → white) that clears the light haze
+> and keeps colored figures (`src/preprocess.py`); (b) **filter residual watermark strings**
+> ("web version", "pctb", "not for sale", "pesrp") from OCR text downstream; (c) instruct the
+> VLM captioner to ignore watermark text on figure crops. Full removal (frequency-domain /
+> inpainting) is a **future option only if RAG quality demands it** — body-text OCR is already
+> accurate, and the residual mainly affects dense figure-overlap zones.
 
 ## Context
 

@@ -2,6 +2,18 @@
 
 **Status:** Proposed (decision finalized after Week-1 spike) · **Date:** 2026-07-04
 
+> **Spike checkpoint (2026-07-05) — integration proven, model choice still open.**
+> The generation pipeline runs **end-to-end inside the Rahbar AI app** on the x86_64
+> emulator: pick model → download (`.task`) → load (MediaPipe, CPU) → **stream tokens** →
+> render. Smoke-tested with **SmolLM 135M** on the plant-cell MCQ prompt — coherent,
+> on-topic output; ~978 token-chunks in ~15.7 s (**~62 chunks/s**). Caveats: (1) this is
+> **x86_64 emulator CPU**, *not* a real budget-phone number — meaningless for perf ranking;
+> (2) SmolLM over-generated (ignored "2 questions") — expected at 135M; (3) output is
+> **ungrounded** (no RAG yet). The real Gemma 3n E2B / Qwen bake-off still needs **arm64
+> hardware** (`.litertlm` + embeddings are arm64-only — see [ADR-002](ADR-002-on-device-inference.md)).
+> Harness: `app/lib/features/generation/` (`model_spike_screen.dart`, `inference_service.dart`,
+> `spike_models.dart`).
+
 ## Context
 
 The generation model must produce credible, curriculum-grounded **lesson plans and MCQs**
