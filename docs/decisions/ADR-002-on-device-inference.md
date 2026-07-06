@@ -32,6 +32,23 @@ well (e.g. a specific Qwen3/Llama quant), GGUF + llama.cpp gives us the widest s
 the cost of more glue code. We keep the generation layer behind an interface so switching
 engines does not ripple through the app.
 
+> **⚠️ DECISION REVERSED for budget hardware (2026-07-06, on-device test).** On the real
+> target-class device (Redmi Note 12, Snapdragon 680/685, Adreno budget GPU), **flutter_gemma /
+> LiteRT is NOT viable**:
+> - **GPU delegate fails** — `Invalid work group size {1,1,512}` / "Failed to invoke the
+>   compiled model". The budget Adreno GPU can't run LiteRT's OpenCL kernels. So LiteRT's main
+>   selling point (GPU offload) is unavailable on exactly the devices we target.
+> - **LiteRT CPU is too slow** — Gemma 4 E2B (`.litertlm`) ran at **~1.4 tok/s** (≈9 min for an
+>   800-token lesson plan) at ~1.6 GB RAM. Quality was excellent, but the speed is unusable.
+> - **llama.cpp Q4 crushes it on the same phone**: Llama 3.2 1B **7.5 tok/s @ 0.9 GB**, Qwen3
+>   1.7B **6.5 tok/s @ 1.4 GB** — ~5× faster and lighter (better ARM CPU kernels + aggressive Q4).
+>
+> **New decision: `llama.cpp` / GGUF is the PRIMARY runtime for budget devices** (this ADR's
+> former "fallback" and "primary" swap). Needs a Flutter FFI binding (`fllama` /
+> `llama_cpp_dart`) — more integration work than flutter_gemma, but the only path fast enough.
+> flutter_gemma/LiteRT stays only as an option for higher-end phones with a working GPU delegate.
+> Model target narrows to **1–1.7 B Q4** (Llama 3.2 1B / Qwen3 1.7B). See [ADR-003](ADR-003-generation-model.md).
+
 ## Implementation notes (verified while wiring the spike, 2026-07-05)
 
 `flutter_gemma` 1.2.0 is **modularized**: a thin core + opt-in engine packages. You add the

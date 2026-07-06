@@ -1,72 +1,78 @@
 import 'package:flutter_gemma/flutter_gemma.dart';
 
-/// A candidate on-device model for the Week-1 generation spike.
+/// A candidate on-device model for the generation spike.
 ///
-/// IMPORTANT (see docs/decisions/ADR-002 & ADR-003): on an **x86_64 Android
-/// emulator**, only MediaPipe `.task` text inference runs — `.litertlm` and
-/// LiteRT embeddings are `arm64-v8a` only. All models below are therefore
-/// `.task` (MediaPipe) and **ungated** (`needsAuth: false`) so the spike needs
-/// no HuggingFace token. The real target model (Gemma 3n E2B) is gated and its
-/// `.litertlm` build is arm64-only, so its true latency/quality must be
-/// measured on a physical arm64 device — deferred, by design.
+/// See docs/decisions/ADR-002 & ADR-003. `.task` (MediaPipe) models run on the
+/// x86_64 emulator and arm64; `.litertlm` (LiteRT-LM) models are **arm64-only**
+/// but GPU-capable — the path for the mobile-optimized Gemma candidate.
+enum ModelFormat { task, litertlm }
+
 class SpikeModel {
   const SpikeModel({
     required this.id,
     required this.displayName,
-    required this.url,
     required this.sizeLabel,
     required this.modelType,
+    required this.format,
     required this.note,
+    this.url,
+    this.localFile,
+    this.defaultBackend = PreferredBackend.cpu,
   });
 
   final String id;
   final String displayName;
-  final String url;
   final String sizeLabel;
   final ModelType modelType;
+  final ModelFormat format;
   final String note;
 
-  /// The MediaPipe `.task` filename (last path segment of [url]).
-  String get filename => url.split('/').last;
+  /// Network source (downloaded on-device). Null if [localFile] is used.
+  final String? url;
+
+  /// Filename in the app's external files dir (pushed via USB to avoid a slow
+  /// on-device download). Resolved against getExternalStorageDirectory().
+  final String? localFile;
+
+  /// GPU generally only usable for `.litertlm` on a real arm64 device.
+  final PreferredBackend defaultBackend;
+
+  /// Model id flutter_gemma tracks it by (its filename).
+  String get filename => localFile ?? (url ?? '').split('/').last;
 }
 
-/// Curated, ungated `.task` models runnable on the x86_64 emulator, smallest
-/// first. Start with SmolLM to prove the pipeline instantly, then step up.
+/// The lead candidate this session: mobile-optimized Gemma, ungated, loaded from
+/// a USB-pushed local file, run on the GPU via LiteRT.
 const List<SpikeModel> kSpikeModels = [
   SpikeModel(
-    id: 'smollm-135m',
-    displayName: 'SmolLM 135M Instruct',
-    url:
-        'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    sizeLabel: '135 MB',
-    modelType: ModelType.general,
-    note: 'Tiny — smoke-tests the pipeline. Quality is low; English only.',
+    id: 'gemma-4-e2b',
+    displayName: 'Gemma 4 E2B (LiteRT)',
+    sizeLabel: '2.6 GB',
+    modelType: ModelType.gemma4,
+    format: ModelFormat.litertlm,
+    localFile: 'gemma-4-e2b.litertlm',
+    defaultBackend: PreferredBackend.gpu,
+    note: 'Mobile-optimized, ungated. LiteRT can run it <~1.5GB and use the GPU.',
   ),
-  SpikeModel(
-    id: 'qwen25-0_5b',
-    displayName: 'Qwen 2.5 0.5B Instruct',
-    url:
-        'https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    sizeLabel: '0.5 GB',
-    modelType: ModelType.qwen,
-    note: 'First genuinely coherent tier; fits comfortably in the 3 GB emulator.',
-  ),
+  // MediaPipe `.task` fallbacks (also run on emulator). Ungated.
   SpikeModel(
     id: 'qwen25-1_5b',
-    displayName: 'Qwen 2.5 1.5B Instruct',
-    url:
-        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
+    displayName: 'Qwen 2.5 1.5B (MediaPipe)',
     sizeLabel: '1.6 GB',
     modelType: ModelType.qwen,
-    note: 'Closer to target quality; watch emulator RAM headroom.',
+    format: ModelFormat.task,
+    url:
+        'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
+    note: 'CPU-only .task path; comparison point.',
   ),
   SpikeModel(
-    id: 'deepseek-r1-1_5b',
-    displayName: 'DeepSeek R1 Distill Qwen 1.5B',
+    id: 'smollm-135m',
+    displayName: 'SmolLM 135M (MediaPipe)',
+    sizeLabel: '135 MB',
+    modelType: ModelType.general,
+    format: ModelFormat.task,
     url:
-        'https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/deepseek_q8_ekv1280.task',
-    sizeLabel: '1.7 GB',
-    modelType: ModelType.deepSeek,
-    note: 'Reasoning-tuned; has a thinking phase.',
+        'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct_multi-prefill-seq_q8_ekv1280.task',
+    note: 'Tiny smoke-test model.',
   ),
 ];

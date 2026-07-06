@@ -44,6 +44,7 @@ dependencies:
   mobile_scanner: ^7.2.0
   drift_flutter: ^0.3.0
   flutter_gemma_mediapipe: ^1.0.3
+  flutter_gemma_litertlm: ^1.0.2
 
 dev_dependencies:
   flutter_test:

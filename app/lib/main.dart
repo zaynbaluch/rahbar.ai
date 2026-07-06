@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 
 import 'core/theme.dart';
@@ -8,12 +9,11 @@ import 'features/generation/model_spike_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Register the on-device inference engine(s). MediaPipe runs `.task` text
-  // inference and is the only path that works on the x86_64 emulator (see
-  // docs/decisions/ADR-002). On a physical arm64 device we'll also add
-  // LiteRtLmEngine (.litertlm) and the embeddings backend for RAG.
+  // Register on-device inference engines. MediaPipe runs `.task` models (works on
+  // x86_64 emulator + arm64); LiteRT-LM runs `.litertlm` models (arm64 device only,
+  // GPU-capable) — the path for our mobile-optimized Gemma candidate. See ADR-002/003.
   await FlutterGemma.initialize(
-    inferenceEngines: const [MediaPipeEngine()],
+    inferenceEngines: const [MediaPipeEngine(), LiteRtLmEngine()],
   );
 
   runApp(const RahbarApp());
