@@ -5,7 +5,7 @@ import 'package:flutter_gemma/flutter_gemma.dart';
 /// See docs/decisions/ADR-002 & ADR-003. `.task` (MediaPipe) models run on the
 /// x86_64 emulator and arm64; `.litertlm` (LiteRT-LM) models are **arm64-only**
 /// but GPU-capable — the path for the mobile-optimized Gemma candidate.
-enum ModelFormat { task, litertlm }
+enum ModelFormat { task, litertlm, gguf }
 
 class SpikeModel {
   const SpikeModel({
@@ -44,6 +44,16 @@ class SpikeModel {
 /// The lead candidate this session: mobile-optimized Gemma, ungated, loaded from
 /// a USB-pushed local file, run on the GPU via LiteRT.
 const List<SpikeModel> kSpikeModels = [
+  // Primary path: llama.cpp GGUF (fastest + lightest on budget CPU — see ADR-003).
+  SpikeModel(
+    id: 'llama-3.2-1b-gguf',
+    displayName: 'Llama 3.2 1B (llama.cpp)',
+    sizeLabel: '0.8 GB',
+    modelType: ModelType.general,
+    format: ModelFormat.gguf,
+    localFile: 'llama-3.2-1b.gguf',
+    note: 'Q4 GGUF via llama.cpp. Fastest viable option measured (~7.5 tok/s CPU).',
+  ),
   SpikeModel(
     id: 'gemma-4-e2b',
     displayName: 'Gemma 4 E2B (LiteRT)',
