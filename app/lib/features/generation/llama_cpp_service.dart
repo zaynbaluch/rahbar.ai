@@ -53,6 +53,7 @@ class LlamaCppService {
         ..nThreads = nThreads
         ..nThreadsBatch = nThreads,
       samplingParams: SamplerParams(),
+      verbose: true, // surface llama.cpp's native logs (else they're silenced)
     );
     _parent = LlamaParent(load);
     await _parent!.init();
