@@ -48,6 +48,23 @@ engines does not ripple through the app.
 > `llama_cpp_dart`) — more integration work than flutter_gemma, but the only path fast enough.
 > flutter_gemma/LiteRT stays only as an option for higher-end phones with a working GPU delegate.
 > Model target narrows to **1–1.7 B Q4** (Llama 3.2 1B / Qwen3 1.7B). See [ADR-003](ADR-003-generation-model.md).
+>
+> **✅ WORKING ON-DEVICE (2026-07-07).** Integrated `llama_cpp_dart` v0.2.0 (vendored at
+> `third_party/`, path dep; native libs built from its pinned llama.cpp submodule by
+> `scripts/setup-llama.sh`, bundled in `app/.../jniLibs/`). App: `LlamaCppService` (isolate,
+> CPU, streaming). **Llama 3.2 1B Q4 generates in-app at ~7.0 tok/s — matching the `llama-bench`
+> prediction (7.5).** Four non-obvious fixes were required (all captured in `setup-llama.sh` /
+> `llama_cpp_service.dart`), documented so we never re-debug them:
+> 1. **`add_compile_definitions(GGML_USE_CPU)`** — the package's wrapper CMake set `GGML_USE_CPU`
+>    only on its `mtmd` target, not on `ggml` (where `ggml-backend-reg.cpp` lives), so the CPU
+>    backend was never statically registered → `llama_model_load: available devices: 0`.
+> 2. **`ModelParams.mainGpu = -1`** — with 0 GPU devices (Vulkan off), the default `main_gpu=0`
+>    fails llama.cpp's `main_gpu >= devices.size()` validation. `-1` skips it → CPU fallback.
+> 3. **`BUILD_SHARED_LIBS=ON`** (separate libs) — static-linking into one `libmtmd.so` stripped
+>    FFI-only symbols (`undefined symbol: llama_sampler_chain_init`). Separate `libllama.so`
+>    exports all API symbols.
+> 4. **`ANDROID_STL=c++_shared`** + bundle `libc++_shared.so`; and the app copies the GGUF from
+>    FUSE external storage to internal ext4 (llama.cpp's native `open()` fails on FUSE).
 
 ## Implementation notes (verified while wiring the spike, 2026-07-05)
 

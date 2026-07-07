@@ -17,11 +17,22 @@ fi
 # --- install into the app's jniLibs. Requires the Android NDK.
 NDK=${ANDROID_NDK:-/opt/android-sdk/ndk/28.2.13676358}
 SRC=third_party/llama_cpp_dart/src
-# ANDROID_STL=c++_shared is REQUIRED: with the default c++_static, each .so gets
-# its own C++ runtime and the ggml CPU-backend's static-initializer registration
-# never runs across the separate shared libs → "available devices: 0" at model
-# load. Shared STL fixes it; libc++_shared.so must be bundled too. (Also set
-# GGML_VULKAN=OFF in src/CMakeLists.txt for the CPU-only build.)
+CM="$SRC/CMakeLists.txt"
+
+# Patch the package's wrapper CMakeLists (idempotent). Two fixes needed to make
+# the CPU backend register in an Android app (else model load = "available
+# devices: 0"):
+#   1. add_compile_definitions(GGML_USE_CPU) — the wrapper only sets GGML_USE_CPU
+#      on its `mtmd` target, NOT on the `ggml` target where ggml-backend-reg.cpp
+#      lives, so the CPU backend is never statically registered. Force it globally.
+#   2. GGML_VULKAN OFF — CPU-only build for budget devices (no working Adreno GPU).
+# (Also: keep BUILD_SHARED_LIBS=ON so libllama.so exports all FFI symbols like
+# llama_sampler_chain_init; ANDROID_STL=c++_shared; and set ModelParams.mainGpu=-1
+# in Dart so load validation passes with 0 GPU devices — see llama_cpp_service.dart.)
+grep -q "add_compile_definitions(GGML_USE_CPU)" "$CM" || \
+  sed -i 's|add_subdirectory(llama.cpp)|add_compile_definitions(GGML_USE_CPU)\nadd_subdirectory(llama.cpp)|' "$CM"
+sed -i 's|set(GGML_VULKAN ON |set(GGML_VULKAN OFF |' "$CM"
+
 cmake -B "$SRC/build-android" -S "$SRC" \
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
