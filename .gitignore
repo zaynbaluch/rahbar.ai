@@ -2,10 +2,11 @@
 data/raw/
 data/processed/
 
-# Bundled model weights & built vector DB (large binaries)
+# Bundled model weights (large binaries) — GGUFs are USB-pushed, not in VCS.
 app/assets/models/*
-app/assets/rag/*.db
 !app/assets/models/.gitkeep
+# The prebuilt vector DB is a small (~627 KB) REQUIRED bundled asset — track it so
+# the app builds from a fresh clone without re-running the Python pipeline.
 !app/assets/rag/.gitkeep
 
 # Flutter / Dart

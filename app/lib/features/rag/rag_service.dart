@@ -1,0 +1,206 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:llama_cpp_dart/llama_cpp_dart.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+/// One retrieved curriculum excerpt.
+class Chunk {
+  const Chunk({
+    required this.id,
+    required this.chapter,
+    required this.title,
+    required this.text,
+    required this.pageStart,
+    required this.pageEnd,
+    required this.score,
+  });
+  final String id;
+  final int chapter;
+  final String title;
+  final String text;
+  final int pageStart;
+  final int pageEnd;
+  final double score;
+}
+
+/// A grounded prompt split into the two chat roles.
+class GroundedPrompt {
+  const GroundedPrompt(this.system, this.user, this.hits);
+  final String system;
+  final String user;
+  final List<Chunk> hits;
+}
+
+/// On-device RAG: embed the topic with **bge-small-en-v1.5** (GGUF, CLS pooling)
+/// via llama.cpp, brute-force cosine over the bundled `curriculum.db` (167 chunks,
+/// 384-dim float32 BLOBs), then assemble a curriculum-grounded prompt. This mirrors
+/// the off-device `pipeline/src/rag_prompt.py` exactly — verified identical retrieval
+/// (cosine 0.9999998 query parity) so on-device results match the validated pipeline.
+/// See docs/decisions/ADR-004.
+class RagService {
+  static const String embedModelFile = 'bge-small-en-v1.5.gguf';
+  static const int dim = 384;
+
+  LlamaParent? _embedder;
+  Database? _db;
+  final Map<String, String> _templates = {}; // kind -> raw template text
+
+  bool get isReady => _embedder != null && _db != null;
+
+  /// Exercise blocks are question lists, not explanatory facts — exclude them from
+  /// grounding (matches rag_prompt.py EXCLUDE_TYPES + the OCR-tolerant title regex).
+  static final RegExp _exerciseTitle = RegExp(
+    r'encircle|select\s*the|give\s*answer|write\s*short|construct(ed)?\s*response|'
+    r'answer\s*the\s*following|briefly\s*describe|fill\s*in|differentiate|'
+    r'investigate|project|tick\b|match\s*the',
+    caseSensitive: false,
+  );
+
+  bool _isExercise(String blockType, String title) =>
+      blockType == 'exercise' || _exerciseTitle.hasMatch(title);
+
+  /// Load the embedding model + curriculum DB + prompt templates. Idempotent.
+  Future<void> init() async {
+    if (isReady) return;
+
+    // --- curriculum.db: copy the read-only asset to a file sqlite3 can open. ---
+    final support = await getApplicationSupportDirectory();
+    final dbPath = p.join(support.path, 'curriculum.db');
+    final dbBytes = await rootBundle.load('assets/rag/curriculum.db');
+    await File(dbPath).writeAsBytes(dbBytes.buffer.asUint8List(), flush: true);
+    _db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
+
+    // --- prompt templates (bundled copies of prompts/*.md). ---
+    _templates['mcq'] = await rootBundle.loadString('assets/prompts/mcq.md');
+    _templates['lesson'] =
+        await rootBundle.loadString('assets/prompts/lesson_plan.md');
+
+    // --- bge embedder: GGUF in an embeddings-only context, CLS pooling. ---
+    Llama.libraryPath = 'libmtmd.so';
+    final modelPath = await _internalModelPath(embedModelFile);
+    final load = LlamaLoad(
+      path: modelPath,
+      modelParams: ModelParams()
+        ..nGpuLayers = 0
+        ..mainGpu = -1,
+      contextParams: ContextParams()
+        ..nCtx = 512
+        ..nBatch = 512
+        ..nThreads = 4
+        ..nThreadsBatch = 4
+        ..embeddings = true // embeddings-only context
+        ..poolingType = LlamaPoolingType.cls, // bge-small-en-v1.5 uses CLS pooling
+      samplingParams: SamplerParams(),
+      verbose: false,
+    );
+    _embedder = LlamaParent(load);
+    await _embedder!.init();
+  }
+
+  /// Retrieve the top-[k] non-exercise chunks for [query] by cosine similarity.
+  /// Default k=4: keeps the highest-similarity sections while trimming ~350–1500
+  /// prefill tokens vs k=6 (meaningful on the budget CPU) — see ADR-003 speed note.
+  Future<List<Chunk>> retrieve(String query, {int k = 4}) async {
+    final embedder = _embedder;
+    final db = _db;
+    if (embedder == null || db == null) {
+      throw StateError('RagService not initialized — call init() first.');
+    }
+    final q = Float32List.fromList(
+      (await embedder.getEmbeddings(query)).map((e) => e.toDouble()).toList(),
+    );
+
+    final rows = db.select(
+      'SELECT id, chapter, title, block_type, page_start, page_end, text, '
+      'embedding FROM chunks',
+    );
+    final scored = <Chunk>[];
+    for (final r in rows) {
+      final blockType = (r['block_type'] as String?) ?? '';
+      final title = (r['title'] as String?) ?? '';
+      if (_isExercise(blockType, title)) continue;
+      final blob = r['embedding'] as Uint8List;
+      final vec = blob.buffer.asFloat32List(blob.offsetInBytes, dim);
+      double sim = 0;
+      for (var i = 0; i < dim; i++) {
+        sim += q[i] * vec[i]; // both L2-normalized → dot == cosine
+      }
+      scored.add(Chunk(
+        id: r['id'] as String,
+        chapter: (r['chapter'] as int?) ?? 0,
+        title: title,
+        text: (r['text'] as String?) ?? '',
+        pageStart: (r['page_start'] as int?) ?? 0,
+        pageEnd: (r['page_end'] as int?) ?? 0,
+        score: sim,
+      ));
+    }
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(k).toList();
+  }
+
+  /// Build the grounded (system, user) prompt for [kind] ('mcq' | 'lesson').
+  Future<GroundedPrompt> assemble(String kind, String topic, {int k = 4}) async {
+    final template = _templates[kind];
+    if (template == null) throw ArgumentError('Unknown prompt kind: $kind');
+    final hits = await retrieve(topic, k: k);
+
+    final filled = template
+        .replaceAll('{{topic}}', topic)
+        .replaceAll('{{slos}}', _deriveSlos(hits))
+        .replaceAll('{{context}}', _buildContext(hits));
+
+    // Templates are "… ## SYSTEM … ## USER …". Split into the two roles.
+    final afterSys = filled.split('## SYSTEM');
+    final parts = afterSys.last.split('## USER');
+    final system = parts.first.trim();
+    final user = parts.length > 1 ? parts[1].trim() : '';
+    return GroundedPrompt(system, user, hits);
+  }
+
+  String _buildContext(List<Chunk> hits) {
+    final blocks = <String>[];
+    for (var i = 0; i < hits.length; i++) {
+      final h = hits[i];
+      final pages =
+          h.pageStart == h.pageEnd ? 'p${h.pageStart}' : 'p${h.pageStart}-${h.pageEnd}';
+      blocks.add('[Excerpt ${i + 1} — Ch ${h.chapter}, ${h.title} ($pages)]\n'
+          '${h.text.trim()}');
+    }
+    return blocks.join('\n\n');
+  }
+
+  /// Rough SLO list = the distinct section titles retrieved (v1, matches Python).
+  String _deriveSlos(List<Chunk> hits) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final h in hits) {
+      final t = h.title.trim();
+      if (t.isNotEmpty && seen.add(t)) out.add(t);
+    }
+    return out.take(4).join('; ');
+  }
+
+  /// Same FUSE→internal copy trick as LlamaCppService (native open() fails on FUSE).
+  Future<String> _internalModelPath(String fileName) async {
+    final ext = await getExternalStorageDirectory();
+    final internal = await getApplicationSupportDirectory();
+    final src = File(p.join(ext!.path, fileName));
+    final dst = File(p.join(internal.path, fileName));
+    final needCopy =
+        !await dst.exists() || (await dst.length()) != (await src.length());
+    if (needCopy) await src.copy(dst.path);
+    return dst.path;
+  }
+
+  Future<void> dispose() async {
+    await _embedder?.dispose();
+    _embedder = null;
+    _db?.close();
+    _db = null;
+  }
+}
