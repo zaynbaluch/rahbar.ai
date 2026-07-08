@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:printing/printing.dart';
 
-import '../export/pdf_export.dart';
+import '../library/library_screen.dart';
+import '../library/library_store.dart';
+import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
 import 'llama_cpp_service.dart';
 import 'mcq_parser.dart';
+import 'mcq_test_view.dart';
 import 'model_spike_screen.dart';
 
 /// The real generate-and-review flow: pick a topic, the app runs **on-device RAG**
@@ -25,6 +27,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
 
   final _rag = RagService();
   final _llama = LlamaCppService();
+  final _library = LibraryStore();
   final _topic = TextEditingController(text: 'the human digestive system');
 
   String _kind = 'mcq'; // 'mcq' | 'lesson'
@@ -32,7 +35,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
   List<Chunk> _hits = [];
   String _output = '';
   McqTest? _test; // parsed structured test (MCQ mode only)
-  bool _showAnswers = false;
+  bool _saved = false;
   String? _error;
 
   Duration _elapsed = Duration.zero;
@@ -57,7 +60,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       _error = null;
       _output = '';
       _test = null;
-      _showAnswers = false;
+      _saved = false;
       _hits = [];
       _chunks = 0;
       _elapsed = Duration.zero;
@@ -101,14 +104,22 @@ class _GenerationScreenState extends State<GenerationScreen> {
     }
   }
 
-  Future<void> _exportPdf() async {
-    final test = _test;
-    if (test == null) return;
-    final bytes = await PdfExport.build(test);
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Rahbar-${PdfExport.testId(test.topic)}',
+  Future<void> _save() async {
+    if (_output.isEmpty) return;
+    final saved = SavedTest(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      kind: _kind,
+      topic: _topic.text.trim(),
+      rawOutput: _output,
+      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      excerptTitles: _hits.map((h) => h.title).toList(),
     );
+    await _library.save(saved);
+    if (mounted) {
+      setState(() => _saved = true);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Saved to library')));
+    }
   }
 
   String get _phaseLabel => switch (_phase) {
@@ -129,6 +140,15 @@ class _GenerationScreenState extends State<GenerationScreen> {
       appBar: AppBar(
         title: const Text('Rahbar AI'),
         actions: [
+          IconButton(
+            tooltip: 'Saved tests',
+            icon: const Icon(Icons.folder_outlined),
+            onPressed: _busy
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LibraryScreen()),
+                    ),
+          ),
           IconButton(
             tooltip: 'Model spike',
             icon: const Icon(Icons.science_outlined),
@@ -227,15 +247,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
               // lesson plans (which aren't in the MCQ schema).
               if (_test != null && _test!.questions.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                _TestHeader(
-                  test: _test!,
-                  showAnswers: _showAnswers,
-                  onToggle: () => setState(() => _showAnswers = !_showAnswers),
-                  onExport: _exportPdf,
-                ),
-                const SizedBox(height: 8),
-                for (final q in _test!.questions)
-                  _QuestionCard(q: q, showAnswer: _showAnswers),
+                McqTestView(test: _test!, onSave: _save, saved: _saved),
               ] else if (_output.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text('Output', style: theme.textTheme.labelLarge),
@@ -256,147 +268,6 @@ class _GenerationScreenState extends State<GenerationScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Summary banner + answer-key reveal for a parsed MCQ test.
-class _TestHeader extends StatelessWidget {
-  const _TestHeader({
-    required this.test,
-    required this.showAnswers,
-    required this.onToggle,
-    required this.onExport,
-  });
-
-  final McqTest test;
-  final bool showAnswers;
-  final VoidCallback onToggle;
-  final VoidCallback onExport;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final complete = test.completeCount == test.count;
-    return Card(
-      color: theme.colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(complete ? Icons.check_circle : Icons.info_outline,
-                color: theme.colorScheme.onPrimaryContainer),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '${test.count} questions'
-                '${complete ? '' : ' · ${test.completeCount} complete'}',
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: onToggle,
-              icon: Icon(showAnswers ? Icons.visibility_off : Icons.visibility),
-              label: Text(showAnswers ? 'Hide key' : 'Show key'),
-            ),
-            IconButton(
-              tooltip: 'Export / print PDF',
-              onPressed: onExport,
-              icon: const Icon(Icons.picture_as_pdf),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One question rendered as a card; correct option highlighted when [showAnswer].
-class _QuestionCard extends StatelessWidget {
-  const _QuestionCard({required this.q, required this.showAnswer});
-
-  final McqQuestion q;
-  final bool showAnswer;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Q${q.number}. ',
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                Expanded(
-                  child: Text(q.text.isEmpty ? '(missing question)' : q.text,
-                      style: theme.textTheme.titleSmall),
-                ),
-                if (q.difficulty.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: Chip(
-                      label: Text(q.difficulty),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            for (final letter in const ['A', 'B', 'C', 'D'])
-              if (q.options.containsKey(letter))
-                _OptionRow(
-                  letter: letter,
-                  text: q.options[letter]!,
-                  correct: showAnswer && q.answer == letter,
-                ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OptionRow extends StatelessWidget {
-  const _OptionRow({
-    required this.letter,
-    required this.text,
-    required this.correct,
-  });
-
-  final String letter;
-  final String text;
-  final bool correct;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: correct ? theme.colorScheme.tertiaryContainer : null,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$letter) ',
-              style: TextStyle(
-                  fontWeight: correct ? FontWeight.bold : FontWeight.normal)),
-          Expanded(child: Text(text)),
-          if (correct)
-            Icon(Icons.check, size: 18, color: theme.colorScheme.onTertiaryContainer),
-        ],
       ),
     );
   }
