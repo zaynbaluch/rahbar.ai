@@ -102,10 +102,11 @@ class RagService {
   }
 
   /// Retrieve the top-[k] non-exercise chunks for [query] by cosine similarity.
-  /// The corpus is now paragraph-level (chunk_fine.py), so k=8 dense paragraphs
-  /// give BETTER topic coverage than 4 whole sections in FEWER chars (~3.3 K vs
-  /// ~5 K) — faster prefill AND higher quality. The char budget still caps it.
-  Future<List<Chunk>> retrieve(String query, {int k = 8}) async {
+  /// The corpus is paragraph-level (chunk_fine.py). k=6 dense paragraphs give
+  /// BETTER topic coverage than whole sections in far FEWER chars (~2.7 K vs ~5 K;
+  /// offline check: k=6 keeps full fact coverage while trimming 20–50% vs k=8) —
+  /// faster prefill AND higher quality. The char budget still caps it.
+  Future<List<Chunk>> retrieve(String query, {int k = 6}) async {
     final embedder = _embedder;
     final db = _db;
     if (embedder == null || db == null) {
@@ -145,7 +146,7 @@ class RagService {
   }
 
   /// Build the grounded (system, user) prompt for [kind] ('mcq' | 'lesson').
-  Future<GroundedPrompt> assemble(String kind, String topic, {int k = 8}) async {
+  Future<GroundedPrompt> assemble(String kind, String topic, {int k = 6}) async {
     final template = _templates[kind];
     if (template == null) throw ArgumentError('Unknown prompt kind: $kind');
     final hits = await retrieve(topic, k: k);
