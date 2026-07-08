@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../library/library_screen.dart';
@@ -34,6 +36,8 @@ class _GenerationScreenState extends State<GenerationScreen> {
   _Phase _phase = _Phase.idle;
   List<Chunk> _hits = [];
   String _output = '';
+  final StringBuffer _buffer = StringBuffer(); // tokens land here; flushed to UI on a timer
+  Timer? _uiTimer;
   McqTest? _test; // parsed structured test (MCQ mode only)
   bool _saved = false;
   String? _error;
@@ -47,6 +51,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
 
   @override
   void dispose() {
+    _uiTimer?.cancel();
     _topic.dispose();
     _rag.dispose();
     _llama.unload();
@@ -59,6 +64,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
     setState(() {
       _error = null;
       _output = '';
+      _buffer.clear();
       _test = null;
       _saved = false;
       _hits = [];
@@ -80,19 +86,28 @@ class _GenerationScreenState extends State<GenerationScreen> {
       await _llama.load(_modelFile);
 
       // 4. Stream the grounded generation. /no_think keeps Qwen3 out of its slow
-      //    reasoning mode (validated config — see ADR-003).
+      //    reasoning mode (validated config — see ADR-003). Tokens are buffered and
+      //    flushed to the UI every 200 ms so output streams live without rebuilding
+      //    the tree on every token (which starves rendering during heavy CPU).
       setState(() => _phase = _Phase.generating);
       final sw = Stopwatch()..start();
+      _uiTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (mounted) {
+          setState(() {
+            _output = _clean(_buffer.toString());
+            _elapsed = sw.elapsed;
+          });
+        }
+      });
       final stream = _llama.generateChat(grounded.system, '${grounded.user}\n/no_think');
       await for (final chunk in stream) {
-        setState(() {
-          _output += chunk;
-          _chunks++;
-          _elapsed = sw.elapsed;
-        });
+        _buffer.write(chunk);
+        _chunks++;
       }
       sw.stop();
+      _uiTimer?.cancel();
       setState(() {
+        _output = _clean(_buffer.toString());
         _elapsed = sw.elapsed;
         // Parse MCQ output into a structured test (foundation for PDF + OMR).
         if (_kind == 'mcq') _test = McqParser.parse(_output, topic: topic);
@@ -100,9 +115,14 @@ class _GenerationScreenState extends State<GenerationScreen> {
     } catch (e) {
       setState(() => _error = '$e');
     } finally {
+      _uiTimer?.cancel();
       if (mounted) setState(() => _phase = _Phase.idle);
     }
   }
+
+  /// Strip Qwen3's empty `<think>…</think>` block (emitted even with /no_think).
+  static String _clean(String s) =>
+      s.replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '').trimLeft();
 
   Future<void> _save() async {
     if (_output.isEmpty) return;
