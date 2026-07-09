@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
+import '../export/pdf_export.dart';
 import '../generation/mcq_parser.dart';
+import 'gradebook_store.dart';
+import 'graded_result.dart';
 import 'omr_grader.dart';
+import 'results_screen.dart';
 
 /// Camera-based OMR grading: photograph a filled answer sheet, read the bubbles,
 /// and score against this test's stored key — no SLM (see ADR-007). One tap per
@@ -19,15 +23,28 @@ class GradingScreen extends StatefulWidget {
 
 class _GradingScreenState extends State<GradingScreen> {
   final _picker = ImagePicker();
+  final _gradebook = GradebookStore();
+  final _name = TextEditingController();
   bool _busy = false;
   String? _error;
   OmrResult? _result;
+  bool _saved = false;
+  int _savedCount = 0;
+
+  String get _testId => PdfExport.testId(widget.test.topic);
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
 
   Future<void> _grade(ImageSource source) async {
     setState(() {
       _busy = true;
       _error = null;
       _result = null;
+      _saved = false;
     });
     try {
       final shot = await _picker.pickImage(
@@ -52,7 +69,10 @@ class _GradingScreenState extends State<GradingScreen> {
         throw 'Could not find the 4 corner markers — retake with the ANSWERS box '
             'filling the frame, flat and well-lit.';
       }
-      setState(() => _result = result);
+      setState(() {
+        _result = result;
+        _name.text = 'Student ${_savedCount + 1}';
+      });
     } catch (e) {
       setState(() => _error = '$e');
     } finally {
@@ -60,12 +80,45 @@ class _GradingScreenState extends State<GradingScreen> {
     }
   }
 
+  Future<void> _saveResult() async {
+    final r = _result;
+    if (r == null) return;
+    final name = _name.text.trim();
+    await _gradebook.save(GradedResult.fromGrading(
+      testId: _testId,
+      testTopic: widget.test.topic,
+      studentName: name.isEmpty ? 'Student ${_savedCount + 1}' : name,
+      result: r,
+    ));
+    if (mounted) {
+      setState(() {
+        _saved = true;
+        _savedCount++;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Result saved')));
+    }
+  }
+
+  void _openResults() => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => ResultsScreen(testId: _testId, topic: widget.test.topic),
+      ));
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final r = _result;
     return Scaffold(
-      appBar: AppBar(title: const Text('Grade Answer Sheets')),
+      appBar: AppBar(
+        title: const Text('Grade Answer Sheets'),
+        actions: [
+          IconButton(
+            tooltip: 'Class results',
+            onPressed: _openResults,
+            icon: const Icon(Icons.people_alt_outlined),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -121,6 +174,28 @@ class _GradingScreenState extends State<GradingScreen> {
               if (r != null) ...[
                 const SizedBox(height: 20),
                 _ScoreCard(result: r),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _name,
+                        enabled: !_saved,
+                        decoration: const InputDecoration(
+                          labelText: 'Student name / roll',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _saved ? null : _saveResult,
+                      icon: Icon(_saved ? Icons.check : Icons.save_outlined),
+                      label: Text(_saved ? 'Saved' : 'Save'),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 for (final q in r.questions) _QRow(q: q),
               ],
