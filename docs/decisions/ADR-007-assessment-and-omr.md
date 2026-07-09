@@ -20,8 +20,10 @@
 >   bubble positions in A4 points). The PDF export draws from it and the grader samples from
 >   it, so they can never drift.
 > - PDF reworked: the A–D bubble grid is now boxed on the **top-right of the test paper**
->   itself (no separate sheet; 4 pages → ~2), with fiducials drawn at absolute template coords
->   on page 1. The printed answer key was **removed** (teacher reads answers in-app).
+>   itself (no separate sheet; 4 pages → ~2). The four fiducial squares sit at the **corners of
+>   the answer box** (not the page), so the teacher photographs **just the box** — far more
+>   pixels per bubble than a whole-sheet shot, and easier to frame. The printed answer key was
+>   **removed** (teacher reads answers in-app).
 > - `omr/omr_grader.dart` — grayscale → locate the 4 corner fiducials (darkest-window +
 >   dark-pixel centroid) → **bilinear-map** each bubble via the fiducials (so it's robust to an
 >   off-center/rotated photo) → measure interior darkness → the darkest option per row (beating
