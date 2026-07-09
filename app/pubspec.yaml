@@ -51,6 +51,8 @@ dependencies:
   drift_flutter: ^0.3.0
   flutter_gemma_mediapipe: ^1.0.3
   flutter_gemma_litertlm: ^1.0.2
+  image: ^4.9.1
+  image_picker: ^1.2.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

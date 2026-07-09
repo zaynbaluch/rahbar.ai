@@ -4,11 +4,12 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../generation/mcq_parser.dart';
+import '../omr/omr_template.dart';
 
 /// Renders a parsed [McqTest] to a single printable **test paper**: questions on
 /// the left, a compact **OMR answer grid** (A–D bubbles) boxed on the top-right of
-/// the same sheet — so no separate answer sheet is wasted. Corner fiducial markers
-/// on the first page let the future camera grader register the bubbles. The answer
+/// the same sheet (no separate answer sheet). Fiducials + bubbles are drawn at
+/// exact [OmrTemplate] coordinates so the camera grader can sample them. The answer
 /// key is NOT printed (the teacher reads it in the app); the test ID ties a scanned
 /// sheet back to its stored key so grading needs no SLM (see ADR-007).
 class PdfExport {
@@ -29,17 +30,18 @@ class PdfExport {
   }
 
   static pw.Page _paperPage(McqTest test, String id, List<McqQuestion> qs) {
+    final n = qs.length;
     return pw.MultiPage(
-      // Fiducial markers only on the first page (the one the grader photographs).
+      // The OMR layer (fiducials + bubbles) is drawn in the page foreground at
+      // absolute OmrTemplate coordinates, only on page 1 (the graded page).
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(30),
-        buildBackground: (context) => context.pageNumber == 1
-            ? pw.FullPage(ignoreMargins: true, child: pw.Stack(children: _fiducials()))
-            : pw.SizedBox(),
+        buildForeground: (context) =>
+            context.pageNumber == 1 ? _omrLayer(n) : pw.SizedBox(),
       ),
       build: (context) => [
-        // Top block: test info on the left, the answer bubble grid boxed on the right.
+        // Reserve the top-right block where the OMR grid is drawn on top.
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -47,26 +49,104 @@ class PdfExport {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _header('Test Paper', test.topic, id),
-                  pw.SizedBox(height: 8),
+                  _header(test.topic, id),
+                  pw.SizedBox(height: 10),
                   _studentFields(),
-                  pw.SizedBox(height: 8),
+                  pw.SizedBox(height: 10),
                   pw.Text(
-                    'Choose the ONE best answer for each question and fill the '
-                    'matching bubble in the answer grid. Time: 50 minutes.',
+                    'Choose the ONE best answer and fill the matching bubble in the '
+                    'answer grid. Time: 50 minutes.',
                     style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
                   ),
                 ],
               ),
             ),
-            pw.SizedBox(width: 14),
-            _answerGrid(qs.length),
+            pw.SizedBox(width: OmrTemplate.boxW + 12, height: OmrTemplate.boxH + 8),
           ],
         ),
-        pw.Divider(height: 20),
-        for (var i = 0; i < qs.length; i++) _question(i + 1, qs[i]),
+        pw.Divider(height: 18),
+        for (var i = 0; i < n; i++) _question(i + 1, qs[i]),
       ],
     );
+  }
+
+  // ---- OMR foreground: fiducials + boxed bubble grid at absolute coords ----
+  static pw.Widget _omrLayer(int n) {
+    final children = <pw.Widget>[];
+
+    // Corner fiducial markers.
+    for (final (fx, fy) in OmrTemplate.fiducials) {
+      children.add(pw.Positioned(
+        left: fx - OmrTemplate.fidSize / 2,
+        top: fy - OmrTemplate.fidSize / 2,
+        child: pw.Container(
+            width: OmrTemplate.fidSize,
+            height: OmrTemplate.fidSize,
+            color: PdfColors.black),
+      ));
+    }
+
+    // Answer box.
+    children.add(pw.Positioned(
+      left: OmrTemplate.boxLeft,
+      top: OmrTemplate.boxTop,
+      child: pw.Container(
+        width: OmrTemplate.boxW,
+        height: OmrTemplate.boxH,
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(width: 0.8, color: PdfColors.grey600),
+          borderRadius: pw.BorderRadius.circular(4),
+        ),
+      ),
+    ));
+    children.add(pw.Positioned(
+      left: OmrTemplate.boxLeft + 8,
+      top: OmrTemplate.boxTop + 6,
+      child: pw.Text('ANSWERS',
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+    ));
+    children.add(pw.Positioned(
+      left: OmrTemplate.boxLeft + 8,
+      top: OmrTemplate.boxTop + 18,
+      child: pw.Text('Fill one bubble per row with a dark pen.',
+          style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
+    ));
+
+    // Column labels A B C D.
+    for (var c = 0; c < OmrTemplate.options; c++) {
+      children.add(pw.Positioned(
+        left: OmrTemplate.colX(c) - 2.5,
+        top: OmrTemplate.colLabelY - 5,
+        child: pw.Text(_letters[c], style: const pw.TextStyle(fontSize: 7)),
+      ));
+    }
+
+    // Q labels + bubbles.
+    for (var q = 1; q <= n; q++) {
+      children.add(pw.Positioned(
+        left: OmrTemplate.qLabelX,
+        top: OmrTemplate.rowY(q) - 4,
+        child: pw.Text('Q$q',
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+      ));
+      for (var c = 0; c < OmrTemplate.options; c++) {
+        final (cx, cy) = OmrTemplate.bubbleCenter(q, c);
+        children.add(pw.Positioned(
+          left: cx - OmrTemplate.bubbleR,
+          top: cy - OmrTemplate.bubbleR,
+          child: pw.Container(
+            width: OmrTemplate.bubbleR * 2,
+            height: OmrTemplate.bubbleR * 2,
+            decoration: pw.BoxDecoration(
+              shape: pw.BoxShape.circle,
+              border: pw.Border.all(width: 0.9, color: PdfColors.black),
+            ),
+          ),
+        ));
+      }
+    }
+
+    return pw.FullPage(ignoreMargins: true, child: pw.Stack(children: children));
   }
 
   // ---- Questions (left, flow down the page) ----
@@ -91,98 +171,16 @@ class PdfExport {
     );
   }
 
-  // ---- OMR answer grid (top-right box) ----
-  static pw.Widget _answerGrid(int n) {
-    return pw.Container(
-      width: 168,
-      padding: const pw.EdgeInsets.all(6),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(width: 0.8, color: PdfColors.grey600),
-        borderRadius: pw.BorderRadius.circular(4),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text('ANSWERS',
-              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-          pw.Text('Fill one bubble per row with a dark pen.',
-              style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-          pw.SizedBox(height: 4),
-          // Column labels
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 24),
-            child: pw.Row(children: [
-              for (final l in _letters)
-                pw.SizedBox(
-                    width: 30,
-                    child: pw.Center(
-                        child: pw.Text(l, style: const pw.TextStyle(fontSize: 7)))),
-            ]),
-          ),
-          for (var i = 1; i <= n; i++) _bubbleRow(i),
-        ],
-      ),
-    );
-  }
-
-  static pw.Widget _bubbleRow(int n) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(top: 3),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          pw.SizedBox(
-            width: 24,
-            child: pw.Text('Q$n',
-                style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-          ),
-          for (var i = 0; i < _letters.length; i++)
-            pw.SizedBox(
-              width: 30,
-              child: pw.Center(
-                child: pw.Container(
-                  width: 13,
-                  height: 13,
-                  decoration: pw.BoxDecoration(
-                    shape: pw.BoxShape.circle,
-                    border: pw.Border.all(width: 0.9, color: PdfColors.black),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  static List<pw.Widget> _fiducials() {
-    const s = 14.0;
-    pw.Widget marker(pw.Alignment a) => pw.Align(
-          alignment: a,
-          child: pw.Container(
-            margin: const pw.EdgeInsets.all(12),
-            width: s,
-            height: s,
-            color: PdfColors.black,
-          ),
-        );
-    return [
-      marker(pw.Alignment.topLeft),
-      marker(pw.Alignment.topRight),
-      marker(pw.Alignment.bottomLeft),
-      marker(pw.Alignment.bottomRight),
-    ];
-  }
-
-  // ---- shared bits ----
-  static pw.Widget _header(String kind, String subtitle, String id) {
+  static pw.Widget _header(String topic, String id) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text('Rahbar AI - General Science, Grade 6',
             style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-        pw.Text('$kind: $subtitle   ·   Test ID: $id',
+        pw.Text('Topic: $topic',
             style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
+        pw.Text('Test ID: $id',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
       ],
     );
   }

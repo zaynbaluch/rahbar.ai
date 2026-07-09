@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../export/pdf_export.dart';
+import '../omr/grading_screen.dart';
 import 'mcq_parser.dart';
 
 /// Reusable display for a parsed [McqTest]: a summary banner (question count,
@@ -121,6 +122,13 @@ class _Header extends StatelessWidget {
                   tooltip: 'Export / print PDF',
                   onPressed: onExport,
                   icon: const Icon(Icons.picture_as_pdf),
+                ),
+                IconButton(
+                  tooltip: 'Grade answer sheets',
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => GradingScreen(test: test),
+                  )),
+                  icon: const Icon(Icons.grading),
                 ),
               ],
             ),
