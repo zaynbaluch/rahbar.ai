@@ -7,16 +7,25 @@ import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
 import 'llama_cpp_service.dart';
+import 'mcq_grammar.dart';
 import 'mcq_parser.dart';
 import 'mcq_test_view.dart';
 import 'model_spike_screen.dart';
 
-/// The real generate-and-review flow: pick a topic, the app runs **on-device RAG**
-/// (bge-small query embedding → cosine over the bundled curriculum.db) to build a
-/// grounded prompt, then streams a **Qwen3 1.7B** (greedy) lesson plan or MCQ test.
-/// This is the validated end-to-end pipeline from ADR-003/004.
+/// **The escape hatch.** On-device RAG (bge-small → cosine over the bundled
+/// `curriculum.db`) into a grounded prompt, then a streamed **LFM2 1.2B** (greedy)
+/// generation; MCQ mode is grammar-constrained (mcq_grammar.dart) so the output is
+/// parseable and OMR-ready. ADR-003/004.
+///
+/// This is **no longer the main path**. Lesson plans and tests now come from the
+/// pre-generated, verified content pack and appear instantly (ADR-008) — this run costs
+/// ~3.5 min and its answer keys have never been checked by anything. It exists for topics
+/// outside the shipped curriculum, so "it generates for anything, offline" stays true.
 class GenerationScreen extends StatefulWidget {
-  const GenerationScreen({super.key});
+  const GenerationScreen({super.key, this.initialTopic});
+
+  /// Pre-fills the topic box — set when arriving from a failed search in the picker.
+  final String? initialTopic;
 
   @override
   State<GenerationScreen> createState() => _GenerationScreenState();
@@ -25,12 +34,14 @@ class GenerationScreen extends StatefulWidget {
 enum _Phase { idle, preparing, retrieving, loadingModel, generating }
 
 class _GenerationScreenState extends State<GenerationScreen> {
-  static const String _modelFile = 'qwen3-1.7b.gguf';
+  // LFM2-1.2B is the shipping model after the ADR-003 speed bake-off: ~2× Qwen3's
+  // decode on CPU, with MCQ schema guaranteed by grammar-constrained decoding.
+  static const String _modelFile = 'lfm2-1.2b.gguf';
 
   final _rag = RagService();
   final _llama = LlamaCppService();
   final _library = LibraryStore();
-  final _topic = TextEditingController(text: 'the human digestive system');
+  late final _topic = TextEditingController(text: widget.initialTopic ?? '');
 
   String _kind = 'mcq'; // 'mcq' | 'lesson'
   _Phase _phase = _Phase.idle;
@@ -81,14 +92,15 @@ class _GenerationScreenState extends State<GenerationScreen> {
       final grounded = await _rag.assemble(_kind, topic);
       setState(() => _hits = grounded.hits);
 
-      // 3. Load the generation model.
+      // 3. Load the generation model. MCQ mode loads with the GBNF grammar so the
+      //    output is guaranteed parseable/OMR-ready (see mcq_grammar.dart); lesson
+      //    plans run unconstrained. Switching kind reloads the model (rare).
       setState(() => _phase = _Phase.loadingModel);
-      await _llama.load(_modelFile);
+      await _llama.load(_modelFile, grammar: _kind == 'mcq' ? kMcqGrammar : null);
 
-      // 4. Stream the grounded generation. /no_think keeps Qwen3 out of its slow
-      //    reasoning mode (validated config — see ADR-003). Tokens are buffered and
-      //    flushed to the UI every 200 ms so output streams live without rebuilding
-      //    the tree on every token (which starves rendering during heavy CPU).
+      // 4. Stream the grounded generation. Tokens are buffered and flushed to the
+      //    UI every 200 ms so output streams live without rebuilding the tree on
+      //    every token (which starves rendering during heavy CPU).
       setState(() => _phase = _Phase.generating);
       final sw = Stopwatch()..start();
       _uiTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
@@ -99,7 +111,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
           });
         }
       });
-      final stream = _llama.generateChat(grounded.system, '${grounded.user}\n/no_think');
+      final stream = _llama.generateChat(grounded.system, grounded.user);
       await for (final chunk in stream) {
         _buffer.write(chunk);
         _chunks++;
@@ -148,7 +160,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
             : 'Enter a topic and generate.',
         _Phase.preparing => 'Loading embedder + curriculum…',
         _Phase.retrieving => 'Searching the textbook…',
-        _Phase.loadingModel => 'Loading Qwen3 1.7B…',
+        _Phase.loadingModel => 'Loading LFM2 1.2B…',
         _Phase.generating =>
           'Generating · ${_tokPerSec.toStringAsFixed(1)} tok/s · ${_elapsed.inSeconds}s',
       };

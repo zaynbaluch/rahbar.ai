@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../generation/lesson_plan.dart';
 import '../generation/mcq_parser.dart';
 import '../omr/omr_template.dart';
 
@@ -28,6 +29,95 @@ class PdfExport {
     doc.addPage(_paperPage(test, id, qs));
     return doc.save();
   }
+
+  /// The teacher's 5E lesson plan (ADR-006). Plain A4, no OMR layer — this sheet is for
+  /// the teacher's hand, not the camera, so none of the [OmrTemplate] geometry applies.
+  static Future<Uint8List> buildLessonPlan(LessonPlan plan) async {
+    final doc = pw.Document();
+    final materials = plan.materials;
+
+    doc.addPage(pw.MultiPage(
+      pageTheme: const pw.PageTheme(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.all(36),
+      ),
+      build: (context) => [
+        pw.Text(plan.topic,
+            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          'Grade 6 · General Science · one ${plan.totalMinutes}-minute period · '
+          'Single National Curriculum',
+          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+        ),
+        pw.Divider(height: 16),
+        if (plan.slos.isNotEmpty) ...[
+          pw.Text('Learning outcomes',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          for (final s in plan.slos)
+            pw.Bullet(text: s, style: const pw.TextStyle(fontSize: 10)),
+          pw.SizedBox(height: 8),
+        ],
+        if (materials.isNotEmpty) ...[
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey200,
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.RichText(
+              text: pw.TextSpan(
+                children: [
+                  pw.TextSpan(
+                    text: 'What to bring:  ',
+                    style: pw.TextStyle(
+                        fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.TextSpan(
+                    text: materials.join(' · '),
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 10),
+        ],
+        for (final s in plan.sections) _planSection(s),
+      ],
+    ));
+    return doc.save();
+  }
+
+  static pw.Widget _planSection(PlanSection s) => pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 10),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Text(
+                    LessonPlan.sectionTitles[s.section] ?? s.section,
+                    style: pw.TextStyle(
+                        fontSize: 12, fontWeight: pw.FontWeight.bold),
+                  ),
+                ),
+                if (s.minutes > 0)
+                  pw.Text('${s.minutes} min',
+                      style: const pw.TextStyle(
+                          fontSize: 9, color: PdfColors.grey700)),
+              ],
+            ),
+            pw.SizedBox(height: 3),
+            pw.Text(s.body,
+                style: const pw.TextStyle(fontSize: 10, lineSpacing: 1.6)),
+          ],
+        ),
+      );
 
   static pw.Page _paperPage(McqTest test, String id, List<McqQuestion> qs) {
     final n = qs.length;

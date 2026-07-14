@@ -4,7 +4,7 @@ import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 
 import 'core/theme.dart';
-import 'features/generation/generation_screen.dart';
+import 'features/content/topic_picker_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +28,10 @@ class RahbarApp extends StatelessWidget {
       title: 'Rahbar AI',
       debugShowCheckedModeBanner: false,
       theme: RahbarTheme.light(),
-      home: const GenerationScreen(),
+      // Home is the curriculum topic picker, served from the pre-generated content pack
+      // (ADR-008). The on-device SLM (GenerationScreen) is reachable from it as the
+      // escape hatch for topics the pack does not cover.
+      home: const TopicPickerScreen(),
     );
   }
 }

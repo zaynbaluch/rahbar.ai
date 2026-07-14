@@ -1,0 +1,16 @@
+root ::= block1 block2 block3 block4 block5 block6 block7 block8 block9 block10 key
+block1 ::= "Q1 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block2 ::= "Q2 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block3 ::= "Q3 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block4 ::= "Q4 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block5 ::= "Q5 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block6 ::= "Q6 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block7 ::= "Q7 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block8 ::= "Q8 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block9 ::= "Q9 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+block10 ::= "Q10 [" diff "]\n" text "\n" "A) " text "\n" "B) " text "\n" "C) " text "\n" "D) " text "\n" "ANSWER: " letter "\n\n"
+key ::= "KEY:" " 1=" letter " 2=" letter " 3=" letter " 4=" letter " 5=" letter " 6=" letter " 7=" letter " 8=" letter " 9=" letter " 10=" letter "\n"
+diff ::= "easy" | "medium" | "hard"
+letter ::= "A" | "B" | "C" | "D"
+text ::= char char{0,199}
+char ::= [^\n]

@@ -44,16 +44,29 @@ class SpikeModel {
 /// The lead candidate this session: mobile-optimized Gemma, ungated, loaded from
 /// a USB-pushed local file, run on the GPU via LiteRT.
 const List<SpikeModel> kSpikeModels = [
-  // SHIPPING model: Qwen3 1.7B via llama.cpp. Grounded-quality bake-off (ADR-003)
-  // picked it over Llama 1B — 9/10 answer keys correct vs ~5/10, varied questions.
+  // SHIPPING model: LFM2 1.2B via llama.cpp. Speed bake-off (ADR-003) picked it
+  // over Qwen3 1.7B — ~2× decode / ~1.4× prefill on CPU — with MCQ schema
+  // guaranteed by grammar-constrained decoding (mcq_grammar.dart). ChatML template
+  // (LFM2 uses the same <|im_start|> structure), greedy.
+  SpikeModel(
+    id: 'lfm2-1.2b-gguf',
+    displayName: 'LFM2 1.2B (llama.cpp)',
+    sizeLabel: '0.7 GB',
+    modelType: ModelType.general,
+    format: ModelFormat.gguf,
+    localFile: 'lfm2-1.2b.gguf',
+    note: 'Q4_K_M GGUF via llama.cpp, ChatML + greedy + GBNF grammar. ~2× Qwen3 decode.',
+  ),
+  // Prior shipping model, kept as a quality-fallback candidate: Qwen3 1.7B.
+  // Best schema discipline unaided (10/10) but ~half the decode speed of LFM2.
   SpikeModel(
     id: 'qwen3-1.7b-gguf',
     displayName: 'Qwen3 1.7B (llama.cpp)',
-    sizeLabel: '1.3 GB',
+    sizeLabel: '1.1 GB',
     modelType: ModelType.qwen,
     format: ModelFormat.gguf,
     localFile: 'qwen3-1.7b.gguf',
-    note: 'Q4 GGUF via llama.cpp, ChatML + greedy. Best grounded quality (~3.3 tok/s CPU).',
+    note: 'Q4 GGUF via llama.cpp, ChatML + greedy. Strong grounded quality (~3.3 tok/s CPU).',
   ),
   // Low-RAM fallback: Llama 3.2 1B (fastest/lightest, but ~5/10 keys — see ADR-003).
   SpikeModel(
