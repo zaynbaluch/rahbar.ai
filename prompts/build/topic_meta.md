@@ -23,9 +23,11 @@ that was scanned and OCR'd (so some headings are damaged).
 
 Given a section's raw heading and its actual content, produce:
 
-- `title` — the heading as it should read, in Title Case. Fix OCR damage using the content as
-  evidence: repair truncation, correct misspellings, and drop stray punctuation. Keep it the
-  **same topic** — do not rename, generalise, or invent a nicer heading. If the raw heading is
+- `title` — the heading as it should read, in Title Case, **without the leading section number**
+  (e.g. "1.2.1" or "3.2." at the start of the raw heading) — that number is tracked separately
+  and must never appear in the title text. Fix OCR damage using the content as evidence: repair
+  truncation, correct misspellings, and drop stray punctuation. Keep it the **same topic** — do
+  not rename, generalise, or invent a nicer heading. If the raw heading (minus its number) is
   already correct, return it unchanged.
 - `summary` — one sentence (max 20 words) telling a teacher what this topic covers. Shown
   under the title in the picker.

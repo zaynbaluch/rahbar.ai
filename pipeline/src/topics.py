@@ -85,6 +85,16 @@ def deglue(token: str) -> list[str]:
     return parts
 
 
+_LEADING_NUMBER = re.compile(r"^\d+(\.\d+)*\.?\s*")
+
+
+def strip_leading_number(title: str) -> str:
+    """Drop a hardcoded '1.2.1 ' / '3.2. ' prefix. The number is carried separately
+    (`section_no`); a title should never repeat it, in the source or in an LLM rewrite
+    that echoed the raw heading back verbatim."""
+    return _LEADING_NUMBER.sub("", (title or "").strip())
+
+
 def clean_title(raw: str) -> str:
     """OCR title -> a title a teacher would recognise. '3.2 BALANCEDDIET' -> 'Balanced Diet'.
 
@@ -92,7 +102,7 @@ def clean_title(raw: str) -> str:
     ("Giveshortanswers.") and internal hyphens ("Non-metals") survive intact.
     """
     # Drop the leading section number; it is carried separately.
-    body = re.sub(r"^\d+(\.\d+)*\.?\s*", "", (raw or "").strip())
+    body = strip_leading_number(raw)
     body = re.sub(r"[A-Za-z]{6,}", lambda m: " ".join(deglue(m.group(0))), body)
 
     out = []

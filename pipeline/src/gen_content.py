@@ -35,7 +35,7 @@ from . import checkpoint as ckpt
 from . import llm
 from .build_db import DB, embed_texts, unpack
 from .rag_prompt import REPO, _is_exercise
-from .topics import load_topics
+from .topics import load_topics, strip_leading_number
 
 BUILD_PROMPTS = REPO / "prompts" / "build"
 
@@ -203,6 +203,10 @@ def run_topic_meta(topic: dict) -> dict:
              section_no=topic["section_no"], context=ctx),
         TOPIC_META_SCHEMA, max_tokens=1024, temperature=0.2,
     )
+    # Belt-and-braces: the prompt asks the model to drop the section number, but it
+    # sometimes echoes `raw_title` (which carries one) back verbatim. section_no is
+    # already tracked on the topic — a title must never duplicate it.
+    out["title"] = strip_leading_number(out["title"])
     return out
 
 
