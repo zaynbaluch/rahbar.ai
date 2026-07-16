@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
-  static const primary = Color(0xFF1B4EF5);
-  static const primaryMedium = Color(0xFF3874FF);
-  static const primaryLight = Color(0xFF5996FF);
+  static const primary = Color(0xFF003CFF);
+  static const primaryMedium = Color(0xFF1D62FF);
+  static const primaryLight = Color(0xFF3E84FF);
   static const gold = Color(0xFFFFC300);
   static const goldBright = Color(0xFFFFD400);
 

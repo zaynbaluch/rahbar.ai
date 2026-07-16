@@ -3,7 +3,7 @@ import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 
-import 'app/rahbar_shell.dart';
+import 'app/bayaz_shell.dart';
 import 'core/theme.dart';
 
 Future<void> main() async {
@@ -16,19 +16,19 @@ Future<void> main() async {
     inferenceEngines: const [MediaPipeEngine(), LiteRtLmEngine()],
   );
 
-  runApp(const RahbarApp());
+  runApp(const BayazApp());
 }
 
-class RahbarApp extends StatelessWidget {
-  const RahbarApp({super.key});
+class BayazApp extends StatelessWidget {
+  const BayazApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Rahbar AI',
+      title: 'Bayaz AI',
       debugShowCheckedModeBanner: false,
-      theme: RahbarTheme.light(),
-      home: const RahbarShell(),
+      theme: BayazTheme.light(),
+      home: const BayazShell(),
     );
   }
 }

@@ -1,4 +1,4 @@
-# Rahbar AI production asset bundle v2
+# Bayaz AI production asset bundle v2
 
 This corrected bundle contains:
 

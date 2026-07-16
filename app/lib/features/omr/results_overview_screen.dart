@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/components/brand_app_bar.dart';
 import '../../design_system/components/empty_state.dart';
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/section_header.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
@@ -55,7 +55,7 @@ class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
             }
             final all = snapshot.data ?? const [];
             if (all.isEmpty) {
-              return const RahbarEmptyState(
+              return const BayazEmptyState(
                 asset: 'assets/ui/illustrations/empty_results.webp',
                 title: 'No grading results yet',
                 message:
@@ -119,7 +119,7 @@ class _SessionCard extends StatelessWidget {
         .reduce((a, b) => a > b ? a : b);
     final d = first.createdAt;
 
-    return RahbarCard(
+    return BayazCard(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>

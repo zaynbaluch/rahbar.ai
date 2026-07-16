@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/empty_state.dart';
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -53,7 +53,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return RahbarEmptyState(
+              return BayazEmptyState(
                 asset: 'assets/ui/illustrations/no_search_results.webp',
                 title: 'Could not load these results',
                 message:
@@ -67,7 +67,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
             }
             final results = snapshot.data ?? const [];
             if (results.isEmpty) {
-              return const RahbarEmptyState(
+              return const BayazEmptyState(
                 asset: 'assets/ui/illustrations/empty_results.webp',
                 title: 'No sheets saved for this paper',
                 message:
@@ -271,7 +271,7 @@ class _StudentResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = result.createdAt;
     final passed = result.pct >= 50;
-    return RahbarCard(
+    return BayazCard(
       child: Row(
         children: [
           Container(

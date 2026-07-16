@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -73,7 +73,7 @@ class _TopicScreenState extends State<TopicScreen> {
             ),
             if (!topic.hasTest && topic.nItems > 0) ...[
               const SizedBox(height: AppSpacing.sm),
-              RahbarCard(
+              BayazCard(
                 color: AppColors.softGold,
                 borderColor: const Color(0xFFFFD96A),
                 child: Row(
@@ -84,7 +84,7 @@ class _TopicScreenState extends State<TopicScreen> {
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
-                        'Rahbar will use every currently available verified question. It will not invent missing items or imply that a 10-question paper exists.',
+                        'Bayaz will use every currently available verified question. It will not invent missing items or imply that a 10-question paper exists.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: AppColors.warningText,
                             ),
@@ -247,7 +247,7 @@ class _LearningOutcomes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -305,7 +305,7 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 430;

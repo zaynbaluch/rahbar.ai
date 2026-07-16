@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../../design_system/components/frame_animation.dart';
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -102,7 +102,7 @@ class _McqTestViewState extends State<McqTestView> {
       final bytes = await PdfExport.build(widget.test);
       await Printing.layoutPdf(
         onLayout: (_) async => bytes,
-        name: 'Rahbar-${PdfExport.testId(widget.test)}',
+        name: 'Bayaz-${PdfExport.testId(widget.test)}',
       );
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -207,7 +207,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
           showAnimation
-              ? const RahbarFrameAnimation(
+              ? const BayazFrameAnimation(
                   name: 'test_ready',
                   size: 112,
                 )
@@ -276,7 +276,7 @@ class _ActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       child: Wrap(
         spacing: AppSpacing.xs,
         runSpacing: AppSpacing.xs,
@@ -321,7 +321,7 @@ class _QuestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return RahbarCard(
+    return BayazCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

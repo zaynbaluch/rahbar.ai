@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Lightweight frame animation for the generated Rahbar asset sheets.
+/// Lightweight frame animation for the generated Bayaz asset sheets.
 ///
 /// Uses the individually exported frames rather than decoding a sprite sheet at
 /// runtime. This keeps the implementation dependency-free and lets Flutter cache
 /// each frame normally.
-class RahbarFrameAnimation extends StatefulWidget {
-  const RahbarFrameAnimation({
+class BayazFrameAnimation extends StatefulWidget {
+  const BayazFrameAnimation({
     super.key,
     required this.name,
     this.size = 160,
@@ -22,10 +22,10 @@ class RahbarFrameAnimation extends StatefulWidget {
   final bool loop;
 
   @override
-  State<RahbarFrameAnimation> createState() => _RahbarFrameAnimationState();
+  State<BayazFrameAnimation> createState() => _BayazFrameAnimationState();
 }
 
-class _RahbarFrameAnimationState extends State<RahbarFrameAnimation> {
+class _BayazFrameAnimationState extends State<BayazFrameAnimation> {
   int _frame = 1;
   Timer? _timer;
 
@@ -66,7 +66,7 @@ class _RahbarFrameAnimationState extends State<RahbarFrameAnimation> {
   }
 
   @override
-  void didUpdateWidget(covariant RahbarFrameAnimation oldWidget) {
+  void didUpdateWidget(covariant BayazFrameAnimation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.name != widget.name ||
         oldWidget.loop != widget.loop ||

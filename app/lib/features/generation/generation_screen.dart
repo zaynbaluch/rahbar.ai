@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -183,7 +183,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              RahbarCard(
+              BayazCard(
                 color: AppColors.softGold,
                 borderColor: const Color(0xFFFFD96A),
                 child: Row(
@@ -241,7 +241,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
                 label: Text(_busy ? 'Working on-device…' : 'Generate'),
               ),
               const SizedBox(height: AppSpacing.md),
-              RahbarCard(
+              BayazCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -272,7 +272,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                RahbarCard(
+                BayazCard(
                   color: Theme.of(context).colorScheme.errorContainer,
                   borderColor: Theme.of(context).colorScheme.error,
                   child: Text(
@@ -309,7 +309,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                RahbarCard(
+                BayazCard(
                   child: SelectableText(
                     _output,
                     style: const TextStyle(height: 1.5),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_spacing.dart';
 
-class RahbarEmptyState extends StatelessWidget {
-  const RahbarEmptyState({
+class BayazEmptyState extends StatelessWidget {
+  const BayazEmptyState({
     super.key,
     required this.asset,
     required this.title,

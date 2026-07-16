@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:rahbar_ai/features/generation/mcq_parser.dart';
-import 'package:rahbar_ai/features/omr/omr_grader.dart';
-import 'package:rahbar_ai/features/omr/omr_template.dart';
+import 'package:bayaz_ai/features/generation/mcq_parser.dart';
+import 'package:bayaz_ai/features/omr/omr_grader.dart';
+import 'package:bayaz_ai/features/omr/omr_template.dart';
 
 /// A test whose key is A B C D A B C D A B for Q1..Q10.
 McqTest _key() => McqTest(

@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../design_system/theme/app_colors.dart';
 import '../design_system/theme/app_radii.dart';
 
-/// Material 3 theme for Rahbar AI.
+/// Material 3 theme for Bayaz AI.
 ///
 /// The brand palette is concentrated in actions, navigation, and status. Content
 /// remains on neutral surfaces so long lesson plans and tests stay comfortable to read.
-class RahbarTheme {
+class BayazTheme {
   static ThemeData light() {
     const scheme = ColorScheme(
       brightness: Brightness.light,

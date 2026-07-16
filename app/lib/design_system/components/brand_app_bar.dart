@@ -12,14 +12,14 @@ class BrandAppBarTitle extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Image.asset('assets/ui/branding/rahbar_mark.png', width: 38, height: 38),
+        Image.asset('assets/ui/branding/bayaz_logo.png', width: 38, height: 38),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Rahbar AI', style: theme.textTheme.titleLarge),
+              Text('Bayaz AI', style: theme.textTheme.titleLarge),
               if (subtitle != null)
                 Text(subtitle!, style: theme.textTheme.bodySmall),
             ],

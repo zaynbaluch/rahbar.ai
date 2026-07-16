@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rahbar_ai/features/omr/graded_result.dart';
-import 'package:rahbar_ai/features/omr/omr_grader.dart';
+import 'package:bayaz_ai/features/omr/graded_result.dart';
+import 'package:bayaz_ai/features/omr/omr_grader.dart';
 
 void main() {
   test('GradedResult from an OmrResult captures score + marks and round-trips', () {

@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rahbar_ai/main.dart';
+import 'package:bayaz_ai/main.dart';
 
 void main() {
   testWidgets('app shell exposes only the existing teacher workflows',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const RahbarApp());
+    await tester.pumpWidget(const BayazApp());
 
-    expect(find.text('Rahbar AI'), findsOneWidget);
+    expect(find.text('Bayaz AI'), findsOneWidget);
     expect(find.text('Offline teacher toolkit'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Library'), findsOneWidget);

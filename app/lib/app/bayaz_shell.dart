@@ -6,14 +6,14 @@ import '../features/omr/results_overview_screen.dart';
 
 /// The three existing teacher workflows: prepare, reopen, and review grading.
 /// No destination advertises functionality that is not backed by current storage.
-class RahbarShell extends StatefulWidget {
-  const RahbarShell({super.key});
+class BayazShell extends StatefulWidget {
+  const BayazShell({super.key});
 
   @override
-  State<RahbarShell> createState() => _RahbarShellState();
+  State<BayazShell> createState() => _BayazShellState();
 }
 
-class _RahbarShellState extends State<RahbarShell> {
+class _BayazShellState extends State<BayazShell> {
   int _index = 0;
   int _libraryRevision = 0;
   int _resultsRevision = 0;
