@@ -1,0 +1,15 @@
+[project]
+name = "rahbar-pipeline"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "docling>=2.110.0",
+    "fastembed>=0.8.0",
+    "httpx>=0.28.1",
+    "numpy>=2.5.1",
+    "opencv-python-headless>=5.0.0.93",
+    "pillow>=12.3.0",
+    "pymupdf>=1.28.0",
+    "pytesseract>=0.3.13",
+    "wordninja>=2.0.0",
+]

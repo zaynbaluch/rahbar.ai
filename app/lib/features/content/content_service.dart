@@ -1,0 +1,237 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+import '../generation/lesson_plan.dart';
+import '../generation/mcq_parser.dart';
+
+/// A topic from the curriculum catalogue — what the picker shows.
+class Topic {
+  const Topic({
+    required this.id,
+    required this.chapter,
+    required this.sectionNo,
+    required this.title,
+    required this.summary,
+    required this.slos,
+    required this.nItems,
+  });
+
+  final String id;
+  final int chapter;
+  final String sectionNo;
+  final String title;
+  final String summary;
+  final List<String> slos;
+  final int nItems; // verified MCQs available for this topic
+
+  bool get hasTest => nItems >= 10;
+}
+
+/// The pre-generated content pack: a verified MCQ item bank plus a library of 5E
+/// lesson-plan section variants, built off-device by `pipeline/src/gen_content.py`
+/// (see ADR-008).
+///
+/// On-device generation cost ~3.5 min per test and left the answer key unverifiable —
+/// and the OMR grader marks real student papers against that key with no human in the
+/// loop (ADR-007). So the content is generated once on a laptop by an 8B model, checked
+/// by a second model, and shipped. Here we only **select** from it, which is instant.
+///
+/// Tests are *sampled* from the bank, not generated; plans are *assembled* from section
+/// variants, not generated. The on-device SLM keeps the tail: short open-ended chat, and
+/// an escape hatch for topics outside the pack.
+class ContentService {
+  Database? _db;
+  final _rng = Random();
+
+  bool get isReady => _db != null;
+
+  /// Copy the read-only asset out of the bundle so sqlite3 can open it. Same pattern as
+  /// [RagService.init].
+  Future<void> init() async {
+    if (isReady) return;
+    final support = await getApplicationSupportDirectory();
+    final path = p.join(support.path, 'content_pack.db');
+    final bytes = await rootBundle.load('assets/content/content_pack.db');
+    await File(path).writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+    _db = sqlite3.open(path, mode: OpenMode.readOnly);
+  }
+
+  void dispose() {
+    _db?.close();
+    _db = null;
+  }
+
+  String get packVersion {
+    final r = _db!.select("SELECT value FROM meta WHERE key = 'pack_version'");
+    return r.isEmpty ? '?' : r.first['value'] as String;
+  }
+
+  // ---------------------------------------------------------------- topics
+
+  List<Topic> listTopics() {
+    final rows = _db!.select(
+      'SELECT id, chapter, section_no, title, summary, slos, n_items '
+      'FROM topics ORDER BY chapter, section_no',
+    );
+    return rows.map(_topic).toList();
+  }
+
+  Topic? topicById(String id) {
+    final rows = _db!.select(
+      'SELECT id, chapter, section_no, title, summary, slos, n_items '
+      'FROM topics WHERE id = ?',
+      [id],
+    );
+    return rows.isEmpty ? null : _topic(rows.first);
+  }
+
+  Topic _topic(Row r) => Topic(
+        id: r['id'] as String,
+        chapter: r['chapter'] as int,
+        sectionNo: r['section_no'] as String,
+        title: r['title'] as String,
+        summary: (r['summary'] as String?) ?? '',
+        slos: ((jsonDecode(r['slos'] as String? ?? '[]')) as List)
+            .map((e) => e.toString())
+            .toList(),
+        nItems: r['n_items'] as int,
+      );
+
+  // ---------------------------------------------------------------- MCQ sampling
+
+  /// Draw a test from the item bank. Instant — no model runs.
+  ///
+  /// Sampling from a bank (rather than generating per request) is how professional
+  /// assessment actually works, and it buys two things a live model cannot: the answer
+  /// keys were verified before shipping, and [exclude] lets a teacher re-test a class
+  /// without repeating questions they have already used.
+  ///
+  /// [mix] is the target difficulty spread (ADR-007: ~4 easy / 4 medium / 2 hard). If a
+  /// band is short, the shortfall is backfilled from the other bands so the teacher still
+  /// gets a full paper rather than an error.
+  McqTest sampleTest(
+    String topicId, {
+    int n = 10,
+    Map<String, int> mix = const {'easy': 4, 'medium': 4, 'hard': 2},
+    Set<String> exclude = const {},
+    int? seed,
+  }) {
+    final topic = topicById(topicId);
+    if (topic == null) throw StateError('unknown topic: $topicId');
+    final rng = seed == null ? _rng : Random(seed);
+
+    final rows = _db!.select(
+      'SELECT id, difficulty, bloom, stem, option_a, option_b, option_c, option_d, answer '
+      "FROM mcq_items WHERE topic_id = ? AND verify_status = 'passed'",
+      [topicId],
+    );
+    final pool = rows.where((r) => !exclude.contains(r['id'] as String)).toList();
+    if (pool.isEmpty) {
+      throw StateError('no items left for "${topic.title}"');
+    }
+
+    final byBand = <String, List<Row>>{};
+    for (final r in pool) {
+      byBand.putIfAbsent(r['difficulty'] as String, () => []).add(r);
+    }
+    for (final list in byBand.values) {
+      list.shuffle(rng);
+    }
+
+    final picked = <Row>[];
+    for (final entry in mix.entries) {
+      final band = byBand[entry.key] ?? const [];
+      picked.addAll(band.take(entry.value));
+    }
+    // Backfill from whatever is left, so a thin band never yields a short paper.
+    if (picked.length < n) {
+      final rest = pool.where((r) => !picked.contains(r)).toList()..shuffle(rng);
+      picked.addAll(rest.take(n - picked.length));
+    }
+    picked.shuffle(rng);
+
+    final questions = <McqQuestion>[];
+    for (var i = 0; i < picked.length && i < n; i++) {
+      final r = picked[i];
+      questions.add(McqQuestion(
+        number: i + 1,
+        difficulty: r['difficulty'] as String,
+        text: r['stem'] as String,
+        options: {
+          'A': r['option_a'] as String,
+          'B': r['option_b'] as String,
+          'C': r['option_c'] as String,
+          'D': r['option_d'] as String,
+        },
+        answer: r['answer'] as String,
+        itemId: r['id'] as String,
+      ));
+    }
+    return McqTest(topic: topic.title, questions: questions);
+  }
+
+  // ---------------------------------------------------------------- plan assembly
+
+  /// Build a full 5E lesson plan by choosing one variant per section — instant, and with
+  /// ~50 distinct combinations per topic, two teachers do not get the same plan.
+  ///
+  /// [prefer] pins a section to a named variant (this is what "swap this activity" uses).
+  LessonPlan assemblePlan(
+    String topicId, {
+    Map<String, String> prefer = const {},
+    int? seed,
+  }) {
+    final topic = topicById(topicId);
+    if (topic == null) throw StateError('unknown topic: $topicId');
+    final rng = seed == null ? _rng : Random(seed);
+
+    final variants = variantsFor(topicId);
+    final sections = <PlanSection>[];
+    for (final section in LessonPlan.sectionOrder) {
+      final options = variants[section];
+      if (options == null || options.isEmpty) continue;
+      final wanted = prefer[section];
+      final chosen = options.firstWhere(
+        (v) => v.variantLabel == wanted,
+        orElse: () => options[rng.nextInt(options.length)],
+      );
+      sections.add(chosen);
+    }
+    return LessonPlan(
+      topicId: topicId,
+      topic: topic.title,
+      slos: topic.slos,
+      sections: sections,
+    );
+  }
+
+  /// Every variant of every section for a topic, keyed by section — the swap menu.
+  Map<String, List<PlanSection>> variantsFor(String topicId) {
+    final rows = _db!.select(
+      'SELECT id, section, variant_label, minutes, body, materials '
+      'FROM plan_sections WHERE topic_id = ?',
+      [topicId],
+    );
+    final out = <String, List<PlanSection>>{};
+    for (final r in rows) {
+      final s = PlanSection(
+        id: r['id'] as String,
+        section: r['section'] as String,
+        variantLabel: r['variant_label'] as String,
+        minutes: r['minutes'] as int,
+        body: r['body'] as String,
+        materials: ((jsonDecode(r['materials'] as String? ?? '[]')) as List)
+            .map((e) => e.toString())
+            .toList(),
+      );
+      out.putIfAbsent(s.section, () => []).add(s);
+    }
+    return out;
+  }
+}
