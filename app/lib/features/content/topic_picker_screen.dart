@@ -316,14 +316,14 @@ class _HeroPanel extends StatelessWidget {
       child: Stack(
         children: [
           Positioned(
-            right: -28,
-            top: -30,
+            right: -18,
+            top: -20,
             child: Opacity(
               opacity: 0.16,
               child: Image.asset(
                 'assets/ui/branding/bayaz_logo.png',
-                width: 170,
-                height: 170,
+                width: 132,
+                height: 132,
               ),
             ),
           ),
