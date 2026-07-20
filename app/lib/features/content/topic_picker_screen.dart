@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/brand_app_bar.dart';
@@ -9,6 +11,7 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_radii.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../generation/generation_screen.dart';
+import '../curriculum/recent_access_store.dart';
 import '../library/library_screen.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
@@ -18,7 +21,18 @@ import 'topic_screen.dart';
 /// Teacher home and curriculum browser. Every number and action on this screen
 /// comes from the shipped content pack or the local library.
 class TopicPickerScreen extends StatefulWidget {
-  const TopicPickerScreen({super.key});
+  const TopicPickerScreen({
+    super.key,
+    this.classCode = '6',
+    this.subjectCode = 'general_science',
+    this.className = 'Class 6',
+    this.subjectName = 'General Science',
+  });
+
+  final String classCode;
+  final String subjectCode;
+  final String className;
+  final String subjectName;
 
   @override
   State<TopicPickerScreen> createState() => _TopicPickerScreenState();
@@ -156,7 +170,7 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
         ),
         const SectionHeader(
           title: 'Choose a curriculum topic',
-          subtitle: 'Class 6 General Science · verified offline content',
+          subtitle: '${widget.className} ${widget.subjectName} · verified offline content',
         ),
         const SizedBox(height: AppSpacing.sm),
         TextField(
@@ -204,6 +218,12 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
   }
 
   void _openTopic(Topic topic) {
+    unawaited(RecentAccessStore().record(
+      classCode: widget.classCode,
+      subjectCode: widget.subjectCode,
+      topicId: topic.id,
+      topicTitle: topic.title,
+    ));
     Navigator.of(context)
         .push(
           MaterialPageRoute(

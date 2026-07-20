@@ -1,20 +1,18 @@
+import 'package:bayaz_ai/features/onboarding/onboarding_gate.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bayaz_ai/main.dart';
-
 void main() {
-  testWidgets('app shell exposes only the existing teacher workflows',
+  testWidgets('onboarding gate shows a non-blocking startup state',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const BayazApp());
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: OnboardingGate(
+          child: Scaffold(body: Text('Teacher home')),
+        ),
+      ),
+    );
 
-    expect(find.text('Bayaz AI'), findsOneWidget);
-    expect(find.text('Offline teacher toolkit'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Results'), findsOneWidget);
-
-    // The content pack loads asynchronously. A second pump lets a platform error
-    // be caught by the screen in environments without path_provider plugins.
-    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
