@@ -47,3 +47,20 @@ RAHBAR_N_CANDIDATES=20 uv run python -m src.gen_content # smaller bank, faster r
 marked `unsure` are held back from the pack and listed there for a human to judge; a wrong
 answer key reaches students through the OMR grader with nobody in between
 ([ADR-007](../docs/decisions/ADR-007-assessment-and-omr.md)).
+
+## Release quality gate
+
+Before replacing the bundled database, run:
+
+```bash
+uv run python -m src.audit_content_pack \
+  --markdown ../docs/content/CURRENT_PACK_AUDIT.md \
+  --json ../docs/content/current_pack_audit.json
+```
+
+`build_content_db` now requires the `plan_verify` checkpoint, excludes each flagged
+lesson-plan variant, and refuses to ship a topic when any lesson section has no safe
+variant left. The audit checks SQLite integrity, plan completeness, thin item banks,
+answer-position distribution, duplicate normalized stems, and duplicate section
+numbers. These automated checks supplement rather than replace review by a qualified
+subject teacher.

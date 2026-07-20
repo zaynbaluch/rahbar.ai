@@ -57,11 +57,13 @@ class McqTest {
     String? id,
     required this.topic,
     required this.questions,
+    this.reusedItemIds = const {},
   }) : id = id ?? createId();
 
   final String id;
   final String topic;
   final List<McqQuestion> questions;
+  final Set<String> reusedItemIds;
 
   int get count => questions.length;
   int get completeCount => questions.where((q) => q.isComplete).length;
@@ -85,6 +87,7 @@ class McqTest {
         'id': id,
         'topic': topic,
         'questions': questions.map((q) => q.toJson()).toList(),
+        if (reusedItemIds.isNotEmpty) 'reusedItemIds': reusedItemIds.toList(),
       };
 
   factory McqTest.fromJson(Map<String, dynamic> j) => McqTest(
@@ -93,6 +96,9 @@ class McqTest {
         questions: (j['questions'] as List? ?? [])
             .map((e) => McqQuestion.fromJson(e as Map<String, dynamic>))
             .toList(),
+        reusedItemIds: (j['reusedItemIds'] as List? ?? const [])
+            .map((item) => item.toString())
+            .toSet(),
       );
 }
 
