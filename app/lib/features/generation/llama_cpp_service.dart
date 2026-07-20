@@ -2,9 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-
 import 'mcq_grammar.dart';
 
 /// On-device generation via **llama.cpp** (GGUF), the primary runtime for budget
@@ -12,10 +9,11 @@ import 'mcq_grammar.dart';
 /// `llama_cpp_dart` FFI binding; llama.cpp runs in its own isolate (off the UI
 /// thread). CPU-only here — this budget Adreno GPU can't accelerate reliably.
 ///
-/// Shipping model is **Qwen3 1.7B** (ChatML template) with **greedy decoding**
-/// (temp 0 + repeat penalty) — the grounded-quality bake-off (ADR-003) showed
-/// default temperature collapses structured MCQ output, and greedy + Qwen3 1.7B
-/// gets 9/10 answer keys right vs Llama 1B's ~5/10.
+/// The current model profile is Liquid AI LFM2 1.2B in GGUF form with greedy
+/// decoding (temperature 0 plus repeat penalty). LFM2 uses a ChatML-like
+/// template, so system and user roles remain explicit while all generation stays
+/// on-device. Final quantization and device performance still require hardware
+/// benchmarking before a production model manifest is published.
 class LlamaCppService {
   LlamaParent? _parent;
   String? _loadedFile;
@@ -23,37 +21,18 @@ class LlamaCppService {
 
   bool get isLoaded => _parent != null;
 
-  /// llama.cpp opens the model with a native `open()`, which is blocked on
-  /// Android's FUSE-emulated external storage (SELinux). So we copy the
-  /// USB-pushed model from the external dir into internal storage (real ext4)
-  /// on first use, and load llama.cpp from there. The Dart copy works where the
-  /// native open() doesn't.
-  Future<String> _internalModelPath(String fileName) async {
-    final ext = await getExternalStorageDirectory();
-    final internal = await getApplicationSupportDirectory();
-    final src = File(p.join(ext!.path, fileName));
-    final dst = File(p.join(internal.path, fileName));
-    final needCopy = !await dst.exists() ||
-        (await dst.length()) != (await src.length());
-    if (needCopy) {
-      await src.copy(dst.path);
-    }
-    return dst.path;
-  }
-
-  /// Load a GGUF from the app's external files dir (USB-pushed).
-  ///
-  /// [grammar] is an optional GBNF string that constrains decoding (used for the
-  /// MCQ schema — see [kMcqGrammar]). The binding fixes the sampler at load time,
-  /// so switching the grammar (e.g. MCQ→lesson) reloads the model. That only
-  /// happens on a mode change, not per generation, so the cost is a rare one-off.
-  Future<void> load(
-    String fileName, {
+  /// Load a model already installed in private app storage by ResourceManager.
+  Future<void> loadPath(
+    String modelPath, {
     String? grammar,
-    int nThreads = 4, // 4 big cores
-    int nCtx = 4096, // room for ~2 K-token RAG prompt + generation
+    int nThreads = 4,
+    int nCtx = 4096,
   }) async {
-    if (_loadedFile == fileName && _loadedGrammar == grammar && _parent != null) {
+    final model = File(modelPath);
+    if (!await model.exists()) {
+      throw StateError('Local language model is not installed.');
+    }
+    if (_loadedFile == modelPath && _loadedGrammar == grammar && _parent != null) {
       return;
     }
     await unload();
@@ -62,7 +41,7 @@ class LlamaCppService {
     Llama.libraryPath = 'libmtmd.so';
 
     final load = LlamaLoad(
-      path: await _internalModelPath(fileName), // internal ext4 — native open() works
+      path: modelPath,
       modelParams: ModelParams()
         ..nGpuLayers = 0 // CPU-only on budget hardware
         // main_gpu=-1 → no GPU device required (else load fails validation when
@@ -96,12 +75,12 @@ class LlamaCppService {
       // re-binds the (silent) callback to its own isolate instead.
       verbose: false,
     );
-    // ChatML formatter — Qwen3's template. formatMessages() wraps system+user as
-    // <|im_start|>system…<|im_start|>user…<|im_start|>assistant. Tokenized with
-    // parse_special=true so the control tokens are recognized.
+    // LFM2 uses a ChatML-like template with im_start/im_end role tokens.
+    // The model's GGUF metadata and this formatter must be re-verified whenever
+    // the production model revision changes.
     _parent = LlamaParent(load, ChatMLFormat());
     await _parent!.init();
-    _loadedFile = fileName;
+    _loadedFile = modelPath;
     _loadedGrammar = grammar;
   }
 
@@ -109,7 +88,7 @@ class LlamaCppService {
   /// path). Resets chat history each call so generations are independent.
   Stream<String> generateChat(String system, String user) {
     final parent = _parent;
-    if (parent == null) throw StateError('No model loaded — call load() first.');
+    if (parent == null) throw StateError('No model loaded — call loadPath() first.');
     parent.messages
       ..clear()
       ..add({'role': 'system', 'content': system})
@@ -120,7 +99,7 @@ class LlamaCppService {
   /// Stream a plain single-prompt generation (spike / ungrounded path).
   Stream<String> generate(String prompt) {
     final parent = _parent;
-    if (parent == null) throw StateError('No model loaded — call load() first.');
+    if (parent == null) throw StateError('No model loaded — call loadPath() first.');
     parent.messages.clear(); // ensure the single-prompt (formatPrompt) path is used
     return _stream(parent, prompt);
   }

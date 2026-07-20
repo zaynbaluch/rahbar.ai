@@ -7,6 +7,9 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../resources/resource_manager.dart';
+import '../resources/resource_manifest.dart';
+
 /// One retrieved curriculum excerpt.
 class Chunk {
   const Chunk({
@@ -42,7 +45,6 @@ class GroundedPrompt {
 /// (cosine 0.9999998 query parity) so on-device results match the validated pipeline.
 /// See docs/decisions/ADR-004.
 class RagService {
-  static const String embedModelFile = 'bge-small-en-v1.5.gguf';
   static const int dim = 384;
 
   LlamaParent? _embedder;
@@ -66,39 +68,46 @@ class RagService {
   /// Load the embedding model + curriculum DB + prompt templates. Idempotent.
   Future<void> init() async {
     if (isReady) return;
+    await dispose();
+    try {
+      // Resolve and verify the managed embedding model before allocating the DB.
+      final modelPath = await _resolveEmbeddingModelPath();
 
-    // --- curriculum.db: copy the read-only asset to a file sqlite3 can open. ---
-    final support = await getApplicationSupportDirectory();
-    final dbPath = p.join(support.path, 'curriculum.db');
-    final dbBytes = await rootBundle.load('assets/rag/curriculum.db');
-    await File(dbPath).writeAsBytes(dbBytes.buffer.asUint8List(), flush: true);
-    _db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
+      // --- curriculum.db: copy the read-only asset to a file sqlite3 can open. ---
+      final support = await getApplicationSupportDirectory();
+      final dbPath = p.join(support.path, 'curriculum.db');
+      final dbBytes = await rootBundle.load('assets/rag/curriculum.db');
+      await File(dbPath).writeAsBytes(dbBytes.buffer.asUint8List(), flush: true);
+      _db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
 
-    // --- prompt templates (bundled copies of prompts/*.md). ---
-    _templates['mcq'] = await rootBundle.loadString('assets/prompts/mcq.md');
-    _templates['lesson'] =
-        await rootBundle.loadString('assets/prompts/lesson_plan.md');
+      // --- prompt templates (bundled copies of prompts/*.md). ---
+      _templates['mcq'] = await rootBundle.loadString('assets/prompts/mcq.md');
+      _templates['lesson'] =
+          await rootBundle.loadString('assets/prompts/lesson_plan.md');
 
-    // --- bge embedder: GGUF in an embeddings-only context, CLS pooling. ---
-    Llama.libraryPath = 'libmtmd.so';
-    final modelPath = await _internalModelPath(embedModelFile);
-    final load = LlamaLoad(
-      path: modelPath,
-      modelParams: ModelParams()
-        ..nGpuLayers = 0
-        ..mainGpu = -1,
-      contextParams: ContextParams()
-        ..nCtx = 512
-        ..nBatch = 512
-        ..nThreads = 4
-        ..nThreadsBatch = 4
-        ..embeddings = true // embeddings-only context
-        ..poolingType = LlamaPoolingType.cls, // bge-small-en-v1.5 uses CLS pooling
-      samplingParams: SamplerParams(),
-      verbose: false,
-    );
-    _embedder = LlamaParent(load);
-    await _embedder!.init();
+      // --- bge embedder: GGUF in an embeddings-only context, CLS pooling. ---
+      Llama.libraryPath = 'libmtmd.so';
+      final load = LlamaLoad(
+        path: modelPath,
+        modelParams: ModelParams()
+          ..nGpuLayers = 0
+          ..mainGpu = -1,
+        contextParams: ContextParams()
+          ..nCtx = 512
+          ..nBatch = 512
+          ..nThreads = 4
+          ..nThreadsBatch = 4
+          ..embeddings = true // embeddings-only context
+          ..poolingType = LlamaPoolingType.cls, // bge-small-en-v1.5 uses CLS pooling
+        samplingParams: SamplerParams(),
+        verbose: false,
+      );
+      _embedder = LlamaParent(load);
+      await _embedder!.init();
+    } catch (_) {
+      await dispose();
+      rethrow;
+    }
   }
 
   /// Retrieve the top-[k] non-exercise chunks for [query] by cosine similarity.
@@ -216,16 +225,24 @@ class RagService {
     return out.take(4).join('; ');
   }
 
-  /// Same FUSE→internal copy trick as LlamaCppService (native open() fails on FUSE).
-  Future<String> _internalModelPath(String fileName) async {
-    final ext = await getExternalStorageDirectory();
-    final internal = await getApplicationSupportDirectory();
-    final src = File(p.join(ext!.path, fileName));
-    final dst = File(p.join(internal.path, fileName));
-    final needCopy =
-        !await dst.exists() || (await dst.length()) != (await src.length());
-    if (needCopy) await src.copy(dst.path);
-    return dst.path;
+  /// Resolve only an app-managed embedding model whose downloaded file
+  /// matches the size and SHA-256 declared in the bundled manifest.
+  Future<String> _resolveEmbeddingModelPath() async {
+    final manager = ResourceManager();
+    try {
+      await manager.init();
+      final models = manager.resources(kind: ResourceKind.embeddingModel);
+      if (models.isEmpty) {
+        throw FileSystemException('No approved embedding model is configured.');
+      }
+      final installed = await manager.installedFile(models.first.id);
+      if (installed == null) {
+        throw FileSystemException('Embedding model is not installed.');
+      }
+      return installed.path;
+    } finally {
+      manager.dispose();
+    }
   }
 
   Future<void> dispose() async {

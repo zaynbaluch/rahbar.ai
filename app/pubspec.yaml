@@ -53,6 +53,7 @@ dependencies:
   flutter_gemma_litertlm: ^1.0.2
   image: ^4.9.1
   image_picker: ^1.2.3
+  crypto: ^3.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -82,6 +83,7 @@ flutter:
     - assets/content/content_pack.db # verified MCQ bank + 5E section variants (ADR-008)
     - assets/prompts/ # grounded templates for the on-device escape hatch
     - assets/ui/ # metadata files stored directly in the UI asset root
+    - assets/config/ # runtime resource manifest and module metadata
     - assets/ui/branding/
     - assets/ui/illustrations/
     - assets/ui/grading/
