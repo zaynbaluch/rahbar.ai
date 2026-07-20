@@ -53,8 +53,9 @@ class SavedTest {
     return McqTest.fromJson(json);
   }
 
-  /// The structured lesson plan (kind == 'lesson'). Null for SLM-generated plans, which
-  /// are an unstructured blob and are rendered as text.
+  /// The structured lesson plan (kind == 'lesson'). New SLM-generated plans are
+  /// parsed before saving; older library entries may still return null and use the
+  /// raw-text recovery view.
   LessonPlan? toLessonPlan() =>
       contentJson == null ? null : LessonPlan.fromJson(contentJson!);
 
