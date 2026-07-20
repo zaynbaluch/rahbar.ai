@@ -1,53 +1,65 @@
-# Run Rahbar AI on an Android phone
+# Run Bayaz AI on Android
 
-## 1. Use the project SDK baseline
+## Required toolchain
 
-Use Flutter 3.44.4 stable, which includes Dart 3.12.2. Confirm with:
+Use the versions pinned by the repository configuration and setup documents:
 
-```bash
-flutter --version
-```
+- Flutter 3.44.4 stable
+- Dart 3.12.2
+- Android Gradle Plugin 8.11.1
+- Gradle 8.13
+- Kotlin 2.2.20
+- Java 17
+- Android NDK 27.0.12077973
 
-Do not run `flutter upgrade` for this project before the first validation build.
+## 1. Restore the native runtime
 
-## 2. Restore the local llama.cpp dependency
-
-The uploaded source archive did not include `third_party/llama_cpp_dart`, although `app/pubspec.yaml` references it as a local path dependency.
-
-From the repository root, run the existing setup script:
+From the repository root:
 
 ```bash
 bash scripts/setup-llama.sh
+bash scripts/check-environment.sh
 ```
 
-Follow any Android NDK requirements printed by that script.
+The large native dependency is not stored in this source ZIP.
 
-## 3. Resolve and validate the Flutter app
+## 2. Resolve Flutter packages
 
 ```bash
 cd app
 flutter pub get
+```
+
+This creates `pubspec.lock`. Review and commit that lockfile in the real repository.
+
+## 3. Validate
+
+```bash
+cd ..
+python scripts/validation/validate_repository.py
+cd app
 flutter analyze
 flutter test
 ```
 
-The lockfile has been retained, so use `flutter pub get`, not `flutter pub upgrade`.
+The Python validator performs structural checks only. It does not replace Flutter analysis, Flutter tests, an Android build, model inference testing, or physical-camera OMR testing.
 
-## 4. Connect the phone
+## 4. Run on a phone
 
-Enable Developer options and USB debugging on the Android phone, connect it, then run:
+Enable Android developer options and USB debugging, connect the device, then run:
 
 ```bash
 flutter devices
 flutter run
 ```
 
-To install a release-mode build using the project's current debug signing configuration:
+## 5. Build a release APK
+
+Keep signing material outside Git. Copy the template and point it to the organization-controlled keystore:
 
 ```bash
-flutter run --release
+cp android/key.properties.example android/key.properties
+flutter build apk --release
 ```
 
-## Local-model note
-
-The verified curriculum content-pack path works from the bundled SQLite databases. The custom-topic fallback still requires its existing local model files and setup; the UI clearly marks that path as slower and review-required.
+Never place keystores, passwords, certificates, or private signing keys in a delivery ZIP or Git commit.

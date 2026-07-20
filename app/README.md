@@ -1,17 +1,24 @@
-# rahbar_ai
+# Bayaz AI Flutter App
 
-A new Flutter project.
+The app is an offline-first teacher tool for the current Class 6 General Science MVP.
 
-## Getting Started
+## Main workflows
 
-This project is a starting point for a Flutter application.
+1. Complete the three-step teacher setup.
+2. Open a recent topic or browse Class 6 -> General Science -> topic.
+3. Use verified stored lesson plans and MCQ papers by default.
+4. Optionally generate custom material or ask for clarification after installing approved local models.
+5. Export material, save it to the library, or grade answer sheets with teacher confirmation.
 
-A few resources to get you started if this is your first Flutter project:
+## Local resources
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+`assets/config/runtime_manifest.json` lists bundled coursework and optional AI models. A downloadable model entry must include a direct HTTPS URL, exact byte size, and SHA-256 checksum. The app performs a direct download, verifies the checksum, and stores the file in private app storage.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Commands
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+```

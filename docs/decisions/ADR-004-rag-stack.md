@@ -1,5 +1,8 @@
 # ADR-004 — RAG stack: EmbeddingGemma + sqlite-vec, corpus prebuilt & bundled
 
+> **Status: Superseded in implementation details.** The current application uses its own SQLite retrieval path with a separately managed BGE-compatible embedding resource; it does not ship the early `flutter_gemma` RAG stack. See `../01-architecture.md` and `../resources/MODEL_AND_MODULE_DELIVERY.md`.
+
+
 **Status:** Accepted · **Date:** 2026-07-04 · **Revisit flagged:** 2026-07-05
 
 > **Update (2026-07-05):** While wiring the generation spike we found `flutter_gemma` now
