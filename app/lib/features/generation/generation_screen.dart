@@ -197,6 +197,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
     await _library.save(SavedTest(
       id: test?.id ?? now.toString(),
       kind: _kind,
+      source: SavedContentSource.customAi,
       topic: _topic.text.trim(),
       rawOutput: _output,
       contentJson: test?.toJson() ?? _lessonPlan?.toJson(),

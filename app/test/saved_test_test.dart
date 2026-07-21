@@ -19,6 +19,7 @@ ANSWER: B
     final t = SavedTest(
       id: '123',
       kind: 'mcq',
+      source: SavedContentSource.customAi,
       topic: 'digestion',
       rawOutput: raw,
       createdAtMillis: 1720000000000,
@@ -32,6 +33,8 @@ ANSWER: B
     expect(back.id, '123');
     expect(back.kind, 'mcq');
     expect(back.topic, 'digestion');
+    expect(back.source, SavedContentSource.customAi);
+    expect(back.fromPack, isFalse);
     expect(back.excerptTitles, ['4.2 DIGESTIVE GLANDS']);
 
     final parsed = back.toMcqTest();
@@ -66,6 +69,7 @@ ANSWER: B
     final saved = SavedTest(
       id: 'lesson-1',
       kind: 'lesson',
+      source: SavedContentSource.curriculumPack,
       topic: plan.topic,
       topicId: plan.topicId,
       createdAtMillis: 1720000000000,
@@ -109,6 +113,7 @@ ANSWER: B
     final saved = SavedTest(
       id: 'legacy-paper-id',
       kind: 'mcq',
+      source: SavedContentSource.legacy,
       topic: 'Digestion',
       createdAtMillis: 1720000000000,
       contentJson: {
@@ -118,5 +123,59 @@ ANSWER: B
     );
 
     expect(saved.toMcqTest().id, 'legacy-paper-id');
+  });
+
+  test('legacy pack entries infer curriculum provenance only with a topic ID', () {
+    final saved = SavedTest.fromJson({
+      'id': 'old-pack',
+      'kind': 'mcq',
+      'topic': 'Cells',
+      'topicId': 'cells',
+      'contentJson': jsonEncode({
+        'topic': 'Cells',
+        'questions': const <Map<String, dynamic>>[],
+      }),
+    });
+
+    expect(saved.source, SavedContentSource.curriculumPack);
+    expect(saved.fromPack, isTrue);
+  });
+
+  test('structured legacy entries without a topic ID are not marked verified', () {
+    final saved = SavedTest.fromJson({
+      'id': 'old-custom',
+      'kind': 'mcq',
+      'topic': 'Cells',
+      'contentJson': jsonEncode({
+        'topic': 'Cells',
+        'questions': const <Map<String, dynamic>>[],
+      }),
+    });
+
+    expect(saved.source, SavedContentSource.legacy);
+    expect(saved.fromPack, isFalse);
+    expect(saved.toMcqTest().expectedCount, 10);
+  });
+
+
+  test('structured custom output keeps its review provenance', () {
+    final saved = SavedTest(
+      id: 'custom-paper',
+      kind: 'mcq',
+      source: SavedContentSource.customAi,
+      topic: 'Cells',
+      createdAtMillis: 1720000000000,
+      contentJson: {
+        'topic': 'Cells',
+        'expectedCount': 10,
+        'questions': const <Map<String, dynamic>>[],
+      },
+    );
+
+    final restored = SavedTest.fromJson(saved.toJson());
+
+    expect(restored.source, SavedContentSource.customAi);
+    expect(restored.fromCustomAi, isTrue);
+    expect(restored.fromPack, isFalse);
   });
 }

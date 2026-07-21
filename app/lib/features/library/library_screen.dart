@@ -299,6 +299,20 @@ class _LibraryCard extends StatelessWidget {
                       const StatusChip(
                         label: 'Curriculum pack',
                         icon: Icons.verified_outlined,
+                      )
+                    else if (item.fromCustomAi)
+                      const StatusChip(
+                        label: 'Custom AI · Review',
+                        icon: Icons.rate_review_outlined,
+                        backgroundColor: AppColors.softGold,
+                        foregroundColor: AppColors.warningText,
+                      )
+                    else
+                      const StatusChip(
+                        label: 'Source not verified',
+                        icon: Icons.info_outline,
+                        backgroundColor: AppColors.softGold,
+                        foregroundColor: AppColors.warningText,
                       ),
                   ],
                 ),
