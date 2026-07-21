@@ -5,7 +5,7 @@ import 'resource_manifest.dart';
 
 class ResourceManager {
   ResourceManager({ResourceDownloadManager? downloads})
-      : _downloads = downloads ?? ResourceDownloadManager();
+    : _downloads = downloads ?? ResourceDownloadManager();
 
   final ResourceDownloadManager _downloads;
   ResourceManifest? _manifest;
@@ -28,7 +28,7 @@ class ResourceManager {
 
   Future<bool> isInstalled(String id) async {
     final resource = _find(id);
-    return resource.isBundled || _downloads.verifyIntegrity(resource);
+    return resource.isBundled || await _downloads.verifyIntegrity(resource);
   }
 
   Future<File?> installedFile(String id) async {
@@ -46,7 +46,9 @@ class ResourceManager {
   }) {
     final resource = _find(id);
     if (resource.isBundled) {
-      throw StateError('${resource.displayName} is already included in the app.');
+      throw StateError(
+        '${resource.displayName} is already included in the app.',
+      );
     }
     return _downloads.download(
       resource,
@@ -60,9 +62,9 @@ class ResourceManager {
   Future<void> remove(String id) => _downloads.remove(_find(id));
 
   ResourceDescriptor _find(String id) => manifest.resources.firstWhere(
-        (resource) => resource.id == id,
-        orElse: () => throw StateError('Unknown resource: $id'),
-      );
+    (resource) => resource.id == id,
+    orElse: () => throw StateError('Unknown resource: $id'),
+  );
 
   void dispose() => _downloads.dispose();
 }
