@@ -2,6 +2,7 @@ import 'package:image/image.dart' as img;
 
 import '../generation/mcq_parser.dart';
 import 'omr_template.dart';
+import 'projective_mapper.dart';
 
 /// Per-question grading outcome.
 class OmrQuestion {
@@ -89,7 +90,7 @@ class OmrResult {
 }
 
 /// Reads a photographed OMR sheet and scores it against the stored key — no SLM.
-/// Pipeline: grayscale → locate the 4 corner fiducials → bilinear-map each bubble
+/// Pipeline: grayscale → locate the 4 corner fiducials → projectively map each bubble
 /// (known [OmrTemplate] positions) into the photo → measure interior darkness →
 /// the darkest option per row (clearly above the rest) is the mark. See ADR-007.
 class OmrGrader {
@@ -107,6 +108,7 @@ class OmrGrader {
     final w = gray.width, h = gray.height;
 
     final fids = _findFiducials(gray);
+    final mapper = fids == null ? null : ProjectiveMapper.fromUnitSquare(fids);
     final answers = {for (final q in key.questions) q.number: q.answer};
 
     final out = <OmrQuestion>[];
@@ -114,12 +116,12 @@ class OmrGrader {
       final fills = <double>[];
       for (var c = 0; c < OmrTemplate.options; c++) {
         final (u, v) = OmrTemplate.bubbleNorm(q.number, c);
-        final (px, py) = _map(fids, u, v);
+        final (px, py) = mapper?.map(u, v) ?? (0.0, 0.0);
         fills.add(_sampleFill(gray, px, py, w, h));
       }
       out.add(_decide(q.number, fills, answers[q.number]));
     }
-    return OmrResult(questions: out, fiducialsFound: fids != null);
+    return OmrResult(questions: out, fiducialsFound: mapper != null);
   }
 
   static OmrQuestion _decide(int number, List<double> fills, String? correct) {
@@ -261,18 +263,6 @@ class OmrGrader {
     }
     if (wsum == 0) return (bx + win / 2, by + win / 2);
     return (sx / wsum, sy / wsum);
-  }
-
-  /// Bilinear map of a normalized point (u,v) into photo pixels via the 4 fiducials.
-  static (double, double) _map(List<(double, double)>? fids, double u, double v) {
-    if (fids == null) return (0, 0);
-    final (tlx, tly) = fids[0];
-    final (trx, tryy) = fids[1];
-    final (brx, bry) = fids[2];
-    final (blx, bly) = fids[3];
-    final topX = tlx + (trx - tlx) * u, topY = tly + (tryy - tly) * u;
-    final botX = blx + (brx - blx) * u, botY = bly + (bry - bly) * u;
-    return (topX + (botX - topX) * v, topY + (botY - topY) * v);
   }
 
   /// Average darkness (0..1) inside a small disc at (px,py) — the bubble interior.

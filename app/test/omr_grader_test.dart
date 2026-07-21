@@ -3,6 +3,7 @@ import 'package:image/image.dart' as img;
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 import 'package:bayaz_ai/features/omr/omr_grader.dart';
 import 'package:bayaz_ai/features/omr/omr_template.dart';
+import 'package:bayaz_ai/features/omr/projective_mapper.dart';
 
 /// A test whose key is A B C D A B C D A B for Q1..Q10.
 McqTest _key() => McqTest(
@@ -53,6 +54,53 @@ img.Image _renderSheet(Map<int, String> marks,
   return im;
 }
 
+img.Image _renderPerspectiveSheet(Map<int, String> marks) {
+  final image = img.Image(width: 800, height: 1000);
+  img.fill(image, color: img.ColorRgb8(255, 255, 255));
+  final black = img.ColorRgb8(0, 0, 0);
+  final corners = <(double, double)>[
+    (130, 90),
+    (665, 175),
+    (575, 915),
+    (215, 800),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+
+  for (final corner in corners) {
+    img.fillRect(
+      image,
+      x1: corner.$1.round() - 22,
+      y1: corner.$2.round() - 22,
+      x2: corner.$1.round() + 22,
+      y2: corner.$2.round() + 22,
+      color: black,
+    );
+  }
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (u, v) = OmrTemplate.bubbleNorm(q, c);
+      final (x, y) = mapper.map(u, v);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 24,
+        color: black,
+      );
+      if (marks[q] == 'ABCD'[c]) {
+        img.fillCircle(
+          image,
+          x: x.round(),
+          y: y.round(),
+          radius: 22,
+          color: black,
+        );
+      }
+    }
+  }
+  return image;
+}
+
 void main() {
   group('OmrGrader', () {
     test('reads a perfectly-framed sheet and scores against the key', () {
@@ -79,6 +127,15 @@ void main() {
       final result = OmrGrader.grade(_renderSheet(marks, dx: 40, dy: 25), _key());
       expect(result.fiducialsFound, isTrue);
       expect(result.correct, 10); // all correct despite the offset
+    });
+
+    test('reads a sheet photographed with perspective distortion', () {
+      final marks = {for (var i = 1; i <= 10; i++) i: 'ABCD'[(i - 1) % 4]};
+
+      final result = OmrGrader.grade(_renderPerspectiveSheet(marks), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.correct, 10);
     });
   });
 
