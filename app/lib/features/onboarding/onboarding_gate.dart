@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../resources/local_ai_resources.dart';
 import 'onboarding_screen.dart';
 import 'onboarding_store.dart';
 
@@ -8,10 +9,14 @@ class OnboardingGate extends StatefulWidget {
     super.key,
     required this.child,
     this.store,
+    this.inspectAi,
   });
 
   final Widget child;
   final OnboardingStore? store;
+
+  /// Forwarded to [OnboardingScreen] so tests can skip the platform probe.
+  final Future<LocalAiAvailability?> Function()? inspectAi;
 
   @override
   State<OnboardingGate> createState() => _OnboardingGateState();
@@ -28,7 +33,11 @@ class _OnboardingGateState extends State<OnboardingGate> {
     _state = _store.read();
   }
 
-  void _retry() => setState(() => _state = _store.read());
+  void _retry() {
+    setState(() {
+      _state = _store.read();
+    });
+  }
 
   Future<void> _reset() async {
     try {
@@ -85,8 +94,11 @@ class _OnboardingGateState extends State<OnboardingGate> {
         if (snapshot.data!.completed) return widget.child;
         return OnboardingScreen(
           store: _store,
+          inspectAi: widget.inspectAi,
           onCompleted: () {
-            setState(() => _state = _store.read());
+            setState(() {
+              _state = _store.read();
+            });
           },
         );
       },

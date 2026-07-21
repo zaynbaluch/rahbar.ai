@@ -235,7 +235,10 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
           ),
         )
         .then((_) {
-          if (mounted) setState(() => _recentFuture = _library.list());
+          if (!mounted) return;
+          setState(() {
+            _recentFuture = _library.list();
+          });
         });
   }
 

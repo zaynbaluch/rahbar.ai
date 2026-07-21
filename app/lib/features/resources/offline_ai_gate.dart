@@ -11,11 +11,16 @@ class OfflineAiGate extends StatefulWidget {
     required this.title,
     required this.enabledBuilder,
     this.policy,
+    this.openSettings,
   });
 
   final String title;
   final WidgetBuilder enabledBuilder;
   final OfflineAiPolicy? policy;
+
+  /// Opens teacher setup. Overridden by tests so they do not have to drive the
+  /// real settings screen and its file-backed store.
+  final Future<void> Function(BuildContext context)? openSettings;
 
   @override
   State<OfflineAiGate> createState() => _OfflineAiGateState();
@@ -42,10 +47,18 @@ class _OfflineAiGateState extends State<OfflineAiGate> {
   }
 
   Future<void> _openSettings() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => const SettingsScreen()),
-    );
-    if (mounted) setState(() => _enabled = _policy.isEnabled());
+    final open = widget.openSettings;
+    if (open != null) {
+      await open(context);
+    } else {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _enabled = _policy.isEnabled();
+    });
   }
 
   @override
@@ -72,9 +85,11 @@ class _OfflineAiGateState extends State<OfflineAiGate> {
                       const Text('Could not read the offline AI setting.'),
                       const SizedBox(height: AppSpacing.sm),
                       OutlinedButton(
-                        onPressed: () => setState(
-                          () => _enabled = _policy.isEnabled(),
-                        ),
+                        onPressed: () {
+                          setState(() {
+                            _enabled = _policy.isEnabled();
+                          });
+                        },
                         child: const Text('Retry'),
                       ),
                     ],

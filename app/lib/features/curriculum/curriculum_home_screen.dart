@@ -33,7 +33,11 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     _recentFuture = _recent.list();
   }
 
-  void _refresh() => setState(() => _recentFuture = _recent.list());
+  void _refresh() {
+    setState(() {
+      _recentFuture = _recent.list();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
