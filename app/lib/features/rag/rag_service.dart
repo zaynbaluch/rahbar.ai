@@ -266,6 +266,10 @@ class RagService {
     await embedder?.dispose();
   }
 
+  /// Release the native embedding allocation while keeping lightweight prompt
+  /// and database state available for the current screen.
+  Future<void> releaseNativeModel() => _resetEmbedder();
+
   Future<void> dispose() async {
     await _resetEmbedder();
     _db?.close();

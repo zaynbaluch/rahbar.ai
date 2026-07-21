@@ -16,6 +16,7 @@ import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
 import 'lesson_plan.dart';
 import 'lesson_plan_parser.dart';
+import 'local_model_handoff.dart';
 import 'lesson_plan_view.dart';
 import 'llama_cpp_service.dart';
 import 'mcq_grammar.dart';
@@ -43,6 +44,7 @@ enum _Phase { idle, preparing, retrieving, loadingModel, generating }
 class _GenerationScreenState extends State<GenerationScreen> {
   final _rag = RagService();
   final _llama = LlamaCppService();
+  final _modelHandoff = const LocalModelHandoff();
   final _library = LibraryStore();
   final _localAi = LocalAiResources();
   late final _topic = TextEditingController(text: widget.initialTopic ?? '');
@@ -98,30 +100,35 @@ class _GenerationScreenState extends State<GenerationScreen> {
     try {
       if (!mounted) return;
       setState(() => _phase = _Phase.retrieving);
-      GroundedPrompt prompt;
-      try {
-        await _rag.init();
-        prompt = await _rag.assemble(_kind, topic);
-      } on FileSystemException {
-        _grounded = false;
-        prompt = GroundedPrompt(
-          'You are Bayaz AI, an offline teaching assistant for Pakistan. '
-          'The curriculum retrieval model is not installed. Do not claim curriculum '
-          'alignment. Use simple language, make uncertainty clear, and produce only '
-          'the requested format.',
-          _kind == 'mcq'
-              ? 'Create exactly 10 MCQs about "$topic". For each item output: '
-                  'Q<number>. <stem>, then A) through D) on separate lines, then '
-                  'ANSWER: <A|B|C|D>, then DIFFICULTY: <easy|medium|hard>. '
-                  'Do not add any other sections.'
-              : 'Create a practical 50-minute 5E lesson plan about "$topic". '
-                  'Use these exact Markdown headers in this order: ### Objectives, '
-                  '### Materials, ### Revision starter (5 min), ### Engage (5 min), '
-                  '### Explore (12 min), ### Explain (12 min), ### Socratic questions, '
-                  '### Elaborate (8 min), ### Evaluate (8 min), ### Homework, ### Notes.',
-          const [],
-        );
-      }
+      final prompt = await _modelHandoff.retrieve(
+        releaseGenerator: _llama.unload,
+        releaseRetriever: _rag.releaseNativeModel,
+        runRetrieval: () async {
+          try {
+            await _rag.init();
+            return await _rag.assemble(_kind, topic);
+          } on FileSystemException {
+            _grounded = false;
+            return GroundedPrompt(
+              'You are Bayaz AI, an offline teaching assistant for Pakistan. '
+              'The curriculum retrieval model is not installed. Do not claim curriculum '
+              'alignment. Use simple language, make uncertainty clear, and produce only '
+              'the requested format.',
+              _kind == 'mcq'
+                  ? 'Create exactly 10 MCQs about "$topic". For each item output: '
+                      'Q<number>. <stem>, then A) through D) on separate lines, then '
+                      'ANSWER: <A|B|C|D>, then DIFFICULTY: <easy|medium|hard>. '
+                      'Do not add any other sections.'
+                  : 'Create a practical 50-minute 5E lesson plan about "$topic". '
+                      'Use these exact Markdown headers in this order: ### Objectives, '
+                      '### Materials, ### Revision starter (5 min), ### Engage (5 min), '
+                      '### Explore (12 min), ### Explain (12 min), ### Socratic questions, '
+                      '### Elaborate (8 min), ### Evaluate (8 min), ### Homework, ### Notes.',
+              const [],
+            );
+          }
+        },
+      );
       if (!mounted) return;
       setState(() {
         _hits = prompt.hits;

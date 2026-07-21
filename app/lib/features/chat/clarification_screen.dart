@@ -8,6 +8,7 @@ import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../generation/llama_cpp_service.dart';
+import '../generation/local_model_handoff.dart';
 import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
 import '../settings/resource_management_screen.dart';
@@ -30,6 +31,7 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
   final _scroll = ScrollController();
   final _rag = RagService();
   final _llama = LlamaCppService();
+  final _modelHandoff = const LocalModelHandoff();
   final _resources = LocalAiResources();
   final _messages = <_ChatMessage>[];
 
@@ -78,18 +80,23 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
       }
 
       if (mounted) setState(() => _phase = 'Finding relevant curriculum…');
-      var hits = <Chunk>[];
-      try {
-        await _rag.init();
-        hits = await _rag.retrieve(
-          '${widget.contextMaterial.title}\n$question',
-          k: 3,
-        );
-      } on FileSystemException {
-        hits = const [];
-      } on StateError {
-        hits = const [];
-      }
+      final hits = await _modelHandoff.retrieve(
+        releaseGenerator: _llama.unload,
+        releaseRetriever: _rag.releaseNativeModel,
+        runRetrieval: () async {
+          try {
+            await _rag.init();
+            return await _rag.retrieve(
+              '${widget.contextMaterial.title}\n$question',
+              k: 3,
+            );
+          } on FileSystemException {
+            return const <Chunk>[];
+          } on StateError {
+            return const <Chunk>[];
+          }
+        },
+      );
       _grounded = hits.isNotEmpty;
 
       if (mounted) setState(() => _phase = 'Loading the local model…');
