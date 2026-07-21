@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/storage/debounced_writer.dart';
@@ -39,6 +41,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _saving = false;
   String? _loadError;
   String? _saveError;
+  bool _allowPop = false;
 
   @override
   void initState() {
@@ -141,8 +144,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       );
     }
-    return PopScope(
-      canPop: widget.reconfigure,
+    return PopScope<void>(
+      canPop: widget.reconfigure && _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && widget.reconfigure) {
+          unawaited(_saveAndLeave());
+        }
+      },
       child: Scaffold(
         appBar: widget.reconfigure
             ? AppBar(title: const Text('Review setup'))
@@ -306,7 +314,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             value: _state.offlineAiEnabled,
             onChanged: (value) {
               setState(() => _state = _state.copyWith(offlineAiEnabled: value));
-              _saveDraft();
+              _scheduleDraftSave();
             },
             title: const Text('Enable offline AI features'),
             subtitle: const Text(
@@ -424,9 +432,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     try {
       await _drafts.flush(completed);
       if (!mounted) return;
-      setState(() => _state = completed);
+      setState(() {
+        _state = completed;
+        if (widget.reconfigure) _allowPop = true;
+      });
       if (widget.reconfigure) {
-        Navigator.of(context).pop();
+        await Future<void>.delayed(Duration.zero);
+        if (mounted) Navigator.of(context).pop();
       } else {
         widget.onCompleted?.call();
       }
@@ -434,6 +446,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (mounted) setState(() => _saveError = 'Setup changes could not be saved.');
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveAndLeave() async {
+    if (!widget.reconfigure || _saving || _allowPop) return;
+    final updated = _snapshot();
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    try {
+      await _drafts.flush(updated);
+      if (!mounted) return;
+      setState(() {
+        _state = updated;
+        _saving = false;
+        _allowPop = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError = 'Setup changes could not be saved.';
+        });
+      }
     }
   }
 
