@@ -50,7 +50,9 @@ class OmrResult {
   int get correct => questions.where((q) => q.isRight).length;
   int get blank => questions.where((q) => q.marked == null).length;
   int get needsReview => questions
-      .where((q) => q.marked == null || q.confidence < 0.20)
+      .where(
+        (q) => !q.reviewed && (q.marked == null || q.confidence < 0.20),
+      )
       .length;
 
   Map<String, dynamic> toJson() => {

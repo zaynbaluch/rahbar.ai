@@ -82,6 +82,26 @@ void main() {
     });
   });
 
+  test('clears the review warning after a teacher corrects an answer', () {
+    const result = OmrResult(
+      fiducialsFound: true,
+      questions: [
+        OmrQuestion(
+          number: 1,
+          marked: null,
+          correct: 'A',
+          fill: 0.1,
+          confidence: 0.02,
+        ),
+      ],
+    );
+
+    expect(result.needsReview, 1);
+    final corrected = result.withMark(1, 'A');
+    expect(corrected.needsReview, 0);
+    expect(corrected.questions.single.reviewed, isTrue);
+  });
+
   test('refuses to grade a paper with a mismatched question count', () {
     final invalid = McqTest(
       topic: 'Incomplete',
