@@ -10,6 +10,7 @@ import '../chat/clarification_context.dart';
 import '../chat/clarification_screen.dart';
 import '../export/pdf_export.dart';
 import '../omr/grading_screen.dart';
+import '../resources/offline_ai_navigation.dart';
 import 'mcq_parser.dart';
 
 class McqTestScreen extends StatelessWidget {
@@ -35,11 +36,12 @@ class McqTestScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Ask about this test',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => ClarificationScreen(
+            onPressed: () => openOfflineAiScreen(
+              context,
+              (_) => ClarificationScreen(
                 contextMaterial: ClarificationContext.test(test),
               ),
-            )),
+            ),
             icon: const Icon(Icons.forum_outlined),
           ),
         ],
@@ -154,11 +156,12 @@ class _McqTestViewState extends State<McqTestView> {
                     builder: (_) => GradingScreen(test: test),
                   ))
               : null,
-          onClarify: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => ClarificationScreen(
+          onClarify: () => openOfflineAiScreen(
+            context,
+            (_) => ClarificationScreen(
               contextMaterial: ClarificationContext.test(test),
             ),
-          )),
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
         Text('Questions', style: Theme.of(context).textTheme.titleLarge),

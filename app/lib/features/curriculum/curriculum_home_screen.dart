@@ -12,6 +12,7 @@ import '../content/content_service.dart';
 import '../content/topic_picker_screen.dart';
 import '../content/topic_screen.dart';
 import '../settings/settings_screen.dart';
+import '../resources/offline_ai_navigation.dart';
 import 'curriculum_catalog.dart';
 import 'recent_access_store.dart';
 
@@ -43,11 +44,12 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
         actions: [
           IconButton(
             tooltip: 'Ask Bayaz',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const ClarificationScreen(
+            onPressed: () => openOfflineAiScreen(
+              context,
+              (_) => const ClarificationScreen(
                 contextMaterial: ClarificationContext.general,
               ),
-            )),
+            ),
             icon: const Icon(Icons.forum_outlined),
           ),
           IconButton(

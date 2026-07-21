@@ -5,6 +5,7 @@ import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../generation/generation_screen.dart';
+import '../resources/offline_ai_navigation.dart';
 import '../generation/lesson_plan_view.dart';
 import '../generation/mcq_parser.dart';
 import '../generation/mcq_test_view.dart';
@@ -130,12 +131,13 @@ class _TopicScreenState extends State<TopicScreen> {
   }
 
   void _openCustom(String kind) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => GenerationScreen(
+    openOfflineAiScreen(
+      context,
+      (_) => GenerationScreen(
         initialTopic: widget.topic.title,
         initialKind: kind,
       ),
-    ));
+    );
   }
 
   void _openPlan() {

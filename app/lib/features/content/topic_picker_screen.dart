@@ -11,6 +11,7 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_radii.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../generation/generation_screen.dart';
+import '../resources/offline_ai_navigation.dart';
 import '../curriculum/recent_access_store.dart';
 import '../library/library_screen.dart';
 import '../library/library_store.dart';
@@ -239,8 +240,9 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
   }
 
   void _openCustomTopic(String topic) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GenerationScreen(initialTopic: topic)),
+    openOfflineAiScreen(
+      context,
+      (_) => GenerationScreen(initialTopic: topic),
     );
   }
 
