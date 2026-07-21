@@ -27,6 +27,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: OnboardingGate(
         store: store,
+        inspectAi: () async => null,
         child: const Text('App'),
       ),
     ));
@@ -39,6 +40,7 @@ void main() {
     await tester.tap(find.text('Reset setup'));
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
     expect(store.resetCalls, 1);
     expect(find.text('Welcome to Bayaz AI'), findsOneWidget);
   });
