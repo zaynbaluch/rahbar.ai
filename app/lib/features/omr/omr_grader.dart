@@ -20,6 +20,24 @@ class OmrQuestion {
   final double confidence; // winner margin, 0..1
   final bool reviewed;
   bool get isRight => marked != null && marked == correct;
+
+  Map<String, dynamic> toJson() => {
+        'number': number,
+        'marked': marked,
+        'correct': correct,
+        'fill': fill,
+        'confidence': confidence,
+        'reviewed': reviewed,
+      };
+
+  factory OmrQuestion.fromJson(Map<String, dynamic> json) => OmrQuestion(
+        number: json['number'] as int,
+        marked: json['marked'] as String?,
+        correct: json['correct'] as String?,
+        fill: (json['fill'] as num).toDouble(),
+        confidence: (json['confidence'] as num).toDouble(),
+        reviewed: json['reviewed'] as bool? ?? false,
+      );
 }
 
 /// Result of grading one answer sheet against a test's key.
@@ -34,6 +52,20 @@ class OmrResult {
   int get needsReview => questions
       .where((q) => q.marked == null || q.confidence < 0.20)
       .length;
+
+  Map<String, dynamic> toJson() => {
+        'fiducialsFound': fiducialsFound,
+        'questions': questions.map((question) => question.toJson()).toList(),
+      };
+
+  factory OmrResult.fromJson(Map<String, dynamic> json) => OmrResult(
+        fiducialsFound: json['fiducialsFound'] as bool,
+        questions: (json['questions'] as List)
+            .map((question) => OmrQuestion.fromJson(
+                  Map<String, dynamic>.from(question as Map),
+                ))
+            .toList(growable: false),
+      );
 
   OmrResult withMark(int questionNumber, String? mark) => OmrResult(
         fiducialsFound: fiducialsFound,

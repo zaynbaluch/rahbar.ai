@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../design_system/components/frame_animation.dart';
@@ -15,6 +14,7 @@ import 'gradebook_store.dart';
 import 'graded_result.dart';
 import 'image_pick_recovery.dart';
 import 'omr_grader.dart';
+import 'omr_image_processor.dart';
 import 'results_screen.dart';
 
 class GradingScreen extends StatefulWidget {
@@ -24,12 +24,14 @@ class GradingScreen extends StatefulWidget {
     this.initialImagePath,
     this.recoveryStore,
     this.picker,
+    this.imageProcessor,
   });
 
   final McqTest test;
   final String? initialImagePath;
   final PendingImagePickStore? recoveryStore;
   final ImagePicker? picker;
+  final OmrImageProcessor? imageProcessor;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
@@ -38,6 +40,7 @@ class GradingScreen extends StatefulWidget {
 class _GradingScreenState extends State<GradingScreen> {
   late final ImagePicker _picker;
   late final PendingImagePickStore _recoveryStore;
+  late final OmrImageProcessor _imageProcessor;
   final _gradebook = GradebookStore();
   final _name = TextEditingController();
   bool _busy = false;
@@ -54,6 +57,7 @@ class _GradingScreenState extends State<GradingScreen> {
     super.initState();
     _picker = widget.picker ?? ImagePicker();
     _recoveryStore = widget.recoveryStore ?? PendingImagePickStore();
+    _imageProcessor = widget.imageProcessor ?? OmrImageProcessor();
     final initialPath = widget.initialImagePath;
     if (initialPath != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -118,17 +122,7 @@ class _GradingScreenState extends State<GradingScreen> {
     }
     try {
       final bytes = await File(path).readAsBytes();
-      var decoded = img.decodeImage(bytes);
-      if (decoded == null) throw 'Could not read the selected image.';
-      decoded = img.bakeOrientation(decoded);
-      if (decoded.width > 2000 || decoded.height > 2000) {
-        decoded = img.copyResize(
-          decoded,
-          width: decoded.width >= decoded.height ? 2000 : null,
-          height: decoded.height > decoded.width ? 2000 : null,
-        );
-      }
-      final result = OmrGrader.grade(decoded, widget.test);
+      final result = await _imageProcessor.process(bytes, widget.test);
       if (!result.fiducialsFound) {
         throw 'The four corner markers were not detected. Retake the image with only the ANSWERS box filling the frame, on a flat surface and without shadows.';
       }
