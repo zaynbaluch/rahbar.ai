@@ -14,6 +14,7 @@ import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
+import 'generated_output_sanitizer.dart';
 import 'lesson_plan.dart';
 import 'lesson_plan_parser.dart';
 import 'local_model_handoff.dart';
@@ -167,7 +168,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       _uiTimer?.cancel();
       if (!mounted) return;
       setState(() {
-        _output = _clean(_buffer.toString());
+        _output = _clean(_buffer.toString(), finalOutput: true);
         _elapsed = stopwatch.elapsed;
         if (_kind == 'mcq') {
           _test = McqParser.parse(_output, topic: topic);
@@ -193,9 +194,12 @@ class _GenerationScreenState extends State<GenerationScreen> {
     return text;
   }
 
-  static String _clean(String value) => value
-      .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
-      .trimLeft();
+  String _clean(String value, {bool finalOutput = false}) =>
+      GeneratedOutputSanitizer.sanitize(
+        value,
+        finalOutput: finalOutput,
+        lessonPlan: _kind == 'lesson',
+      );
 
   Future<void> _save() async {
     if (_output.isEmpty || _saved) return;

@@ -211,7 +211,11 @@ class RagService {
           : _contextCharBudget - used;
       final body = _truncateAtSentence(h.text.trim(), cap);
       used += body.length;
-      blocks.add('[Excerpt ${i + 1} — Ch ${h.chapter}, ${h.title} ($pages)]\n$body');
+      blocks.add(
+        '<<<CURRICULUM SOURCE ${i + 1}: Ch ${h.chapter}, ${h.title} ($pages)>>>\n'
+        '$body\n'
+        '<<<END CURRICULUM SOURCE ${i + 1}>>>',
+      );
     }
     return blocks.join('\n\n');
   }
