@@ -10,9 +10,16 @@ import '../resources/resource_manager.dart';
 import '../resources/resource_manifest.dart';
 
 class ResourceManagementScreen extends StatefulWidget {
-  const ResourceManagementScreen({super.key, this.setupMode = false});
+  const ResourceManagementScreen({
+    super.key,
+    this.setupMode = false,
+    this.manager,
+  });
 
   final bool setupMode;
+
+  /// Overridden by tests, which cannot reach real downloads or storage.
+  final ResourceManager? manager;
 
   @override
   State<ResourceManagementScreen> createState() =>
@@ -20,7 +27,7 @@ class ResourceManagementScreen extends StatefulWidget {
 }
 
 class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
-  final _manager = ResourceManager();
+  late final ResourceManager _manager = widget.manager ?? ResourceManager();
   final Map<String, bool> _installed = {};
   final Map<String, DownloadProgress> _progress = {};
   final Map<String, DownloadCancellationToken> _tokens = {};
@@ -72,7 +79,9 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.setupMode ? 'Set up offline AI' : 'Offline downloads'),
+        title: Text(
+          widget.setupMode ? 'Set up offline AI' : 'Offline downloads',
+        ),
         actions: widget.setupMode
             ? [
                 TextButton(
@@ -153,7 +162,8 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
         ],
         const SectionHeader(
           title: 'Installed coursework',
-          subtitle: 'The MVP ships with only the coursework it currently supports',
+          subtitle:
+              'The MVP ships with only the coursework it currently supports',
         ),
         const SizedBox(height: AppSpacing.sm),
         if (curriculum.isEmpty)
@@ -180,14 +190,16 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
         const SizedBox(height: AppSpacing.lg),
         const SectionHeader(
           title: 'Optional offline AI',
-          subtitle: 'Download only the models needed for custom generation and chat',
+          subtitle:
+              'Download only the models needed for custom generation and chat',
         ),
         const SizedBox(height: AppSpacing.sm),
         if (models.isEmpty)
           const BayazEmptyState(
             asset: 'assets/ui/illustrations/empty_library.webp',
             title: 'No models listed',
-            message: 'Add approved model entries to the bundled runtime manifest.',
+            message:
+                'Add approved model entries to the bundled runtime manifest.',
           )
         else
           for (final resource in models) ...[
@@ -350,9 +362,14 @@ class _ResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = resource.sizeBytes <= 0
-        ? 'Size not configured'
-        : _formatBytes(resource.sizeBytes);
+    final currentProgress = progress;
+    // Bundled coursework ships inside the app, so it has no download size to
+    // report. Only a non-bundled entry with no size is genuinely unexpected.
+    final size = resource.isBundled
+        ? 'Included with app'
+        : resource.sizeBytes > 0
+        ? _formatBytes(resource.sizeBytes)
+        : 'Size unavailable';
     final type = switch (resource.kind) {
       ResourceKind.curriculumModule => 'Coursework module',
       ResourceKind.embeddingModel => 'Curriculum search model',
@@ -368,8 +385,9 @@ class _ResourceCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                backgroundColor:
-                    installed ? const Color(0xFFE7F6EC) : AppColors.softBlue,
+                backgroundColor: installed
+                    ? const Color(0xFFE7F6EC)
+                    : AppColors.softBlue,
                 child: Icon(
                   installed ? Icons.check_rounded : _icon(resource.kind),
                   color: installed ? AppColors.success : AppColors.primary,
@@ -397,11 +415,16 @@ class _ResourceCard extends StatelessWidget {
           ),
           if (downloading) ...[
             const SizedBox(height: AppSpacing.md),
-            LinearProgressIndicator(value: progress!.fraction),
+            // The card turns downloading the moment the cancel token exists, so
+            // the first progress event has usually not arrived yet. A null value
+            // is Flutter's indeterminate state, which is exactly right here.
+            LinearProgressIndicator(value: currentProgress?.fraction),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              '${_formatBytes(progress!.receivedBytes)} of '
-              '${_formatBytes(progress!.totalBytes)}',
+              currentProgress == null
+                  ? 'Starting download…'
+                  : '${_formatBytes(currentProgress.receivedBytes)} of '
+                        '${_formatBytes(currentProgress.totalBytes)}',
             ),
           ],
           if (error != null) ...[
@@ -421,38 +444,38 @@ class _ResourceCard extends StatelessWidget {
                     label: const Text('Cancel'),
                   )
                 : installed
-                    ? resource.required || resource.isBundled
-                        ? const Chip(label: Text('Included'))
-                        : Wrap(
-                            spacing: AppSpacing.sm,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: onVerify,
-                                icon: const Icon(Icons.verified_outlined),
-                                label: const Text('Verify'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: onRemove,
-                                icon: const Icon(Icons.delete_outline_rounded),
-                                label: const Text('Remove'),
-                              ),
-                            ],
-                          )
-                    : FilledButton.icon(
-                        onPressed: onInstall,
-                        icon: Icon(
-                          resource.isDownloadable
-                              ? Icons.download_rounded
-                              : Icons.info_outline_rounded,
-                        ),
-                        label: Text(
-                          error != null
-                              ? 'Retry download'
-                              : resource.isDownloadable
-                                  ? 'Download'
-                                  : 'Provider not configured',
-                        ),
-                      ),
+                ? resource.required || resource.isBundled
+                      ? const Chip(label: Text('Included'))
+                      : Wrap(
+                          spacing: AppSpacing.sm,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: onVerify,
+                              icon: const Icon(Icons.verified_outlined),
+                              label: const Text('Verify'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: onRemove,
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              label: const Text('Remove'),
+                            ),
+                          ],
+                        )
+                : FilledButton.icon(
+                    onPressed: onInstall,
+                    icon: Icon(
+                      resource.isDownloadable
+                          ? Icons.download_rounded
+                          : Icons.info_outline_rounded,
+                    ),
+                    label: Text(
+                      error != null
+                          ? 'Retry download'
+                          : resource.isDownloadable
+                          ? 'Download'
+                          : 'Provider not configured',
+                    ),
+                  ),
           ),
         ],
       ),
@@ -460,10 +483,10 @@ class _ResourceCard extends StatelessWidget {
   }
 
   static IconData _icon(ResourceKind kind) => switch (kind) {
-        ResourceKind.curriculumModule => Icons.menu_book_outlined,
-        ResourceKind.embeddingModel => Icons.manage_search_rounded,
-        ResourceKind.languageModel => Icons.auto_awesome_outlined,
-      };
+    ResourceKind.curriculumModule => Icons.menu_book_outlined,
+    ResourceKind.embeddingModel => Icons.manage_search_rounded,
+    ResourceKind.languageModel => Icons.auto_awesome_outlined,
+  };
 
   static String _formatBytes(int bytes) {
     if (bytes >= 1024 * 1024 * 1024) {
