@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
+import 'generation_stream_bridge.dart';
 import 'mcq_grammar.dart';
 
 /// On-device generation via **llama.cpp** (GGUF), the primary runtime for budget
@@ -18,6 +19,7 @@ class LlamaCppService {
   LlamaParent? _parent;
   String? _loadedFile;
   String? _loadedGrammar;
+  bool _generationActive = false;
 
   bool get isLoaded => _parent != null;
 
@@ -105,18 +107,25 @@ class LlamaCppService {
   }
 
   Stream<String> _stream(LlamaParent parent, String prompt) async* {
-    final out = StreamController<String>();
-    final tokenSub = parent.stream.listen(out.add);
-    final doneSub = parent.completions.listen((_) {
-      if (!out.isClosed) out.close();
-    });
-
-    unawaited(parent.sendPrompt(prompt)); // fire; tokens arrive via stream
+    if (_generationActive) {
+      throw StateError('A local generation is already running.');
+    }
+    _generationActive = true;
     try {
-      yield* out.stream;
+      yield* const GenerationStreamBridge().run(
+        tokens: parent.stream,
+        completions: parent.completions.map(
+          (event) => ModelCompletion(
+            promptId: event.promptId,
+            success: event.success,
+            errorDetails: event.errorDetails,
+          ),
+        ),
+        start: () => parent.sendPrompt(prompt),
+        stop: parent.stop,
+      );
     } finally {
-      await tokenSub.cancel();
-      await doneSub.cancel();
+      _generationActive = false;
     }
   }
 
