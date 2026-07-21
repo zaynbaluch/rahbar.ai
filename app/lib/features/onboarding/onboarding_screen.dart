@@ -14,10 +14,12 @@ class OnboardingScreen extends StatefulWidget {
     super.key,
     this.onCompleted,
     this.reconfigure = false,
+    this.store,
   });
 
   final VoidCallback? onCompleted;
   final bool reconfigure;
+  final OnboardingStore? store;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -26,7 +28,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _stepCount = 3;
 
-  final _store = OnboardingStore();
+  late final OnboardingStore _store;
   final _teacherController = TextEditingController();
   final _schoolController = TextEditingController();
   late final DebouncedWriter<OnboardingState> _drafts;
@@ -35,10 +37,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   LocalAiAvailability? _aiAvailability;
   bool _loading = true;
   bool _saving = false;
+  String? _loadError;
+  String? _saveError;
 
   @override
   void initState() {
     super.initState();
+    _store = widget.store ?? OnboardingStore();
     _drafts = DebouncedWriter<OnboardingState>(save: _store.save);
     _load();
   }
@@ -52,20 +57,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _load() async {
-    final stored = await _store.read();
-    final step = widget.reconfigure
-        ? 0
-        : stored.currentStep.clamp(0, _stepCount - 1).toInt();
-    final state = stored.copyWith(currentStep: step);
-    _teacherController.text = state.teacherName;
-    _schoolController.text = state.schoolName;
-    final availability = await _inspectAi();
-    if (!mounted) return;
-    setState(() {
-      _state = state;
-      _aiAvailability = availability;
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final stored = await _store.read();
+      final step = widget.reconfigure
+          ? 0
+          : stored.currentStep.clamp(0, _stepCount - 1).toInt();
+      final state = stored.copyWith(currentStep: step);
+      _teacherController.text = state.teacherName;
+      _schoolController.text = state.schoolName;
+      final availability = await _inspectAi();
+      if (!mounted) return;
+      setState(() {
+        _state = state;
+        _aiAvailability = availability;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = 'Setup data could not be read.';
+      });
+    }
+  }
+
+  Future<void> _resetAndLoad() async {
+    try {
+      await _store.reset();
+    } catch (_) {
+      if (mounted) setState(() => _loadError = 'Setup data could not be reset.');
+      return;
+    }
+    await _load();
   }
 
   Future<LocalAiAvailability?> _inspectAi() async {
@@ -83,6 +112,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_loadError != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.storage_rounded, size: 48),
+                const SizedBox(height: AppSpacing.sm),
+                Text(_loadError!, textAlign: TextAlign.center),
+                const SizedBox(height: AppSpacing.md),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                    FilledButton(
+                      onPressed: _resetAndLoad,
+                      child: const Text('Reset setup'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     return PopScope(
       canPop: widget.reconfigure,
@@ -106,6 +163,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
               ),
+              if (_saveError != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  child: Text(
+                    _saveError!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
               _navigation(),
             ],
           ),
@@ -352,17 +417,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       currentStep: _stepCount - 1,
       completed: true,
     );
-    setState(() => _saving = true);
-    await _drafts.flush(completed);
-    if (!mounted) return;
     setState(() {
-      _state = completed;
-      _saving = false;
+      _saving = true;
+      _saveError = null;
     });
-    if (widget.reconfigure) {
-      Navigator.of(context).pop();
-    } else {
-      widget.onCompleted?.call();
+    try {
+      await _drafts.flush(completed);
+      if (!mounted) return;
+      setState(() => _state = completed);
+      if (widget.reconfigure) {
+        Navigator.of(context).pop();
+      } else {
+        widget.onCompleted?.call();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _saveError = 'Setup changes could not be saved.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -382,13 +453,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _saveAndShow(OnboardingState updated) async {
     if (_saving) return;
-    setState(() => _saving = true);
-    await _drafts.flush(updated);
-    if (!mounted) return;
     setState(() {
-      _state = updated;
-      _saving = false;
+      _saving = true;
+      _saveError = null;
     });
+    try {
+      await _drafts.flush(updated);
+      if (mounted) setState(() => _state = updated);
+    } catch (_) {
+      if (mounted) setState(() => _saveError = 'Setup changes could not be saved.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _manageModels() async {
