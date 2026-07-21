@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app/bayaz_shell.dart';
 import 'core/theme.dart';
+import 'features/omr/image_pick_recovery_gate.dart';
 import 'features/onboarding/onboarding_gate.dart';
 
 void main() {
@@ -18,7 +19,9 @@ class BayazApp extends StatelessWidget {
       title: 'Bayaz AI',
       debugShowCheckedModeBanner: false,
       theme: BayazTheme.light(),
-      home: const OnboardingGate(child: BayazShell()),
+      home: const ImagePickRecoveryGate(
+        child: OnboardingGate(child: BayazShell()),
+      ),
     );
   }
 }
