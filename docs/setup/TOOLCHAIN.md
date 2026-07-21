@@ -9,7 +9,7 @@ The Android build uses:
 - JDK 17 bytecode target
 - Android SDK platform 36
 - Android Build Tools 35.0.0
-- Android NDK 27.0.12077973
+- Android NDK 28.2.13676358
 - Android command-line tools build 14742923
 
 Run `bash scripts/bootstrap-toolchain.sh` on Linux x86_64 to install the pinned Flutter and Android command-line tools under `~/.local/share/bayaz-toolchain`. The script does not install system packages and requires `curl`, `tar`, `unzip`, `git`, and Java.
@@ -26,11 +26,11 @@ flutter test
 flutter build apk --debug
 ```
 
-`scripts/setup-llama.sh` derives the Android SDK from `ANDROID_SDK_ROOT`, then `ANDROID_HOME`, then the bootstrap location above. It refuses to build against a different `llama_cpp_dart` checkout, defaults to the pinned NDK `27.0.12077973`, and builds the arm64 runtime with an Android API 24 floor. These defaults match the Flutter 3.44 application baseline. Supported overrides are:
+`scripts/setup-llama.sh` derives the Android SDK from `ANDROID_SDK_ROOT`, then `ANDROID_HOME`, then the bootstrap location above. It refuses to build against a different `llama_cpp_dart` checkout, defaults to the pinned NDK `28.2.13676358`, and builds the arm64 runtime with an Android API 24 floor. These defaults match the Flutter 3.44 application baseline. Supported overrides are:
 
 ```text
-ANDROID_NDK=/absolute/path/to/ndk/27.0.12077973
-ANDROID_NDK_VERSION=27.0.12077973
+ANDROID_NDK=/absolute/path/to/ndk/28.2.13676358
+ANDROID_NDK_VERSION=28.2.13676358
 ANDROID_PLATFORM=android-24
 LLAMA_DART_TAG=v0.2.0
 BUILD_JOBS=4
@@ -40,7 +40,7 @@ Do not raise `ANDROID_PLATFORM` above the app's minimum SDK: doing so can produc
 
 The Android application is restricted to `arm64-v8a` because that is the ABI produced by the pinned native setup. Do not remove the Gradle ABI filter unless equivalent native libraries are built, packaged, and tested for every additional ABI.
 
-The repository uses AGP 8.11.1 with Gradle 9.1.0 and Kotlin 2.3.20. AGP 8.11.1 documents Gradle 8.13 as its *minimum* supported version; this repository runs a newer Gradle and has produced a debug APK on that combination. JDK 17, Build Tools 35.0.0, and NDK 27.0.12077973 are unchanged. Do not upgrade one component independently without checking the compatibility table, and do not downgrade Gradle or Kotlin without a specific documented incompatibility.
+The repository uses AGP 8.11.1 with Gradle 9.1.0 and Kotlin 2.3.20. AGP 8.11.1 documents Gradle 8.13 as its *minimum* supported version; this repository runs a newer Gradle and has produced a debug APK on that combination. JDK 17 and Build Tools 35.0.0 remain unchanged; the repository now pins NDK 28.2.13676358 for native plugin compatibility. Do not upgrade one component independently without checking the compatibility table, and do not downgrade Gradle or Kotlin without a specific documented incompatibility.
 
 ## Release signing
 

@@ -10,7 +10,7 @@ Use the versions pinned by the repository configuration and setup documents:
 - Gradle 8.13
 - Kotlin 2.2.20
 - Java 17
-- Android NDK 27.0.12077973
+- Android NDK 28.2.13676358
 
 ## 1. Restore the native runtime
 
