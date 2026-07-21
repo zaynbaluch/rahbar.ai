@@ -17,11 +17,16 @@ class OnboardingScreen extends StatefulWidget {
     this.onCompleted,
     this.reconfigure = false,
     this.store,
+    this.inspectAi,
   });
 
   final VoidCallback? onCompleted;
   final bool reconfigure;
   final OnboardingStore? store;
+
+  /// Overrides the on-device model probe. Tests inject this because the real
+  /// probe reaches platform channels that never answer under widget tests.
+  final Future<LocalAiAvailability?> Function()? inspectAi;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -101,6 +106,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<LocalAiAvailability?> _inspectAi() async {
+    final override = widget.inspectAi;
+    if (override != null) return override();
     final resources = LocalAiResources();
     try {
       return await resources.inspect();
@@ -437,7 +444,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (widget.reconfigure) _allowPop = true;
       });
       if (widget.reconfigure) {
-        await Future<void>.delayed(Duration.zero);
+        // `pop` does not consult `canPop`, so this path was not stuck the way
+        // `_saveAndLeave` was. Waiting for the frame that publishes the new pop
+        // state still beats an arbitrary zero delay, and keeps both exits alike.
+        await WidgetsBinding.instance.endOfFrame;
         if (mounted) Navigator.of(context).pop();
       } else {
         widget.onCompleted?.call();
@@ -464,7 +474,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _saving = false;
         _allowPop = true;
       });
-      await Future<void>.delayed(Duration.zero);
+      // The pop must wait for the frame that republishes `canPop: true`,
+      // otherwise `PopScope` intercepts it again and the route never closes.
+      await WidgetsBinding.instance.endOfFrame;
       if (mounted) Navigator.of(context).maybePop();
     } catch (_) {
       if (mounted) {
