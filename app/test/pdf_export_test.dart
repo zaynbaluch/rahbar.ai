@@ -99,4 +99,26 @@ void main() {
     final out = Platform.environment['PDF_OUT'] ?? '/tmp/bayaz_test.pdf';
     File(out).writeAsBytesSync(bytes);
   });
+
+  test('refuses to export a paper that does not match its expected count', () async {
+    final paper = McqTest(
+      topic: 'Incomplete paper',
+      expectedCount: 2,
+      questions: const [
+        McqQuestion(
+          number: 1,
+          difficulty: 'easy',
+          text: 'Only question',
+          options: {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
+          answer: 'A',
+        ),
+      ],
+    );
+
+    await expectLater(
+      PdfExport.build(paper),
+      throwsA(isA<InvalidMcqPaperException>()),
+    );
+  });
+
 }

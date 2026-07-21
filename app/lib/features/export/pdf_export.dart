@@ -14,6 +14,15 @@ import '../omr/omr_template.dart';
 /// key is NOT printed (the teacher reads it in the app). The persistent test ID keeps
 /// printed papers and saved grading results associated with the same paper; the teacher
 /// still opens that exact test before using the current camera grader.
+class InvalidMcqPaperException implements Exception {
+  const InvalidMcqPaperException(this.issues);
+
+  final List<String> issues;
+
+  @override
+  String toString() => issues.join(' ');
+}
+
 class PdfExport {
   static const _letters = ['A', 'B', 'C', 'D'];
 
@@ -21,9 +30,13 @@ class PdfExport {
   static String testId(McqTest test) => test.id;
 
   static Future<Uint8List> build(McqTest test) async {
+    final validation = test.validation;
+    if (!validation.isReady) {
+      throw InvalidMcqPaperException(validation.issues);
+    }
     final doc = pw.Document();
     final id = testId(test);
-    final qs = test.questions.where((q) => q.isComplete).toList();
+    final qs = test.questions;
     doc.addPage(_paperPage(test, id, qs));
     return doc.save();
   }
@@ -153,7 +166,7 @@ class PdfExport {
           ],
         ),
         pw.Divider(height: 18),
-        for (var i = 0; i < n; i++) _question(i + 1, qs[i]),
+        for (final question in qs) _question(question.number, question),
       ],
     );
   }

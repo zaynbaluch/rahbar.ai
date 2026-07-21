@@ -65,6 +65,10 @@ class OmrGrader {
   static const double _marginThreshold = 0.12;
 
   static OmrResult grade(img.Image image, McqTest key) {
+    final validation = key.validation;
+    if (!validation.isReady) {
+      throw StateError('Cannot grade an invalid paper: ${validation.summary}');
+    }
     final gray = img.grayscale(image);
     final w = gray.width, h = gray.height;
 
