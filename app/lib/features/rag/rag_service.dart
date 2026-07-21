@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../resources/resource_manager.dart';
+import 'embedding_request.dart';
 import '../resources/resource_manifest.dart';
 
 /// One retrieved curriculum excerpt.
@@ -45,8 +46,13 @@ class GroundedPrompt {
 /// (cosine 0.9999998 query parity) so on-device results match the validated pipeline.
 /// See docs/decisions/ADR-004.
 class RagService {
+  RagService({
+    Duration embeddingTimeout = const Duration(seconds: 30),
+  }) : _embeddingRequests = EmbeddingRequestRunner(timeout: embeddingTimeout);
+
   static const int dim = 384;
 
+  final EmbeddingRequestRunner _embeddingRequests;
   LlamaParent? _embedder;
   Database? _db;
   final Map<String, String> _templates = {}; // kind -> raw template text
@@ -121,9 +127,18 @@ class RagService {
     if (embedder == null || db == null) {
       throw StateError('RagService not initialized — call init() first.');
     }
-    final q = Float32List.fromList(
-      (await embedder.getEmbeddings(query)).map((e) => e.toDouble()).toList(),
+    final values = await _embeddingRequests.run(
+      request: () => embedder.getEmbeddings(query),
+      reset: _resetEmbedder,
     );
+    if (values.length != dim) {
+      await _resetEmbedder();
+      throw LocalEmbeddingException(
+        'Curriculum search returned ${values.length} values instead of $dim. '
+        'The local retrieval model was reset; try again.',
+      );
+    }
+    final q = Float32List.fromList(values);
 
     final rows = db.select(
       'SELECT id, chapter, title, block_type, page_start, page_end, text, '
@@ -245,9 +260,14 @@ class RagService {
     }
   }
 
-  Future<void> dispose() async {
-    await _embedder?.dispose();
+  Future<void> _resetEmbedder() async {
+    final embedder = _embedder;
     _embedder = null;
+    await embedder?.dispose();
+  }
+
+  Future<void> dispose() async {
+    await _resetEmbedder();
     _db?.close();
     _db = null;
   }
