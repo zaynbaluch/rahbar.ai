@@ -20,9 +20,10 @@ import '../resources/offline_ai_policy.dart';
 import 'generated_output_sanitizer.dart';
 import 'lesson_plan.dart';
 import 'lesson_plan_parser.dart';
-import 'local_model_handoff.dart';
 import 'lesson_plan_view.dart';
 import 'llama_cpp_service.dart';
+import 'local_ai_route_lifecycle.dart';
+import 'local_model_handoff.dart';
 import 'mcq_grammar.dart';
 import 'mcq_parser.dart';
 import 'mcq_test_view.dart';
@@ -51,6 +52,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
   final _rag = RagService();
   final _llama = LlamaCppService();
   final _modelHandoff = const LocalModelHandoff();
+  final _routeLifecycle = LocalAiRouteLifecycle();
   final _library = LibraryStore();
   final _localAi = LocalAiResources();
   late final OfflineAiPolicy _offlineAiPolicy;
@@ -70,6 +72,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
   String? _error;
   Duration _elapsed = Duration.zero;
   int _chunks = 0;
+  Future<void>? _activeOperation;
+  bool _allowPop = false;
+  bool _localResourcesDisposed = false;
 
   @override
   void initState() {
@@ -77,24 +82,32 @@ class _GenerationScreenState extends State<GenerationScreen> {
     _offlineAiPolicy = widget.offlineAiPolicy ?? OfflineAiPolicy();
   }
 
-  bool get _busy => _phase != _Phase.idle;
+  bool get _busy => _phase != _Phase.idle || _routeLifecycle.closing;
   double get _tokPerSec => _elapsed.inMilliseconds == 0
       ? 0
       : _chunks / (_elapsed.inMilliseconds / 1000);
 
   @override
   void dispose() {
+    _routeLifecycle.cancelOperations();
     _uiTimer?.cancel();
     _topic.dispose();
-    unawaited(_rag.dispose());
-    unawaited(_llama.unload());
-    _localAi.dispose();
+    unawaited(_routeLifecycle.close(_cleanup));
     super.dispose();
   }
 
-  Future<void> _run() async {
+  Future<void> _run() {
     final topic = _topic.text.trim();
-    if (topic.isEmpty || _busy) return;
+    if (topic.isEmpty || _busy) return Future<void>.value();
+    final token = _routeLifecycle.beginOperation();
+    final operation = _runOperation(token, topic);
+    _activeOperation = operation;
+    return operation.whenComplete(() {
+      if (identical(_activeOperation, operation)) _activeOperation = null;
+    });
+  }
+
+  Future<void> _runOperation(int token, String topic) async {
     setState(() {
       _error = null;
       _output = '';
@@ -112,7 +125,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
 
     try {
       await _offlineAiPolicy.requireEnabled();
-      if (!mounted) return;
+      if (!_canUpdate(token)) return;
       setState(() => _phase = _Phase.retrieving);
       final prompt = await _modelHandoff.retrieve(
         releaseGenerator: _llama.unload,
@@ -143,7 +156,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
           }
         },
       );
-      if (!mounted) return;
+      if (!_canUpdate(token)) return;
       setState(() {
         _hits = prompt.hits;
         _phase = _Phase.loadingModel;
@@ -160,12 +173,12 @@ class _GenerationScreenState extends State<GenerationScreen> {
         availability.languageModel.file!.path,
         grammar: _kind == 'mcq' ? kMcqGrammar : null,
       );
-      if (!mounted) return;
+      if (!_canUpdate(token)) return;
       setState(() => _phase = _Phase.generating);
 
       final stopwatch = Stopwatch()..start();
       _uiTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
-        if (!mounted) return;
+        if (!_canUpdate(token)) return;
         setState(() {
           _output = _clean(_buffer.toString());
           _elapsed = stopwatch.elapsed;
@@ -174,12 +187,13 @@ class _GenerationScreenState extends State<GenerationScreen> {
 
       await for (final chunk
           in _llama.generateChat(prompt.system, prompt.user)) {
+        if (!_canUpdate(token)) break;
         _buffer.write(chunk);
         _chunks++;
       }
       stopwatch.stop();
       _uiTimer?.cancel();
-      if (!mounted) return;
+      if (!_canUpdate(token)) return;
       setState(() {
         _output = _clean(_buffer.toString(), finalOutput: true);
         _elapsed = stopwatch.elapsed;
@@ -192,10 +206,52 @@ class _GenerationScreenState extends State<GenerationScreen> {
         }
       });
     } catch (e) {
-      if (mounted) setState(() => _error = _friendlyError(e));
+      if (_canUpdate(token)) setState(() => _error = _friendlyError(e));
     } finally {
       _uiTimer?.cancel();
-      if (mounted) setState(() => _phase = _Phase.idle);
+      if (_canUpdate(token)) setState(() => _phase = _Phase.idle);
+    }
+  }
+
+  bool _canUpdate(int token) => mounted && _routeLifecycle.isCurrent(token);
+
+  Future<void> _closeAndPop() async {
+    if (_routeLifecycle.closing) return;
+    final close = _routeLifecycle.close(_cleanup);
+    if (mounted) setState(() {});
+    try {
+      await close;
+    } finally {
+      if (!mounted) return;
+      setState(() => _allowPop = true);
+      await Future<void>.delayed(Duration.zero);
+      if (mounted) Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<void> _cleanup() async {
+    _uiTimer?.cancel();
+    try {
+      await _llama.unload();
+    } catch (_) {
+      // Continue releasing the remaining route resources.
+    }
+    final active = _activeOperation;
+    if (active != null) {
+      try {
+        await active;
+      } catch (_) {
+        // The closing route no longer surfaces operation errors.
+      }
+    }
+    try {
+      await _rag.dispose();
+    } catch (_) {
+      // Continue with synchronous resource cleanup.
+    }
+    if (!_localResourcesDisposed) {
+      _localResourcesDisposed = true;
+      _localAi.dispose();
     }
   }
 
@@ -240,6 +296,8 @@ class _GenerationScreenState extends State<GenerationScreen> {
   }
 
   String get _phaseLabel => switch (_phase) {
+        _Phase.idle when _routeLifecycle.closing =>
+          'Closing offline AI safely…',
         _Phase.idle => _chunks > 0
             ? 'Finished in ${_elapsed.inSeconds}s · ${_tokPerSec.toStringAsFixed(1)} tok/s'
             : 'Ready when the local model files are installed.',
@@ -264,19 +322,24 @@ class _GenerationScreenState extends State<GenerationScreen> {
         if (seen.add(hit.title)) hit,
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Custom topic generation')),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            AppSpacing.xl,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+    return PopScope<void>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_closeAndPop());
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Custom topic generation')),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.xl,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               BayazCard(
                 color: AppColors.softGold,
                 borderColor: const Color(0xFFFFD96A),
@@ -458,7 +521,8 @@ class _GenerationScreenState extends State<GenerationScreen> {
                   ),
                 ),
               ],
-            ],
+              ],
+            ),
           ),
         ),
       ),

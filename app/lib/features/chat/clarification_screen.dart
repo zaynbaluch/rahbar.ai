@@ -9,6 +9,7 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../generation/generated_output_sanitizer.dart';
 import '../generation/llama_cpp_service.dart';
+import '../generation/local_ai_route_lifecycle.dart';
 import '../generation/local_model_handoff.dart';
 import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
@@ -37,6 +38,7 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
   final _rag = RagService();
   final _llama = LlamaCppService();
   final _modelHandoff = const LocalModelHandoff();
+  final _routeLifecycle = LocalAiRouteLifecycle();
   final _resources = LocalAiResources();
   late final OfflineAiPolicy _offlineAiPolicy;
   final _messages = <_ChatMessage>[];
@@ -52,20 +54,33 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
   bool _modelMissing = false;
   String? _error;
   String _phase = '';
+  Future<void>? _activeOperation;
+  bool _allowPop = false;
+  bool _localResourcesDisposed = false;
 
   @override
   void dispose() {
+    _routeLifecycle.cancelOperations();
     _question.dispose();
     _scroll.dispose();
-    unawaited(_rag.dispose());
-    unawaited(_llama.unload());
-    _resources.dispose();
+    unawaited(_routeLifecycle.close(_cleanup));
     super.dispose();
   }
 
-  Future<void> _send() async {
+  Future<void> _send() {
     final question = _question.text.trim();
-    if (question.isEmpty || _busy) return;
+    if (question.isEmpty || _busy || _routeLifecycle.closing) {
+      return Future<void>.value();
+    }
+    final token = _routeLifecycle.beginOperation();
+    final operation = _sendOperation(token, question);
+    _activeOperation = operation;
+    return operation.whenComplete(() {
+      if (identical(_activeOperation, operation)) _activeOperation = null;
+    });
+  }
+
+  Future<void> _sendOperation(int token, String question) async {
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -77,16 +92,17 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
 
     try {
       await _offlineAiPolicy.requireEnabled();
-      if (!mounted) return;
+      if (!_canUpdate(token)) return;
       setState(() {
         _messages.add(_ChatMessage(role: 'teacher', text: question));
         _question.clear();
       });
       _scrollToEnd();
       final availability = await _resources.inspect();
+      if (!_canUpdate(token)) return;
       final model = availability.languageModel.file;
       if (!availability.languageModel.installed || model == null) {
-        if (mounted) {
+        if (_canUpdate(token)) {
           setState(() {
             _modelMissing = true;
             _phase = '';
@@ -95,7 +111,9 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
         return;
       }
 
-      if (mounted) setState(() => _phase = 'Finding relevant curriculum…');
+      if (_canUpdate(token)) {
+        setState(() => _phase = 'Finding relevant curriculum…');
+      }
       final hits = await _modelHandoff.retrieve(
         releaseGenerator: _llama.unload,
         releaseRetriever: _rag.releaseNativeModel,
@@ -113,10 +131,12 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
           }
         },
       );
+      if (!_canUpdate(token)) return;
       _grounded = hits.isNotEmpty;
 
-      if (mounted) setState(() => _phase = 'Loading the local model…');
+      setState(() => _phase = 'Loading the local model…');
       await _llama.loadPath(model.path, nCtx: 3072);
+      if (!_canUpdate(token)) return;
       final turns = _messages
           .take(_messages.length - 1)
           .map((message) => ClarificationTurn(
@@ -131,31 +151,32 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
         history: turns,
       );
 
-      if (mounted) setState(() => _phase = 'Writing the answer…');
+      setState(() => _phase = 'Writing the answer…');
       final buffer = StringBuffer();
       final reply = _ChatMessage(
         role: 'assistant',
         text: '',
         grounded: _grounded,
       );
-      if (mounted) setState(() => _messages.add(reply));
+      setState(() => _messages.add(reply));
       await for (final chunk in _llama.generateChat(prompt.system, prompt.user)) {
+        if (!_canUpdate(token)) break;
         buffer.write(chunk);
-        if (mounted) {
-          setState(() => reply.text = _clean(buffer.toString()));
-          _scrollToEnd();
-        }
+        setState(() => reply.text = _clean(buffer.toString()));
+        _scrollToEnd();
       }
-      if (mounted) {
+      if (_canUpdate(token)) {
         setState(() => reply.text = _clean(
               buffer.toString(),
               finalOutput: true,
             ));
       }
     } catch (error) {
-      if (mounted) setState(() => _error = _friendlyError(error));
+      if (_canUpdate(token)) {
+        setState(() => _error = _friendlyError(error));
+      }
     } finally {
-      if (mounted) {
+      if (_canUpdate(token)) {
         setState(() {
           _busy = false;
           _phase = '';
@@ -165,8 +186,55 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
     }
   }
 
+  bool _canUpdate(int token) => mounted && _routeLifecycle.isCurrent(token);
+
+  Future<void> _closeAndPop() async {
+    if (_routeLifecycle.closing) return;
+    final close = _routeLifecycle.close(_cleanup);
+    if (mounted) {
+      setState(() {
+        _busy = true;
+        _phase = 'Closing offline AI safely…';
+      });
+    }
+    try {
+      await close;
+    } finally {
+      if (!mounted) return;
+      setState(() => _allowPop = true);
+      await Future<void>.delayed(Duration.zero);
+      if (mounted) Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<void> _cleanup() async {
+    try {
+      await _llama.unload();
+    } catch (_) {
+      // Continue releasing the remaining route resources.
+    }
+    final active = _activeOperation;
+    if (active != null) {
+      try {
+        await active;
+      } catch (_) {
+        // The closing route no longer surfaces operation errors.
+      }
+    }
+    try {
+      await _rag.dispose();
+    } catch (_) {
+      // Continue with synchronous resource cleanup.
+    }
+    if (!_localResourcesDisposed) {
+      _localResourcesDisposed = true;
+      _resources.dispose();
+    }
+  }
+
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _routeLifecycle.closing) return;
       if (!_scroll.hasClients) return;
       _scroll.animateTo(
         _scroll.position.maxScrollExtent,
@@ -203,8 +271,13 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
       );
 
   Widget _buildEnabled(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
+    return PopScope<void>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_closeAndPop());
+      },
+      child: Scaffold(
+        appBar: AppBar(
         title: Text(
           widget.contextMaterial.kind == 'general'
               ? 'Ask Bayaz'
@@ -213,7 +286,7 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      body: SafeArea(
+        body: SafeArea(
         child: Column(
           children: [
             Padding(
@@ -342,6 +415,7 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
