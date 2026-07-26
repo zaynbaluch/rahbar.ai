@@ -66,14 +66,38 @@ def build() -> None:
         meta = ckpt.load("topic_meta", tid)
         verified = ckpt.load("mcq_verify", tid)
         plan = ckpt.load("plan_gen", tid)
-        if not (meta and verified and plan):
+        plan_verification = ckpt.load("plan_verify", tid)
+        if not (meta and verified and plan and plan_verification):
             skipped.append(tid)
             continue
-
-        # Only shippable items: 'flagged' ones await human review and must not reach a
-        # printed answer key.
+        # Only shippable items: flagged MCQs await human review and must not
+        # reach a printed answer key. Plan variants flagged by plan_verify are
+        # excluded individually; a topic ships only if every required section still
+        # has at least one safe variant.
         items = [i for i in verified["items"] if i["verify_status"] == "passed"]
         flagged = [i for i in verified["items"] if i["verify_status"] == "flagged"]
+        flagged_variants = {
+            (item["section"], item["label"])
+            for item in plan_verification.get("flagged", [])
+        }
+        rows = []
+        safe_sections: set[str] = set()
+        for section, variants in plan["sections"].items():
+            for n, variant in enumerate(variants):
+                if (section, variant["label"]) in flagged_variants:
+                    continue
+                rows.append((
+                    f"{tid}-{section}-{n}", tid, section, variant["label"],
+                    PLAN_MINUTES.get(section, 0), variant["body"],
+                    json.dumps(variant.get("materials", [])),
+                ))
+                safe_sections.add(section)
+        missing_sections = sorted(set(plan["sections"]) - safe_sections)
+        if missing_sections:
+            skipped.append(
+                f"{tid} (no safe variant for: {', '.join(missing_sections)})"
+            )
+            continue
 
         con.execute(
             "INSERT INTO topics VALUES (?,?,?,?,?,?,?)",
@@ -82,26 +106,27 @@ def build() -> None:
         )
         con.executemany(
             "INSERT INTO mcq_items VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            [(f"{tid}-q{n:03d}", tid, i["difficulty"], i["bloom"], i["stem"],
-              i["option_a"], i["option_b"], i["option_c"], i["option_d"],
-              i["answer"], i["rationale"], i["verify_status"])
-             for n, i in enumerate(items)],
+            [(f"{tid}-q{n:03d}", tid, item["difficulty"], item["bloom"],
+              item["stem"], item["option_a"], item["option_b"],
+              item["option_c"], item["option_d"], item["answer"],
+              item["rationale"], item["verify_status"])
+             for n, item in enumerate(items)],
         )
-        rows = []
-        for section, variants in plan["sections"].items():
-            for n, v in enumerate(variants):
-                rows.append((f"{tid}-{section}-{n}", tid, section, v["label"],
-                             PLAN_MINUTES.get(section, 0), v["body"],
-                             json.dumps(v.get("materials", []))))
         con.executemany("INSERT INTO plan_sections VALUES (?,?,?,?,?,?,?)", rows)
 
         n_topics += 1
         n_items += len(items)
         n_flagged += len(flagged)
         n_sections += len(rows)
-        review.append({"topic": meta["title"], "id": tid, "n_items": len(items),
-                       "items": items, "flagged": flagged,
-                       "rejected": verified.get("rejected", [])})
+        review.append({
+            "topic": meta["title"],
+            "id": tid,
+            "n_items": len(items),
+            "items": items,
+            "flagged": flagged,
+            "rejected": verified.get("rejected", []),
+            "excluded_plan_variants": plan_verification.get("flagged", []),
+        })
 
     con.executemany("INSERT INTO meta VALUES (?,?)", [
         ("pack_version", PACK_VERSION),
@@ -133,7 +158,7 @@ def write_review(review: list[dict]) -> None:
         "border-left:3px solid #ddd}.flag{border-color:#e8a33d;background:#fff8ec}"
         ".rej{border-color:#d33;background:#fff0f0}.a{color:#137333;font-weight:600}"
         "small{color:#666}</style>",
-        "<h1>Rahbar AI — content pack review</h1>",
+        "<h1>Bayaz AI — content pack review</h1>",
         "<p>Check the <span class='a'>answer</span> of a sample against the textbook. "
         "Orange = flagged by the verifier (held back from the pack). "
         "Red = rejected.</p>",

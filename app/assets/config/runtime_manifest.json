@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-07-20T00:00:00Z",
+  "resources": [
+    {
+      "id": "curriculum.pk.class6.general_science",
+      "kind": "curriculum_module",
+      "version": "1.0.0",
+      "display_name": "Class 6 General Science",
+      "class_code": "6",
+      "subject_code": "general_science",
+      "file_name": "content_pack.db",
+      "size_bytes": 0,
+      "sha256": "",
+      "bundled_asset": "assets/content/content_pack.db",
+      "required": true,
+      "license_name": "Bayaz curriculum content",
+      "license_url": ""
+    },
+    {
+      "id": "curriculum.pk.class6.general_science.rag",
+      "kind": "curriculum_module",
+      "version": "1.0.0",
+      "display_name": "Class 6 General Science retrieval index",
+      "class_code": "6",
+      "subject_code": "general_science",
+      "file_name": "curriculum.db",
+      "size_bytes": 0,
+      "sha256": "",
+      "bundled_asset": "assets/rag/curriculum.db",
+      "required": true,
+      "license_name": "Bayaz curriculum content",
+      "license_url": ""
+    },
+    {
+      "id": "model.baai.bge-small-en-v1.5",
+      "kind": "embedding_model",
+      "version": "1.5.0-unsloth-f16-640cb7e",
+      "display_name": "BGE Small English v1.5 F16",
+      "file_name": "bge-small-en-v1.5-f16.gguf",
+      "size_bytes": 67582560,
+      "sha256": "c5d2302edc429f679642433b9f96dd217799727a06e675abef3b40a79f5e1589",
+      "required": false,
+      "license_name": "MIT License",
+      "license_url": "https://huggingface.co/BAAI/bge-small-en-v1.5/blob/main/LICENSE",
+      "download_url": "https://huggingface.co/unsloth/bge-small-en-v1.5-GGUF/resolve/640cb7ea69eab077a1336918e5f3c79a33a48bf5/bge-small-en-v1.5-f16.gguf?download=true"
+    },
+    {
+      "id": "model.liquid.lfm2.1.2b.q4_k_m",
+      "kind": "language_model",
+      "version": "1.0.0-unsloth-e7f8aa5",
+      "display_name": "LFM2 1.2B Q4_K_M",
+      "file_name": "LFM2-1.2B-Q4_K_M.gguf",
+      "size_bytes": 730893024,
+      "sha256": "ac63aeef935e5a4ca147ad6d966487bb0c23220ea20a5f49ad315614392f104e",
+      "required": false,
+      "license_name": "Liquid AI LFM License 1.0",
+      "license_url": "https://huggingface.co/LiquidAI/LFM2-1.2B-GGUF/blob/main/LICENSE",
+      "download_url": "https://huggingface.co/unsloth/LFM2-1.2B-GGUF/resolve/e7f8aa5bf177ca2af9119982814da6850127d1e2/LFM2-1.2B-Q4_K_M.gguf?download=true"
+    }
+  ]
+}

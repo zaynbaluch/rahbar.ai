@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rahbar_ai/features/generation/mcq_parser.dart';
+import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 
 /// Real Qwen3 1.7B output from the on-device grounded bake-off (ADR-003), the
 /// shipping model/config. Trailing spaces on options are intentional (the model
@@ -111,8 +111,11 @@ void main() {
   group('McqParser', () {
     test('parses the real Qwen3 test into 10 complete questions', () {
       final t = McqParser.parse(_qwen3, topic: 'the human digestive system');
+      expect(t.id, startsWith('GS6-'));
       expect(t.count, 10);
       expect(t.completeCount, 10);
+      expect(t.expectedCount, 10);
+      expect(t.isReady, isTrue);
 
       final q1 = t.questions.first;
       expect(q1.number, 1);
@@ -130,6 +133,15 @@ void main() {
           '1=A 2=C 3=A 4=B 5=D 6=C 7=A 8=A 9=B 10=A');
     });
 
+    test('preserves an existing paper ID when parsing saved model output', () {
+      final t = McqParser.parse(
+        _qwen3,
+        topic: 'the human digestive system',
+        testId: 'GS6-SAVED01',
+      );
+      expect(t.id, 'GS6-SAVED01');
+    });
+
     test('KEY line back-fills answers when per-question ANSWER is missing', () {
       // Strip the inline ANSWER lines; the trailing KEY must still populate them.
       final noAnswers = _qwen3.replaceAll(RegExp(r'^ANSWER:.*\$', multiLine: true), '');
@@ -143,6 +155,7 @@ void main() {
       // Q2 is empty → dropped; Q1 complete; Q3 has a placeholder + answer, no options.
       expect(t.questions.any((q) => q.number == 1 && q.isComplete), isTrue);
       expect(t.completeCount, 1);
+      expect(t.isReady, isFalse);
       final q3 = t.questions.firstWhere((q) => q.number == 3);
       expect(q3.isComplete, isFalse); // no options → incomplete, not invented
       expect(q3.answer, 'C');

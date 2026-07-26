@@ -1,43 +1,48 @@
-# Rahbar AI
+# Bayaz AI - App-Only MVP
 
-**Edge-AI teaching assistant for understaffed low-cost schools in Punjab.**
+Bayaz AI is an offline-first Flutter/Android teacher application for low-connectivity classrooms. This repository is intentionally limited to the app and the tooling required to build and verify its bundled curriculum content.
 
-Rahbar AI is an **offline-first Android app** that helps a single teacher managing 60–70
-students across multiple grades. It runs a **small language model on the phone** to
-generate SNC-compliant, pedagogically-rich **lesson plans** and **MCQ tests**, grounded in
-the official curriculum via on-device **RAG**, and (in a later phase) grades MCQ answer
-sheets from the phone camera. It works with **no internet** and syncs only when a stable
-connection is available.
+## Current app scope
 
-> Status: **Research & technology-decision phase.** This repo currently holds the decision
-> records and research that will drive the build. See [`docs/`](docs/).
+- Class 6 General Science coursework included in the app.
+- Class, subject, and topic navigation with recently accessed topics.
+- Structured lesson-plan and MCQ presentation.
+- Optional custom lesson and MCQ generation using separately installed local models.
+- Compact offline clarification chat using only relevant context.
+- PDF export, local library, and on-device OMR grading with teacher review for uncertain answers.
+- Three-step onboarding and simple optional model management.
+- Branding, splash-screen, logo, and home-card layout fixes.
 
-## MVP scope (first 3 weeks)
-
-- **One subject, one class:** General Science, Class 6 (PCTB textbook).
-- **Core loop:** on-device generation (lesson plans + 10-MCQ tests) with RAG → **PDF export**
-  → **OMR camera grading** of the printed test (scored by test ID, no SLM).
-- Deferred to later phases: cloud backend, sync, analytics, multi-subject/class.
+The app does not initialize a backend, cloud analytics, background synchronization, school administration, licensing, payments, or a download website. Those areas are documented only as research questions under `research/`.
 
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
-| `docs/` | Decision records (ADRs), architecture, pedagogy & tooling research. **Start here.** |
-| `app/` | Flutter app (Android-only). Runtime: on-device SLM + query embedding + retrieval + UI. |
-| `pipeline/` | Off-device, build-time Python: watermark→OCR→parse→caption→chunk→embed→build vector DB. |
-| `prompts/` | Versioned lesson-plan & MCQ prompt templates. |
-| `eval/` | Groundedness + output-quality evaluation harness. |
-| `data/raw/` | Source PDFs (textbook, proposal). Git-ignored. |
-| `data/processed/` | Intermediate parsed markdown / chunks / vectors. |
+| `app/` | Flutter Android application. |
+| `pipeline/` | Curriculum processing, generation, validation, and database packaging. |
+| `prompts/` | Versioned generation prompt source. |
+| `eval/` | Retrieval and generation evaluation utilities. |
+| `scripts/` | Toolchain, native runtime, content-build, and validation scripts. |
+| `docs/` | Current app architecture, decisions, content quality, branding, setup, and OMR validation. |
+| `research/` | Deferred systems described as research only; no runnable external service is included. |
 
-## Key decisions at a glance
+## First build
 
-- **App:** Flutter (Android-only) — best memory/perf balance at 2–4 GB RAM with a first-class on-device LLM path.
-- **Inference:** flutter_gemma (LiteRT); candidate models Gemma 3n E2B / Qwen3 1.7B / Llama 3.2 1–3B (chosen by on-device spike).
-- **RAG:** EmbeddingGemma + `sqlite-vec`, corpus prebuilt off-device and bundled in the app.
-- **Preprocessing:** Docling (layout-aware OCR) + VLM diagram captioning + SLO-aligned chunking.
-- **Lesson plans:** 5E model spine + Bloom-tagged objectives, retrieval starter, Socratic questions, low-cost activities, exit-ticket assessment; one **50-min** period per topic.
-- **Assessment:** 10-question mixed-difficulty MCQ tests, PDF/printable, **OMR-gradable by test ID without invoking the SLM**.
+```bash
+bash scripts/setup-llama.sh
+bash scripts/check-environment.sh
+cd app
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+```
 
-Full rationale in [`docs/decisions/`](docs/decisions/).
+The source package intentionally does not include `app/pubspec.lock`, because the dependency set was reduced without a Flutter SDK in the packaging environment. Generate it with the pinned Flutter version and commit the resulting lockfile in the real Git repository.
+
+See `SCOPE.md` before implementing backlog items and `TRANSFER_TO_GITHUB_REPO.md` before copying this delivery into an existing repository.
+
+## Existing repository migration
+
+For the current `D:\GITHUB\rahbar.ai` checkout, read `MIGRATION_DECISIONS.md` before `TRANSFER_TO_GITHUB_REPO.md`. It records the verified `ui-revamp` base, preservation rules for target-only files, adaptive feature commits, and dependency-tracking rules.

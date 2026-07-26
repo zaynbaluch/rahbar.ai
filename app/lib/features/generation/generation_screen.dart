@@ -1,31 +1,46 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../library/library_screen.dart';
+import '../../design_system/components/bayaz_card.dart';
+import '../../design_system/components/long_operation_panel.dart';
+import '../../design_system/components/status_chip.dart';
+import '../../design_system/theme/app_colors.dart';
+import '../../design_system/theme/app_spacing.dart';
+import '../chat/clarification_context.dart';
+import '../chat/clarification_screen.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
+import '../resources/local_ai_resources.dart';
+import '../resources/offline_ai_gate.dart';
+import '../resources/offline_ai_navigation.dart';
+import '../resources/offline_ai_policy.dart';
+import 'generated_output_sanitizer.dart';
+import 'lesson_plan.dart';
+import 'lesson_plan_parser.dart';
+import 'lesson_plan_view.dart';
 import 'llama_cpp_service.dart';
+import 'local_ai_route_lifecycle.dart';
+import 'local_model_handoff.dart';
 import 'mcq_grammar.dart';
 import 'mcq_parser.dart';
 import 'mcq_test_view.dart';
-import 'model_spike_screen.dart';
 
-/// **The escape hatch.** On-device RAG (bge-small → cosine over the bundled
-/// `curriculum.db`) into a grounded prompt, then a streamed **LFM2 1.2B** (greedy)
-/// generation; MCQ mode is grammar-constrained (mcq_grammar.dart) so the output is
-/// parseable and OMR-ready. ADR-003/004.
-///
-/// This is **no longer the main path**. Lesson plans and tests now come from the
-/// pre-generated, verified content pack and appear instantly (ADR-008) — this run costs
-/// ~3.5 min and its answer keys have never been checked by anything. It exists for topics
-/// outside the shipped curriculum, so "it generates for anything, offline" stays true.
+/// Existing on-device fallback for topics outside the shipped content pack.
+/// It remains secondary because it is slower and its content is not pre-verified.
 class GenerationScreen extends StatefulWidget {
-  const GenerationScreen({super.key, this.initialTopic});
+  const GenerationScreen({
+    super.key,
+    this.initialTopic,
+    this.initialKind = 'mcq',
+    this.offlineAiPolicy,
+  });
 
-  /// Pre-fills the topic box — set when arriving from a failed search in the picker.
   final String? initialTopic;
+  final String initialKind;
+  final OfflineAiPolicy? offlineAiPolicy;
 
   @override
   State<GenerationScreen> createState() => _GenerationScreenState();
@@ -34,284 +49,479 @@ class GenerationScreen extends StatefulWidget {
 enum _Phase { idle, preparing, retrieving, loadingModel, generating }
 
 class _GenerationScreenState extends State<GenerationScreen> {
-  // LFM2-1.2B is the shipping model after the ADR-003 speed bake-off: ~2× Qwen3's
-  // decode on CPU, with MCQ schema guaranteed by grammar-constrained decoding.
-  static const String _modelFile = 'lfm2-1.2b.gguf';
-
   final _rag = RagService();
   final _llama = LlamaCppService();
+  final _modelHandoff = const LocalModelHandoff();
+  final _routeLifecycle = LocalAiRouteLifecycle();
   final _library = LibraryStore();
+  final _localAi = LocalAiResources();
+  late final OfflineAiPolicy _offlineAiPolicy;
   late final _topic = TextEditingController(text: widget.initialTopic ?? '');
 
-  String _kind = 'mcq'; // 'mcq' | 'lesson'
+  late String _kind = widget.initialKind == 'lesson' ? 'lesson' : 'mcq';
   _Phase _phase = _Phase.idle;
   List<Chunk> _hits = [];
   String _output = '';
-  final StringBuffer _buffer = StringBuffer(); // tokens land here; flushed to UI on a timer
+  final StringBuffer _buffer = StringBuffer();
   Timer? _uiTimer;
-  McqTest? _test; // parsed structured test (MCQ mode only)
+  McqTest? _test;
+  LessonPlan? _lessonPlan;
+  List<String> _missingLessonSections = const [];
+  bool _grounded = true;
   bool _saved = false;
   String? _error;
-
   Duration _elapsed = Duration.zero;
   int _chunks = 0;
-  double get _tokPerSec =>
-      _elapsed.inMilliseconds == 0 ? 0 : _chunks / (_elapsed.inMilliseconds / 1000);
+  Future<void>? _activeOperation;
+  bool _allowPop = false;
+  bool _localResourcesDisposed = false;
 
-  bool get _busy => _phase != _Phase.idle;
+  @override
+  void initState() {
+    super.initState();
+    _offlineAiPolicy = widget.offlineAiPolicy ?? OfflineAiPolicy();
+  }
+
+  bool get _busy => _phase != _Phase.idle || _routeLifecycle.closing;
+  double get _tokPerSec => _elapsed.inMilliseconds == 0
+      ? 0
+      : _chunks / (_elapsed.inMilliseconds / 1000);
 
   @override
   void dispose() {
+    _routeLifecycle.cancelOperations();
     _uiTimer?.cancel();
     _topic.dispose();
-    _rag.dispose();
-    _llama.unload();
+    unawaited(_routeLifecycle.close(_cleanup));
     super.dispose();
   }
 
-  Future<void> _run() async {
+  Future<void> _run() {
     final topic = _topic.text.trim();
-    if (topic.isEmpty) return;
+    if (topic.isEmpty || _busy) return Future<void>.value();
+    final token = _routeLifecycle.beginOperation();
+    final operation = _runOperation(token, topic);
+    _activeOperation = operation;
+    return operation.whenComplete(() {
+      if (identical(_activeOperation, operation)) _activeOperation = null;
+    });
+  }
+
+  Future<void> _runOperation(int token, String topic) async {
     setState(() {
       _error = null;
       _output = '';
       _buffer.clear();
       _test = null;
+      _lessonPlan = null;
+      _missingLessonSections = const [];
+      _grounded = true;
       _saved = false;
       _hits = [];
       _chunks = 0;
       _elapsed = Duration.zero;
       _phase = _Phase.preparing;
     });
+
     try {
-      // 1. Load the embedder + curriculum DB (idempotent after first run).
-      await _rag.init();
-
-      // 2. On-device retrieval → grounded (system, user) prompt.
+      await _offlineAiPolicy.requireEnabled();
+      if (!_canUpdate(token)) return;
       setState(() => _phase = _Phase.retrieving);
-      final grounded = await _rag.assemble(_kind, topic);
-      setState(() => _hits = grounded.hits);
-
-      // 3. Load the generation model. MCQ mode loads with the GBNF grammar so the
-      //    output is guaranteed parseable/OMR-ready (see mcq_grammar.dart); lesson
-      //    plans run unconstrained. Switching kind reloads the model (rare).
-      setState(() => _phase = _Phase.loadingModel);
-      await _llama.load(_modelFile, grammar: _kind == 'mcq' ? kMcqGrammar : null);
-
-      // 4. Stream the grounded generation. Tokens are buffered and flushed to the
-      //    UI every 200 ms so output streams live without rebuilding the tree on
-      //    every token (which starves rendering during heavy CPU).
-      setState(() => _phase = _Phase.generating);
-      final sw = Stopwatch()..start();
-      _uiTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
-        if (mounted) {
-          setState(() {
-            _output = _clean(_buffer.toString());
-            _elapsed = sw.elapsed;
-          });
-        }
+      final prompt = await _modelHandoff.retrieve(
+        releaseGenerator: _llama.unload,
+        releaseRetriever: _rag.releaseNativeModel,
+        runRetrieval: () async {
+          try {
+            await _rag.init();
+            return await _rag.assemble(_kind, topic);
+          } on FileSystemException {
+            _grounded = false;
+            return GroundedPrompt(
+              'You are Bayaz AI, an offline teaching assistant for Pakistan. '
+              'The curriculum retrieval model is not installed. Do not claim curriculum '
+              'alignment. Use simple language, make uncertainty clear, and produce only '
+              'the requested format.',
+              _kind == 'mcq'
+                  ? 'Create exactly 10 MCQs about "$topic". For each item output: '
+                      'Q<number>. <stem>, then A) through D) on separate lines, then '
+                      'ANSWER: <A|B|C|D>, then DIFFICULTY: <easy|medium|hard>. '
+                      'Do not add any other sections.'
+                  : 'Create a practical 50-minute 5E lesson plan about "$topic". '
+                      'Use these exact Markdown headers in this order: ### Objectives, '
+                      '### Materials, ### Revision starter (5 min), ### Engage (5 min), '
+                      '### Explore (12 min), ### Explain (12 min), ### Socratic questions, '
+                      '### Elaborate (8 min), ### Evaluate (8 min), ### Homework, ### Notes.',
+              const [],
+            );
+          }
+        },
+      );
+      if (!_canUpdate(token)) return;
+      setState(() {
+        _hits = prompt.hits;
+        _phase = _Phase.loadingModel;
       });
-      final stream = _llama.generateChat(grounded.system, grounded.user);
-      await for (final chunk in stream) {
+
+      final availability = await _localAi.inspect();
+      if (!availability.languageModel.installed ||
+          availability.languageModel.file == null) {
+        throw StateError(
+          'The managed offline language model is not installed. Open setup to download it.',
+        );
+      }
+      await _llama.loadPath(
+        availability.languageModel.file!.path,
+        grammar: _kind == 'mcq' ? kMcqGrammar : null,
+      );
+      if (!_canUpdate(token)) return;
+      setState(() => _phase = _Phase.generating);
+
+      final stopwatch = Stopwatch()..start();
+      _uiTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (!_canUpdate(token)) return;
+        setState(() {
+          _output = _clean(_buffer.toString());
+          _elapsed = stopwatch.elapsed;
+        });
+      });
+
+      await for (final chunk
+          in _llama.generateChat(prompt.system, prompt.user)) {
+        if (!_canUpdate(token)) break;
         _buffer.write(chunk);
         _chunks++;
       }
-      sw.stop();
+      stopwatch.stop();
       _uiTimer?.cancel();
+      if (!_canUpdate(token)) return;
       setState(() {
-        _output = _clean(_buffer.toString());
-        _elapsed = sw.elapsed;
-        // Parse MCQ output into a structured test (foundation for PDF + OMR).
-        if (_kind == 'mcq') _test = McqParser.parse(_output, topic: topic);
+        _output = _clean(_buffer.toString(), finalOutput: true);
+        _elapsed = stopwatch.elapsed;
+        if (_kind == 'mcq') {
+          _test = McqParser.parse(_output, topic: topic);
+        } else {
+          final parsed = LessonPlanParser.parse(_output, topic: topic);
+          _lessonPlan = parsed.plan;
+          _missingLessonSections = parsed.missingSections;
+        }
       });
     } catch (e) {
-      setState(() => _error = '$e');
+      if (_canUpdate(token)) setState(() => _error = _friendlyError(e));
     } finally {
       _uiTimer?.cancel();
-      if (mounted) setState(() => _phase = _Phase.idle);
+      if (_canUpdate(token)) setState(() => _phase = _Phase.idle);
     }
   }
 
-  /// Strip Qwen3's empty `<think>…</think>` block (emitted even with /no_think).
-  static String _clean(String s) =>
-      s.replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '').trimLeft();
+  bool _canUpdate(int token) => mounted && _routeLifecycle.isCurrent(token);
+
+  Future<void> _closeAndPop() async {
+    if (_routeLifecycle.closing) return;
+    final close = _routeLifecycle.close(_cleanup);
+    if (mounted) setState(() {});
+    await finishLocalAiRouteClose(
+      close,
+      description: 'closing the generation screen',
+      isMounted: () => mounted,
+      allowPop: () => setState(() => _allowPop = true),
+      pop: () => unawaited(Navigator.of(context).maybePop()),
+    );
+  }
+
+  Future<void> _cleanup() async {
+    _uiTimer?.cancel();
+    try {
+      await _llama.unload();
+    } catch (_) {
+      // Continue releasing the remaining route resources.
+    }
+    final active = _activeOperation;
+    if (active != null) {
+      try {
+        await active;
+      } catch (_) {
+        // The closing route no longer surfaces operation errors.
+      }
+    }
+    try {
+      await _rag.dispose();
+    } catch (_) {
+      // Continue with synchronous resource cleanup.
+    }
+    if (!_localResourcesDisposed) {
+      _localResourcesDisposed = true;
+      _localAi.dispose();
+    }
+  }
+
+  static String _friendlyError(Object error) {
+    final text = error.toString();
+    if (error is OfflineAiDisabledException) {
+      return 'Offline AI is turned off. Enable it in teacher setup before generating custom content.';
+    }
+    if (text.contains('No such file') || text.contains('not installed')) {
+      return 'Offline AI files are not installed. Open setup to download the language and retrieval models, then try again.';
+    }
+    return text;
+  }
+
+  String _clean(String value, {bool finalOutput = false}) =>
+      GeneratedOutputSanitizer.sanitize(
+        value,
+        finalOutput: finalOutput,
+        lessonPlan: _kind == 'lesson',
+      );
 
   Future<void> _save() async {
-    if (_output.isEmpty) return;
-    final saved = SavedTest(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+    if (_output.isEmpty || _saved) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final test = _test;
+    await _library.save(SavedTest(
+      id: test?.id ?? now.toString(),
       kind: _kind,
+      source: SavedContentSource.customAi,
       topic: _topic.text.trim(),
       rawOutput: _output,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
-      excerptTitles: _hits.map((h) => h.title).toList(),
-    );
-    await _library.save(saved);
+      contentJson: test?.toJson() ?? _lessonPlan?.toJson(),
+      createdAtMillis: now,
+      excerptTitles: _hits.map((hit) => hit.title).toList(),
+    ));
     if (mounted) {
       setState(() => _saved = true);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Saved to library')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved to Library')),
+      );
     }
   }
 
   String get _phaseLabel => switch (_phase) {
+        _Phase.idle when _routeLifecycle.closing =>
+          'Closing offline AI safely…',
         _Phase.idle => _chunks > 0
-            ? 'Done · ${_elapsed.inSeconds}s · ${_tokPerSec.toStringAsFixed(1)} tok/s'
-            : 'Enter a topic and generate.',
-        _Phase.preparing => 'Loading embedder + curriculum…',
-        _Phase.retrieving => 'Searching the textbook…',
-        _Phase.loadingModel => 'Loading LFM2 1.2B…',
+            ? 'Finished in ${_elapsed.inSeconds}s · ${_tokPerSec.toStringAsFixed(1)} tok/s'
+            : 'Ready when the local model files are installed.',
+        _Phase.preparing => 'Preparing the curriculum search…',
+        _Phase.retrieving => 'Finding relevant textbook sections…',
+        _Phase.loadingModel => 'Loading the local LFM2 model…',
         _Phase.generating =>
-          'Generating · ${_tokPerSec.toStringAsFixed(1)} tok/s · ${_elapsed.inSeconds}s',
+          'Writing on-device · ${_elapsed.inSeconds}s · ${_tokPerSec.toStringAsFixed(1)} tok/s',
       };
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rahbar AI'),
-        actions: [
-          IconButton(
-            tooltip: 'Saved tests',
-            icon: const Icon(Icons.folder_outlined),
-            onPressed: _busy
-                ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const LibraryScreen()),
+  Widget build(BuildContext context) => OfflineAiGate(
+        title: 'Custom topic generation',
+        policy: _offlineAiPolicy,
+        enabledBuilder: _buildEnabled,
+      );
+
+  Widget _buildEnabled(BuildContext context) {
+    final seen = <String>{};
+    final sections = [
+      for (final hit in _hits)
+        if (seen.add(hit.title)) hit,
+    ];
+
+    return PopScope<void>(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_closeAndPop());
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Custom topic generation')),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.xl,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+              BayazCard(
+                color: AppColors.softGold,
+                borderColor: const Color(0xFFFFD96A),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: AppColors.warningText),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'This is the existing fallback for topics not covered by the verified pack. It runs fully on-device, takes several minutes, and the result should be checked before use.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.warningText,
+                            ),
+                      ),
                     ),
-          ),
-          IconButton(
-            tooltip: 'Model spike',
-            icon: const Icon(Icons.science_outlined),
-            onPressed: _busy
-                ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ModelSpikeScreen()),
-                    ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(
-                      value: 'mcq',
-                      label: Text('MCQ Test'),
-                      icon: Icon(Icons.checklist)),
+                    value: 'mcq',
+                    label: Text('MCQ test'),
+                    icon: Icon(Icons.fact_check_outlined),
+                  ),
                   ButtonSegment(
-                      value: 'lesson',
-                      label: Text('Lesson Plan'),
-                      icon: Icon(Icons.menu_book)),
+                    value: 'lesson',
+                    label: Text('Lesson plan'),
+                    icon: Icon(Icons.menu_book_outlined),
+                  ),
                 ],
                 selected: {_kind},
-                onSelectionChanged:
-                    _busy ? null : (s) => setState(() => _kind = s.first),
+                onSelectionChanged: _busy
+                    ? null
+                    : (value) => setState(() => _kind = value.first),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _topic,
                 enabled: !_busy,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _run(),
                 decoration: const InputDecoration(
                   labelText: 'Topic',
-                  hintText: 'e.g. the human digestive system',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.search),
+                  hintText: 'e.g. renewable energy in Pakistan',
+                  prefixIcon: Icon(Icons.search_rounded),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.sm),
               FilledButton.icon(
                 onPressed: _busy ? null : _run,
-                icon: const Icon(Icons.auto_awesome),
-                label: Text(_busy ? 'Working…' : 'Generate'),
+                icon: const Icon(Icons.auto_awesome_outlined),
+                label: Text(_busy ? 'Working on-device…' : 'Generate'),
               ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(_phaseLabel, style: theme.textTheme.bodyMedium),
-                      if (_busy) ...[
-                        const SizedBox(height: 10),
-                        const LinearProgressIndicator(),
-                      ],
-                    ],
+              const SizedBox(height: AppSpacing.md),
+              if (_busy)
+                LongOperationPanel(
+                  primaryStatus: _phaseLabel,
+                  messages: const [
+                    'Preparing the chalkboard…',
+                    'Searching the science shelf…',
+                    'Connecting the lesson pieces…',
+                    'Checking the tricky parts…',
+                    'Making it classroom-ready…',
+                  ],
+                )
+              else
+                BayazCard(child: Text(_phaseLabel)),
+              if (sections.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text('Textbook grounding',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final hit in sections)
+                      StatusChip(
+                        label: 'Ch${hit.chapter} · ${hit.title}',
+                        icon: Icons.menu_book_outlined,
+                      ),
+                  ],
+                ),
+              ],
+              if (!_grounded && (_busy || _output.isNotEmpty)) ...[
+                const SizedBox(height: AppSpacing.md),
+                BayazCard(
+                  color: AppColors.softGold,
+                  borderColor: const Color(0xFFFFD96A),
+                  child: const Text(
+                    'Ungrounded mode: the retrieval model was unavailable, so this output comes from the language model’s own knowledge. Review every fact before classroom use.',
                   ),
                 ),
-              ),
-              if (_hits.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Builder(builder: (context) {
-                  // Fine chunks repeat section titles; show unique sections (best
-                  // score each) so the grounding chips stay clean.
-                  final seen = <String>{};
-                  final sections = [
-                    for (final h in _hits)
-                      if (seen.add(h.title)) h,
-                  ];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Grounded in ${sections.length} textbook sections',
-                          style: theme.textTheme.labelLarge),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final h in sections)
-                            Chip(
-                              label: Text('Ch${h.chapter} · ${h.title}  '
-                                  '(${h.score.toStringAsFixed(2)})'),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                }),
               ],
               if (_error != null) ...[
-                const SizedBox(height: 12),
-                Card(
-                  color: theme.colorScheme.errorContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(_error!,
-                        style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+                const SizedBox(height: AppSpacing.md),
+                BayazCard(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderColor: Theme.of(context).colorScheme.error,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
                   ),
                 ),
               ],
-              // Structured MCQ test once parsed; raw text while streaming or for
-              // lesson plans (which aren't in the MCQ schema).
               if (_test != null && _test!.questions.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                McqTestView(test: _test!, onSave: _save, saved: _saved),
-              ] else if (_output.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text('Output', style: theme.textTheme.labelLarge),
-                const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: AppSpacing.lg),
+                McqTestView(
+                  test: _test!,
+                  onSave: _save,
+                  saved: _saved,
+                  showReadyAnimation: true,
+                ),
+              ] else if (_lessonPlan != null && _lessonPlan!.sections.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Generated lesson plan',
+                          style: Theme.of(context).textTheme.titleLarge),
+                    ),
+                    IconButton(
+                      tooltip: 'Ask about this lesson',
+                      onPressed: () => openOfflineAiScreen(
+                        context,
+                        (_) => ClarificationScreen(
+                          contextMaterial: ClarificationContext.lesson(
+                            _lessonPlan!,
+                          ),
+                        ),
+                        policy: _offlineAiPolicy,
+                      ),
+                      icon: const Icon(Icons.forum_outlined),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _saved ? null : _save,
+                      icon: Icon(_saved
+                          ? Icons.bookmark_added_rounded
+                          : Icons.bookmark_add_outlined),
+                      label: Text(_saved ? 'Saved' : 'Save'),
+                    ),
+                  ],
+                ),
+                if (_missingLessonSections.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  BayazCard(
+                    color: AppColors.softGold,
+                    borderColor: const Color(0xFFFFD96A),
+                    child: Text(
+                      'The model omitted: ${_missingLessonSections.join(', ')}. The parsed sections are shown below; review the plan before saving.',
+                    ),
                   ),
-                  child: SelectableText(
-                    _output,
-                    style: const TextStyle(fontFamily: 'monospace', height: 1.4),
+                ],
+                const SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  height: MediaQuery.sizeOf(context).height * 0.72,
+                  child: LessonPlanDocument(plan: _lessonPlan!),
+                ),
+              ] else if (_output.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                BayazCard(
+                  color: AppColors.softGold,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Could not structure this response',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.xs),
+                      const Text('The model did not follow the required section contract. The raw response is kept below for recovery.'),
+                      const SizedBox(height: AppSpacing.sm),
+                      SelectableText(_output),
+                    ],
                   ),
                 ),
               ],
-            ],
+              ],
+            ),
           ),
         ),
       ),

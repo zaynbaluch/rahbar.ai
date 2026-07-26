@@ -1,37 +1,86 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
+import '../../design_system/components/frame_animation.dart';
+import '../../design_system/components/bayaz_card.dart';
+import '../../design_system/components/status_chip.dart';
+import '../../design_system/theme/app_colors.dart';
+import '../../design_system/theme/app_spacing.dart';
 import '../export/pdf_export.dart';
 import '../generation/mcq_parser.dart';
 import 'gradebook_store.dart';
 import 'graded_result.dart';
+import 'image_pick_recovery.dart';
 import 'omr_grader.dart';
+import 'omr_image_processor.dart';
 import 'results_screen.dart';
+import 'student_name_sequence.dart';
 
-/// Camera-based OMR grading: photograph a filled answer sheet, read the bubbles,
-/// and score against this test's stored key — no SLM (see ADR-007). One tap per
-/// student sheet; the key stays in memory so a stack can be graded quickly.
 class GradingScreen extends StatefulWidget {
-  const GradingScreen({super.key, required this.test});
+  const GradingScreen({
+    super.key,
+    required this.test,
+    this.initialImagePath,
+    this.recoveryStore,
+    this.picker,
+    this.imageProcessor,
+    this.gradebookStore,
+  });
 
   final McqTest test;
+  final String? initialImagePath;
+  final PendingImagePickStore? recoveryStore;
+  final ImagePicker? picker;
+  final OmrImageProcessor? imageProcessor;
+  final GradebookStore? gradebookStore;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
 }
 
 class _GradingScreenState extends State<GradingScreen> {
-  final _picker = ImagePicker();
-  final _gradebook = GradebookStore();
+  late final ImagePicker _picker;
+  late final PendingImagePickStore _recoveryStore;
+  late final OmrImageProcessor _imageProcessor;
+  late final GradebookStore _gradebook;
+  late final Future<void> _studentNamesReady;
+  final Set<String> _studentNames = {};
   final _name = TextEditingController();
   bool _busy = false;
   String? _error;
   OmrResult? _result;
   bool _saved = false;
-  int _savedCount = 0;
+  bool _saving = false;
+  int _nextStudentNumber = 1;
+  bool _reviewConfirmed = false;
 
-  String get _testId => PdfExport.testId(widget.test.topic);
+  String get _testId => PdfExport.testId(widget.test);
+
+  @override
+  void initState() {
+    super.initState();
+    _picker = widget.picker ?? ImagePicker();
+    _recoveryStore = widget.recoveryStore ?? PendingImagePickStore();
+    _imageProcessor = widget.imageProcessor ?? OmrImageProcessor();
+    _gradebook = widget.gradebookStore ?? GradebookStore();
+    _studentNamesReady = _loadExistingStudentNames();
+    final initialPath = widget.initialImagePath;
+    if (initialPath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _gradePath(initialPath, clearRecovery: true);
+      });
+    }
+  }
+
+  Future<void> _loadExistingStudentNames() async {
+    final existing = await _gradebook.listForTest(_testId);
+    _studentNames
+      ..clear()
+      ..addAll(existing.map((result) => result.studentName));
+    _nextStudentNumber = StudentNameSequence.nextNumber(_studentNames);
+  }
 
   @override
   void dispose() {
@@ -40,200 +89,279 @@ class _GradingScreenState extends State<GradingScreen> {
   }
 
   Future<void> _grade(ImageSource source) async {
+    if (_busy) return;
     setState(() {
       _busy = true;
       _error = null;
       _result = null;
       _saved = false;
+      _reviewConfirmed = false;
     });
     try {
+      await _recoveryStore.begin(widget.test, source);
       final shot = await _picker.pickImage(
         source: source,
-        maxWidth: 2000, // enough resolution for bubble detection, keeps it fast
+        maxWidth: 2000,
+        maxHeight: 2000,
       );
       if (shot == null) {
-        setState(() => _busy = false);
+        await _recoveryStore.clear();
         return;
       }
-      final bytes = await shot.readAsBytes();
-      var decoded = img.decodeImage(bytes);
-      if (decoded == null) throw 'Could not read the image.';
-      // Preprocess: apply the photo's EXIF rotation, then cap the size so grading
-      // is fast and consistent regardless of the camera/scan resolution.
-      decoded = img.bakeOrientation(decoded);
-      if (decoded.width > 2000) {
-        decoded = img.copyResize(decoded, width: 2000);
-      }
-      final result = OmrGrader.grade(decoded, widget.test);
-      if (!result.fiducialsFound) {
-        throw 'Could not find the 4 corner markers — retake with the ANSWERS box '
-            'filling the frame, flat and well-lit.';
-      }
-      setState(() {
-        _result = result;
-        _name.text = 'Student ${_savedCount + 1}';
-      });
-    } catch (e) {
-      setState(() => _error = '$e');
+      await _gradePath(
+        shot.path,
+        clearRecovery: true,
+        alreadyBusy: true,
+      );
+    } catch (error) {
+      await _recoveryStore.clear();
+      if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  Future<void> _gradePath(
+    String path, {
+    required bool clearRecovery,
+    bool alreadyBusy = false,
+  }) async {
+    if (_busy && !alreadyBusy) return;
+    if (!alreadyBusy) {
+      setState(() {
+        _busy = true;
+        _error = null;
+        _result = null;
+        _saved = false;
+        _reviewConfirmed = false;
+      });
+    }
+    try {
+      await _studentNamesReady;
+      final bytes = await File(path).readAsBytes();
+      final result = await _imageProcessor.process(bytes, widget.test);
+      if (!result.fiducialsFound) {
+        throw 'The four corner markers were not detected. Retake the image with only the ANSWERS box filling the frame, on a flat surface and without shadows.';
+      }
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _name.text = 'Student $_nextStudentNumber';
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (clearRecovery) await _recoveryStore.clear();
+      if (!alreadyBusy && mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _setMark(int questionNumber, String? mark) {
+    final current = _result;
+    if (current == null || _saved) return;
+    setState(() {
+      _result = current.withMark(questionNumber, mark);
+    });
+  }
+
   Future<void> _saveResult() async {
-    final r = _result;
-    if (r == null) return;
-    final name = _name.text.trim();
-    await _gradebook.save(GradedResult.fromGrading(
-      testId: _testId,
-      testTopic: widget.test.topic,
-      studentName: name.isEmpty ? 'Student ${_savedCount + 1}' : name,
-      result: r,
-    ));
-    if (mounted) {
+    final result = _result;
+    if (result == null || _saved || _saving) return;
+    if (result.needsReview > 0 && !_reviewConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Confirm that you reviewed the uncertain or blank answers.')),
+      );
+      return;
+    }
+    final typedName = _name.text.trim();
+    final studentName =
+        typedName.isEmpty ? 'Student $_nextStudentNumber' : typedName;
+    setState(() => _saving = true);
+    try {
+      await _gradebook.save(GradedResult.fromGrading(
+        testId: _testId,
+        testTopic: widget.test.topic,
+        studentName: studentName,
+        result: result,
+      ));
+      if (!mounted) return;
       setState(() {
         _saved = true;
-        _savedCount++;
+        _studentNames.add(studentName);
+        _nextStudentNumber = StudentNameSequence.nextNumber(_studentNames);
       });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Result saved')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Result saved')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save this result: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   void _openResults() => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => ResultsScreen(testId: _testId, topic: widget.test.topic),
+        builder: (_) => ResultsScreen(
+          testId: _testId,
+          topic: widget.test.topic,
+        ),
       ));
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final r = _result;
+    final result = _result;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Grade Answer Sheets'),
+        title: const Text('Grade answer sheets'),
         actions: [
           IconButton(
-            tooltip: 'Class results',
+            tooltip: 'Class results for this paper',
             onPressed: _openResults,
             icon: const Icon(Icons.people_alt_outlined),
           ),
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(widget.test.topic, style: theme.textTheme.titleMedium),
-              const SizedBox(height: 4),
-              Text(
-                'Photograph the ANSWERS box on the sheet so it fills the frame — '
-                'keep all four black corner markers visible, flat and well-lit.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _busy ? null : () => _grade(ImageSource.camera),
-                      icon: const Icon(Icons.camera_alt),
-                      label: Text(_busy
-                          ? 'Reading…'
-                          : (r == null ? 'Camera' : 'Next (camera)')),
-                    ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.md,
+            AppSpacing.xl,
+          ),
+          children: [
+            _GradingHeader(test: widget.test),
+            const SizedBox(height: AppSpacing.md),
+            _CaptureGuide(),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _busy ? null : () => _grade(ImageSource.camera),
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: Text(result == null ? 'Open camera' : 'Next paper'),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _busy ? null : () => _grade(ImageSource.gallery),
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Choose image'),
-                    ),
-                  ),
-                ],
-              ),
-              if (_busy) ...[
-                const SizedBox(height: 16),
-                const LinearProgressIndicator(),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Card(
-                  color: theme.colorScheme.errorContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(_error!,
-                        style:
-                            TextStyle(color: theme.colorScheme.onErrorContainer)),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _busy ? null : () => _grade(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Choose image'),
                   ),
                 ),
               ],
-              if (r != null) ...[
-                const SizedBox(height: 20),
-                _ScoreCard(result: r),
-                const SizedBox(height: 12),
-                Row(
+            ),
+            if (_busy) ...[
+              const SizedBox(height: AppSpacing.md),
+              BayazCard(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _name,
-                        enabled: !_saved,
-                        decoration: const InputDecoration(
-                          labelText: 'Student name / roll',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
+                    const BayazFrameAnimation(
+                      name: 'scanning_answers',
+                      size: 150,
+                      loop: true,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text('Reading the answer bubbles…',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.xs),
+                    const LinearProgressIndicator(),
+                  ],
+                ),
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              BayazCard(
+                color: Theme.of(context).colorScheme.errorContainer,
+                borderColor: Theme.of(context).colorScheme.error,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.error_outline,
+                            color: Theme.of(context).colorScheme.error),
+                        const SizedBox(width: AppSpacing.xs),
+                        Text('Could not grade this image',
+                            style: Theme.of(context).textTheme.titleSmall),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(_error!),
+                  ],
+                ),
+              ),
+            ],
+            if (result != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              _ResultSummary(result: result),
+              const SizedBox(height: AppSpacing.sm),
+              BayazCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _name,
+                      enabled: !_saved,
+                      decoration: const InputDecoration(
+                        labelText: 'Student name or roll number',
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    if (result.needsReview > 0) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _reviewConfirmed,
+                        onChanged: _saved
+                            ? null
+                            : (value) => setState(() => _reviewConfirmed = value ?? false),
+                        title: const Text('I reviewed the uncertain and blank answers'),
+                        subtitle: Text('${result.needsReview} answers require teacher confirmation.'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
                     FilledButton.icon(
-                      onPressed: _saved ? null : _saveResult,
-                      icon: Icon(_saved ? Icons.check : Icons.save_outlined),
-                      label: Text(_saved ? 'Saved' : 'Save'),
+                      onPressed: _saved || _saving ? null : _saveResult,
+                      icon: Icon(_saved
+                          ? Icons.check_circle_rounded
+                          : Icons.verified_outlined),
+                      label: Text(
+                        _saved
+                            ? 'Result saved'
+                            : _saving
+                                ? 'Saving…'
+                                : 'Confirm and save result',
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                for (final q in r.questions) _QRow(q: q),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScoreCard extends StatelessWidget {
-  const _ScoreCard({required this.result});
-  final OmrResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final pct = result.total == 0 ? 0 : (100 * result.correct / result.total).round();
-    return Card(
-      color: theme.colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Text('${result.correct}/${result.total}',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                '$pct%'
-                '${result.blank > 0 ? '  ·  ${result.blank} blank' : ''}',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
               ),
-            ),
+              const SizedBox(height: AppSpacing.md),
+              Text('Question review',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.sm),
+              BayazCard(
+                child: Column(
+                  children: [
+                    for (final question in result.questions)
+                      _QuestionResultRow(
+                        question: question,
+                        enabled: !_saved,
+                        onChanged: (mark) => _setMark(question.number, mark),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -241,30 +369,187 @@ class _ScoreCard extends StatelessWidget {
   }
 }
 
-class _QRow extends StatelessWidget {
-  const _QRow({required this.q});
-  final OmrQuestion q;
+class _GradingHeader extends StatelessWidget {
+  const _GradingHeader({required this.test});
+  final McqTest test;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = q.marked == null
-        ? theme.colorScheme.outline
-        : (q.isRight ? Colors.green : theme.colorScheme.error);
-    final icon = q.marked == null
-        ? Icons.help_outline
-        : (q.isRight ? Icons.check_circle : Icons.cancel);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            test.topic,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Colors.white,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Grade only papers printed from this exact test.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.88),
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          StatusChip(
+            label: 'Paper ID ${test.id}',
+            icon: Icons.fingerprint,
+            backgroundColor: Colors.white.withValues(alpha: 0.14),
+            foregroundColor: Colors.white,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CaptureGuide extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return BayazCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Capture the ANSWERS box',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Keep all four black markers visible. Use even lighting, hold the phone parallel to the paper, and avoid shadows.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.asset(
+              'assets/ui/grading/omr_capture_guide.webp',
+              width: double.infinity,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultSummary extends StatelessWidget {
+  const _ResultSummary({required this.result});
+  final OmrResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final percentage =
+        result.total == 0 ? 0 : (100 * result.correct / result.total).round();
+    return BayazCard(
+      color: const Color(0xFFF3F8FF),
+      borderColor: const Color(0xFFC9D6FF),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Text('Q${q.number}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
+          const BayazFrameAnimation(
+            name: 'grading_complete',
+            size: 116,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${result.correct}/${result.total}',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: AppColors.primary,
+                      ),
+                ),
+                Text('$percentage% score',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    StatusChip(
+                      label: '${result.correct} correct',
+                      icon: Icons.check_circle_outline,
+                      backgroundColor: const Color(0xFFDDF5E8),
+                      foregroundColor: AppColors.success,
+                    ),
+                    StatusChip(
+                      label: '${result.total - result.correct - result.blank} incorrect',
+                      icon: Icons.cancel_outlined,
+                      backgroundColor:
+                          Theme.of(context).colorScheme.errorContainer,
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    if (result.blank > 0)
+                      StatusChip(
+                        label: '${result.blank} blank',
+                        icon: Icons.help_outline,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuestionResultRow extends StatelessWidget {
+  const _QuestionResultRow({
+    required this.question,
+    required this.enabled,
+    required this.onChanged,
+  });
+  final OmrQuestion question;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final blank = question.marked == null;
+    final correct = question.isRight;
+    final color = blank
+        ? AppColors.textSecondary
+        : correct
+            ? AppColors.success
+            : Theme.of(context).colorScheme.error;
+    final icon = blank
+        ? Icons.help_outline
+        : correct
+            ? Icons.check_circle_rounded
+            : Icons.cancel_rounded;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 21),
+          const SizedBox(width: AppSpacing.sm),
+          Text('Q${question.number}',
+              style: Theme.of(context).textTheme.titleSmall),
           const Spacer(),
-          Text('marked ${q.marked ?? '—'}   ·   key ${q.correct ?? '?'}',
-              style: theme.textTheme.bodyMedium),
+          Text('Key ${question.correct ?? '?'}'),
+          const SizedBox(width: AppSpacing.sm),
+          DropdownButton<String?>(
+            value: question.marked,
+            onChanged: enabled ? onChanged : null,
+            items: const [
+              DropdownMenuItem<String?>(value: null, child: Text('Blank')),
+              DropdownMenuItem<String?>(value: 'A', child: Text('A')),
+              DropdownMenuItem<String?>(value: 'B', child: Text('B')),
+              DropdownMenuItem<String?>(value: 'C', child: Text('C')),
+              DropdownMenuItem<String?>(value: 'D', child: Text('D')),
+            ],
+          ),
         ],
       ),
     );
