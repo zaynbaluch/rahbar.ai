@@ -1,0 +1,26 @@
+# Source PDFs & heavy data (not for VCS)
+data/raw/
+data/processed/
+
+# Bundled model weights & built vector DB (large binaries)
+app/assets/models/*
+app/assets/rag/*.db
+!app/assets/models/.gitkeep
+!app/assets/rag/.gitkeep
+
+# Flutter / Dart
+app/.dart_tool/
+app/.flutter-plugins*
+app/build/
+app/.idea/
+*.iml
+
+# Python (pipeline)
+pipeline/.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
