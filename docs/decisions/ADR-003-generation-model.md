@@ -47,6 +47,39 @@
 > (b) verify 1–1.7 B **quality** with RAG grounding is good enough, (c) design UX around
 > ~1.5–2 min generation (progress / background / save-and-reuse).
 
+> **✅ GROUNDED-QUALITY BAKE-OFF (2026-07-07) — model DECIDED: Qwen3 1.7B.**
+> Ran the real RAG pipeline end-to-end on-device: retrieved the top-6 curriculum excerpts for
+> topic *"the human digestive system"* from `curriculum.db`, filled the MCQ template
+> (`prompts/mcq.md`), and generated a full 10-question test via `llama-cli` on the Redmi Note 12
+> (harness: `pipeline/src/make_test_prompt.py` emits the grounded prompt; `sys.txt`/`usr.txt`
+> pushed to `/data/local/tmp`). Both models Q4_K_M, greedy, 4 threads, `-c 4096`, `-st`.
+>
+> | Model | Config | Format | Answer-key accuracy | Variety | Gen t/s (w/ 2 K-tok RAG ctx) |
+> |---|---|---|---|---|---|
+> | Llama 3.2 **1B** | temp 0.8 (default) | **collapsed** — empty Qs, template placeholders leak, textbook lines pasted as "questions" | — | — | 4.5 |
+> | Llama 3.2 **1B** | **temp 0 (greedy)** | ✅ 10 well-formed Qs | ❌ **~5/10 wrong** — shuffles 4 option-templates across organs, mis-assigns (bile "kills germs", pancreas key wrong); repetitive distractors | poor (Q1≈Q6) | 4.1 |
+> | Qwen3 **1.7B** | temp 0, `/no_think` | ✅ 10 Qs **+ `KEY:` line** | ✅ **9/10 correct** (only Q5 "all of the above" debatable) | ✅ varied, precise | 3.3 |
+>
+> **Three findings, all decisive:**
+> 1. **Greedy decoding is MANDATORY for structured output.** At temp 0.8 the 1B model *collapses*
+>    (empty questions, literal `<question text>` placeholders, textbook sentences pasted as
+>    questions). At temp 0 the *same* model produces 10 clean questions. → App must set
+>    `SamplerParams` to greedy/low-temp for generation. This was the single biggest quality lever.
+> 2. **RAG grounding works** — both models stayed strictly on the retrieved digestive-system
+>    excerpts (bile→liver, amylase/protease/lipase, diarrhoea/ORS); no off-topic hallucination.
+>    The retrieval + prompt assembly (`rag_prompt.py`) is validated.
+> 3. **Llama 3.2 1B is NOT good enough; Qwen3 1.7B IS.** Even greedy, the 1B mis-assigns ~half the
+>    answer keys (unsafe for a teacher to use blind) and repeats questions. Qwen3 1.7B gets 9/10
+>    keys right, covers varied concepts, and is genuinely teacher-usable.
+>
+> **DECISION: ship Qwen3 1.7B Q4_K_M** as the generation model (Llama 3.2 1B stays only as a
+> low-RAM fallback). **Cost:** Qwen3 gen ≈ **3.3 tok/s** and the **~2 K-token RAG prefill @ 9.4 t/s
+> dominates** → **~5–6 min for a full 10-MCQ test** on this budget SoC (llama-bench's context-free
+> 6.5 t/s overstates real speed once a big RAG context fills the KV cache). Mitigations to pursue:
+> trim retrieval (k=6→k=4, shorter excerpts) to cut prefill; single-topic/shorter generations;
+> UX around a multi-minute run (progress + background + save-and-reuse). Next: set greedy sampling
+> in `LlamaCppService`, swap the app's bundled model to Qwen3 1.7B, and wire on-device RAG retrieval.
+
 ## Context
 
 The generation model must produce credible, curriculum-grounded **lesson plans and MCQs**

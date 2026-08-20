@@ -2,6 +2,21 @@
 
 **Status:** Accepted · **Date:** 2026-07-04
 
+> **✅ GENERATION + PDF SIDE IMPLEMENTED (2026-07-07).** The generate→structure→print
+> half of the loop is built and verified (grading half still deferred):
+> - `app/lib/features/generation/mcq_parser.dart` — parses the model's strict MCQ text
+>   into a structured `McqTest` + answer key. Tolerant of small format drift; unit-tested
+>   against **real Qwen3 1.7B output** (`test/mcq_parser_test.dart`, 3 tests).
+> - `app/lib/features/export/pdf_export.dart` — renders the test to a 3-part PDF: **test
+>   paper**, **OMR answer sheet** (A–D bubbles + 4 corner **fiducial markers** for the future
+>   camera grader), and a teacher **answer key**. Each carries a **Test ID** (`GS6-XXXX`,
+>   derived from the topic) so a scanned sheet maps back to its key with no SLM. Layout
+>   visually verified by rasterizing the PDF.
+> - Wired into `GenerationScreen`: structured question cards, show/hide key, and an
+>   **Export/print** action via the `printing` plugin.
+> Still deferred: the on-device **OMR reader/grader** (OpenCV camera pipeline) that consumes
+> the fiducials + bubbles and scores against the stored key.
+
 ## Context
 
 MCQ tests are now a first-class MVP feature with a full loop: **generate → print (PDF) →

@@ -40,6 +40,8 @@ dependencies:
   llama_cpp_dart:
     path: ../third_party/llama_cpp_dart
   drift: ^2.34.0
+  sqlite3: ^3.0.0 # raw read of the bundled curriculum.db (RAG vectors)
+  sqlite3_flutter_libs: ^0.6.0 # bundles the native libsqlite3 for Android
   path_provider: ^2.1.6
   path: ^1.9.1
   pdf: ^3.13.0
@@ -72,6 +74,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/rag/curriculum.db # prebuilt vector DB (bge-small, 384-dim, 167 chunks)
+    - assets/prompts/ # grounded lesson-plan & MCQ templates
 
   # To add assets to your application, add an assets section, like this:
   # assets:

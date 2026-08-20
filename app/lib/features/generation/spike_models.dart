@@ -44,7 +44,18 @@ class SpikeModel {
 /// The lead candidate this session: mobile-optimized Gemma, ungated, loaded from
 /// a USB-pushed local file, run on the GPU via LiteRT.
 const List<SpikeModel> kSpikeModels = [
-  // Primary path: llama.cpp GGUF (fastest + lightest on budget CPU — see ADR-003).
+  // SHIPPING model: Qwen3 1.7B via llama.cpp. Grounded-quality bake-off (ADR-003)
+  // picked it over Llama 1B — 9/10 answer keys correct vs ~5/10, varied questions.
+  SpikeModel(
+    id: 'qwen3-1.7b-gguf',
+    displayName: 'Qwen3 1.7B (llama.cpp)',
+    sizeLabel: '1.3 GB',
+    modelType: ModelType.qwen,
+    format: ModelFormat.gguf,
+    localFile: 'qwen3-1.7b.gguf',
+    note: 'Q4 GGUF via llama.cpp, ChatML + greedy. Best grounded quality (~3.3 tok/s CPU).',
+  ),
+  // Low-RAM fallback: Llama 3.2 1B (fastest/lightest, but ~5/10 keys — see ADR-003).
   SpikeModel(
     id: 'llama-3.2-1b-gguf',
     displayName: 'Llama 3.2 1B (llama.cpp)',
@@ -52,7 +63,7 @@ const List<SpikeModel> kSpikeModels = [
     modelType: ModelType.general,
     format: ModelFormat.gguf,
     localFile: 'llama-3.2-1b.gguf',
-    note: 'Q4 GGUF via llama.cpp. Fastest viable option measured (~7.5 tok/s CPU).',
+    note: 'Q4 GGUF via llama.cpp. Fastest (~7.5 tok/s) but weaker answer-key accuracy.',
   ),
   SpikeModel(
     id: 'gemma-4-e2b',

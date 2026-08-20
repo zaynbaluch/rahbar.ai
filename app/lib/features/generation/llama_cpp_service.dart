@@ -9,6 +9,11 @@ import 'package:path_provider/path_provider.dart';
 /// devices after the bake-off (see docs/decisions/ADR-002/003). Uses the vendored
 /// `llama_cpp_dart` FFI binding; llama.cpp runs in its own isolate (off the UI
 /// thread). CPU-only here — this budget Adreno GPU can't accelerate reliably.
+///
+/// Shipping model is **Qwen3 1.7B** (ChatML template) with **greedy decoding**
+/// (temp 0 + repeat penalty) — the grounded-quality bake-off (ADR-003) showed
+/// default temperature collapses structured MCQ output, and greedy + Qwen3 1.7B
+/// gets 9/10 answer keys right vs Llama 1B's ~5/10.
 class LlamaCppService {
   LlamaParent? _parent;
   String? _loadedFile;
@@ -37,7 +42,7 @@ class LlamaCppService {
   Future<void> load(
     String fileName, {
     int nThreads = 4, // 4 big cores
-    int nCtx = 2048,
+    int nCtx = 4096, // room for ~2 K-token RAG prompt + generation
   }) async {
     if (_loadedFile == fileName && _parent != null) return;
     await unload();
@@ -54,21 +59,46 @@ class LlamaCppService {
         ..mainGpu = -1,
       contextParams: ContextParams()
         ..nCtx = nCtx
+        ..nBatch = nCtx // prefill the whole RAG prompt in one batch
         ..nThreads = nThreads
         ..nThreadsBatch = nThreads,
-      samplingParams: SamplerParams(),
+      // GREEDY decoding for structured output (see ADR-003 bake-off). temp=0 makes
+      // llama.cpp's temp sampler pick argmax; penaltyRepeat curbs the small model's
+      // tendency to recycle distractors. (The `greedy` flag would skip the penalty.)
+      samplingParams: SamplerParams()
+        ..temp = 0.0
+        ..penaltyRepeat = 1.15,
       verbose: true, // surface llama.cpp's native logs (else they're silenced)
     );
-    _parent = LlamaParent(load);
+    // ChatML formatter — Qwen3's template. formatMessages() wraps system+user as
+    // <|im_start|>system…<|im_start|>user…<|im_start|>assistant. Tokenized with
+    // parse_special=true so the control tokens are recognized.
+    _parent = LlamaParent(load, ChatMLFormat());
     await _parent!.init();
     _loadedFile = fileName;
   }
 
-  /// Stream generated tokens; completes when the model signals done.
-  Stream<String> generate(String prompt) async* {
+  /// Stream a grounded generation from a **system + user** message pair (the RAG
+  /// path). Resets chat history each call so generations are independent.
+  Stream<String> generateChat(String system, String user) {
     final parent = _parent;
     if (parent == null) throw StateError('No model loaded — call load() first.');
+    parent.messages
+      ..clear()
+      ..add({'role': 'system', 'content': system})
+      ..add({'role': 'user', 'content': user});
+    return _stream(parent, ''); // prompt ignored when messages are set
+  }
 
+  /// Stream a plain single-prompt generation (spike / ungrounded path).
+  Stream<String> generate(String prompt) {
+    final parent = _parent;
+    if (parent == null) throw StateError('No model loaded — call load() first.');
+    parent.messages.clear(); // ensure the single-prompt (formatPrompt) path is used
+    return _stream(parent, prompt);
+  }
+
+  Stream<String> _stream(LlamaParent parent, String prompt) async* {
     final out = StreamController<String>();
     final tokenSub = parent.stream.listen(out.add);
     final doneSub = parent.completions.listen((_) {

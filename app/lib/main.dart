@@ -4,7 +4,7 @@ import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 
 import 'core/theme.dart';
-import 'features/generation/model_spike_screen.dart';
+import 'features/generation/generation_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +28,7 @@ class RahbarApp extends StatelessWidget {
       title: 'Rahbar AI',
       debugShowCheckedModeBanner: false,
       theme: RahbarTheme.light(),
-      home: const ModelSpikeScreen(),
+      home: const GenerationScreen(),
     );
   }
 }
