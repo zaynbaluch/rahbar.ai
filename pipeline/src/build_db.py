@@ -22,7 +22,10 @@ import numpy as np
 from fastembed import TextEmbedding
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-CHUNKS = REPO / "data" / "processed" / "chunks.jsonl"
+# Prefer the paragraph-level chunks (chunk_fine.py) — denser retrieval, smaller
+# RAG prefill — falling back to section chunks if the fine pass hasn't been run.
+_FINE = REPO / "data" / "processed" / "chunks_fine.jsonl"
+CHUNKS = _FINE if _FINE.exists() else REPO / "data" / "processed" / "chunks.jsonl"
 DB = REPO / "app" / "assets" / "rag" / "curriculum.db"
 MODEL = "BAAI/bge-small-en-v1.5"
 DIM = 384

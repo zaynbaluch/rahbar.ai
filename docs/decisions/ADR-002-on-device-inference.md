@@ -43,6 +43,18 @@ engines does not ripple through the app.
 > - **llama.cpp Q4 crushes it on the same phone**: Llama 3.2 1B **7.5 tok/s @ 0.9 GB**, Qwen3
 >   1.7B **6.5 tok/s @ 1.4 GB** — ~5× faster and lighter (better ARM CPU kernels + aggressive Q4).
 >
+> **⚠️ GPU CONFIRMED DEAD-END via a 2nd framework (2026-07-08).** To chase a ~2× speedup we
+> built **llama.cpp's own Adreno OpenCL backend** (`GGML_OPENCL`, embedded kernels) for arm64 and
+> ran it on-device. The Adreno **610** *is* detected and all kernels load, but:
+> - The Qualcomm platform reports OpenCL 3.0 while the **device is only OpenCL 2.0** — the backend
+>   hard-asserts on a 3.0-only query (`CL_DEVICE_OPENCL_C_ALL_VERSIONS`). Patched to fall back.
+> - It then **fails `clEnqueueNDRangeKernel`** (GGML_ASSERT at ggml-opencl.cpp:591) during the
+>   first matmul — the 610 lacks **subgroup broadcast** and has restrictive workgroup limits that
+>   llama.cpp's kernels (tuned for flagship Adreno 6xx/7xx) violate. The generic (non-Adreno)
+>   kernels fail the same way. This is the *same* class of failure LiteRT hit — the budget Adreno
+>   simply can't run these compute kernels. **Conclusion: CPU is the only viable backend on this
+>   class of device; speed work must target the CPU path (context size, quant, threads).**
+>
 > **New decision: `llama.cpp` / GGUF is the PRIMARY runtime for budget devices** (this ADR's
 > former "fallback" and "primary" swap). Needs a Flutter FFI binding (`fllama` /
 > `llama_cpp_dart`) — more integration work than flutter_gemma, but the only path fast enough.

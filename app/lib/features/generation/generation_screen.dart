@@ -236,21 +236,35 @@ class _GenerationScreenState extends State<GenerationScreen> {
               ),
               if (_hits.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text('Grounded in ${_hits.length} textbook excerpts',
-                    style: theme.textTheme.labelLarge),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
+                Builder(builder: (context) {
+                  // Fine chunks repeat section titles; show unique sections (best
+                  // score each) so the grounding chips stay clean.
+                  final seen = <String>{};
+                  final sections = [
                     for (final h in _hits)
-                      Chip(
-                        label: Text('Ch${h.chapter} · ${h.title}  '
-                            '(${h.score.toStringAsFixed(2)})'),
-                        visualDensity: VisualDensity.compact,
+                      if (seen.add(h.title)) h,
+                  ];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Grounded in ${sections.length} textbook sections',
+                          style: theme.textTheme.labelLarge),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final h in sections)
+                            Chip(
+                              label: Text('Ch${h.chapter} · ${h.title}  '
+                                  '(${h.score.toStringAsFixed(2)})'),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                        ],
                       ),
-                  ],
-                ),
+                    ],
+                  );
+                }),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
