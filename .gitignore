@@ -27,3 +27,9 @@ __pycache__/
 
 # Harness runtime
 .claude/
+
+# Vendored native build deps (reproducible via scripts/setup-llama.sh)
+third_party/
+
+# Built native libs (reproduce via scripts/setup-llama.sh)
+app/android/app/src/main/jniLibs/

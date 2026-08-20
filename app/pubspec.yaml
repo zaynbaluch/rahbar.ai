@@ -35,6 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_gemma: ^1.2.0
+  # Vendored (git v0.2.0 + pinned llama.cpp submodule); run scripts/setup-llama.sh.
+  # Primary on-device runtime for budget devices — see ADR-002.
+  llama_cpp_dart:
+    path: ../third_party/llama_cpp_dart
   drift: ^2.34.0
   path_provider: ^2.1.6
   path: ^1.9.1
@@ -45,7 +49,6 @@ dependencies:
   drift_flutter: ^0.3.0
   flutter_gemma_mediapipe: ^1.0.3
   flutter_gemma_litertlm: ^1.0.2
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_gemma/flutter_gemma.dart' show PreferredBackend;
 
 import 'inference_service.dart';
+import 'llama_cpp_service.dart';
 import 'spike_models.dart';
 
 /// Week-1 on-device generation spike (see docs/07-3week-plan.md).
@@ -20,7 +21,8 @@ class ModelSpikeScreen extends StatefulWidget {
 enum _Phase { idle, downloading, loading, generating }
 
 class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
-  final _service = InferenceService();
+  final _service = InferenceService(); // flutter_gemma (.task / .litertlm)
+  final _llama = LlamaCppService(); // llama.cpp (GGUF)
   final _promptController = TextEditingController(
     text:
         'Write 2 multiple-choice questions (with answers) about the parts of a '
@@ -47,6 +49,7 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
   void dispose() {
     _promptController.dispose();
     _service.unload();
+    _llama.unload();
     super.dispose();
   }
 
@@ -58,25 +61,33 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
       _elapsed = Duration.zero;
     });
 
+    final isGguf = _selected.format == ModelFormat.gguf;
     try {
-      // 1. Ensure the model is downloaded + active.
-      setState(() {
-        _phase = _Phase.downloading;
-        _downloadPercent = 0;
-      });
-      await _service.ensureInstalled(
-        _selected,
-        onProgress: (p) => setState(() => _downloadPercent = p),
-      );
-
-      // 2. Load into memory on the selected backend (GPU for LiteRT on device).
-      setState(() => _phase = _Phase.loading);
-      await _service.load(_selected, backend: _backend);
+      // 1+2. Load. GGUF (llama.cpp) is pushed locally — no download; flutter_gemma
+      // models may need a network/local install first.
+      if (isGguf) {
+        setState(() => _phase = _Phase.loading);
+        await _llama.load(_selected.localFile!);
+      } else {
+        setState(() {
+          _phase = _Phase.downloading;
+          _downloadPercent = 0;
+        });
+        await _service.ensureInstalled(
+          _selected,
+          onProgress: (p) => setState(() => _downloadPercent = p),
+        );
+        setState(() => _phase = _Phase.loading);
+        await _service.load(_selected, backend: _backend);
+      }
 
       // 3. Generate, streaming tokens, timing throughput.
       setState(() => _phase = _Phase.generating);
       final sw = Stopwatch()..start();
-      await for (final chunk in _service.generate(_promptController.text)) {
+      final stream = isGguf
+          ? _llama.generate(_promptController.text)
+          : _service.generate(_promptController.text);
+      await for (final chunk in stream) {
         setState(() {
           _output += chunk;
           _tokenChunks++;
