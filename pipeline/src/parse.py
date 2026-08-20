@@ -31,11 +31,9 @@ from docling.datamodel.pipeline_options import (
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-# Parse the RAW scanned PDF directly. Rebuilding a "cleaned" image-PDF was both
-# marginal (the semi-transparent watermark can't be thresholded away — see
-# ADR-005) and ~38x slower (giant page canvas), so we OCR the raw pages at
-# ~5-47 s/page and filter residual watermark strings downstream.
-PDF = REPO / "data" / "raw" / "General_Science_Textbook_6th_Grade.pdf"
+# Parse the flat-field-cleaned PDF (watermark removed, colour + correct page
+# size preserved — see src/preprocess.py). Run `python -m src.preprocess` first.
+PDF = REPO / "data" / "processed" / "textbook_cleaned.pdf"
 OUT = REPO / "data" / "processed" / "parse"
 BATCH_DIR = OUT / "batches"
 FIG_DIR = OUT / "figures"

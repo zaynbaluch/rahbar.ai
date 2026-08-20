@@ -19,16 +19,20 @@
 >   run as a background batch. Docling test (pages 10–12) cleanly detected 5 headings + 10
 >   figures separated from text.
 >
-> **Watermark — known limitation (pixel sampling, 2026-07-05):** the watermark strokes are
-> **neutral grey with values that overlap black text** (watermark V≈75–199 vs text V≈10–106,
-> both saturation≈1). They differ only in shape/position, so **simple thresholding cannot fully
-> remove the watermark without eroding text.** We therefore: (a) apply a **conservative
-> color-preserving lift** (low-saturation, mid/high-value → white) that clears the light haze
-> and keeps colored figures (`src/preprocess.py`); (b) **filter residual watermark strings**
-> ("web version", "pctb", "not for sale", "pesrp") from OCR text downstream; (c) instruct the
-> VLM captioner to ignore watermark text on figure crops. Full removal (frequency-domain /
-> inpainting) is a **future option only if RAG quality demands it** — body-text OCR is already
-> accurate, and the residual mainly affects dense figure-overlap zones.
+> **Watermark — SOLVED via flat-field correction (2026-07-06).** First attempts to threshold
+> the watermark failed (its neutral grey overlaps black-text values). The breakthrough: the
+> watermark is **pixel-identical on every page**, so the **per-pixel median across all 153
+> pages IS the watermark+background template**. Dividing each page by that template
+> (flat-field correction, `src/preprocess.py` → `build_template` + `remove_watermark`) erases
+> the watermark while preserving the page-specific text **and** colour figures.
+>
+> **Result:** re-running preprocess → parse → chunk → embed cut OCR corruption from **297 → 18
+> `@` artefacts (94%↓)**; chunks with moderate/heavy corruption went **32% → 0%** (90% now
+> fully clean), and cleaner OCR recovered **more** content (167 chunks vs 134). Example: the
+> Metals section went from *"Periodic T; ecl |nto three groups… siljc @ ars )"* to a flawless
+> *"Periodic Table are classified into three groups… Boron (B), silicon (Si), arsenic (As)"*.
+> The earlier downstream watermark-string filtering is now largely redundant but kept as a
+> cheap safety net.
 
 ## Context
 
