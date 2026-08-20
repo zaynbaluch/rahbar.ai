@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gemma/flutter_gemma.dart' show PreferredBackend;
 
 import 'inference_service.dart';
 import 'spike_models.dart';
@@ -27,6 +28,7 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
   );
 
   SpikeModel _selected = kSpikeModels.first;
+  PreferredBackend _backend = kSpikeModels.first.defaultBackend;
   _Phase _phase = _Phase.idle;
   int _downloadPercent = 0;
   String _output = '';
@@ -67,9 +69,9 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
         onProgress: (p) => setState(() => _downloadPercent = p),
       );
 
-      // 2. Load into memory (CPU backend on the emulator).
+      // 2. Load into memory on the selected backend (GPU for LiteRT on device).
       setState(() => _phase = _Phase.loading);
-      await _service.load(_selected);
+      await _service.load(_selected, backend: _backend);
 
       // 3. Generate, streaming tokens, timing throughput.
       setState(() => _phase = _Phase.generating);
@@ -117,7 +119,10 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
                 ],
                 onChanged: _busy
                     ? null
-                    : (m) => setState(() => _selected = m ?? _selected),
+                    : (m) => setState(() {
+                        _selected = m ?? _selected;
+                        _backend = _selected.defaultBackend;
+                      }),
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 6, left: 4),
@@ -126,6 +131,25 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.outline),
                 ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text('Backend', style: theme.textTheme.labelLarge),
+                  const SizedBox(width: 12),
+                  SegmentedButton<PreferredBackend>(
+                    segments: const [
+                      ButtonSegment(
+                          value: PreferredBackend.cpu, label: Text('CPU')),
+                      ButtonSegment(
+                          value: PreferredBackend.gpu, label: Text('GPU')),
+                    ],
+                    selected: {_backend},
+                    onSelectionChanged: _busy
+                        ? null
+                        : (s) => setState(() => _backend = s.first),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               TextField(

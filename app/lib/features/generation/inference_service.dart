@@ -1,51 +1,73 @@
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'spike_models.dart';
 
-/// Thin wrapper around flutter_gemma — the single seam the rest of the app
-/// talks to for on-device generation (see docs/decisions/ADR-002). Keeping the
-/// engine behind this interface means swapping MediaPipe ↔ LiteRT-LM, or the
-/// final model, never ripples into feature code.
+/// Thin wrapper around flutter_gemma — the single seam the rest of the app talks
+/// to for on-device generation (see docs/decisions/ADR-002). Supports both
+/// network `.task` models and USB-pushed local `.litertlm` files, on CPU or GPU.
 class InferenceService {
   InferenceModel? _model;
-  String? _loadedModelId;
+  String? _loadedKey;
 
-  String? get loadedModelId => _loadedModelId;
+  String? get loadedKey => _loadedKey;
   bool get isLoaded => _model != null;
 
-  /// Download + register the model if not already present. [onProgress] gets
-  /// 0..100 during a network download; skipped entirely if already installed.
+  /// Resolve a model's local file path in the app's external files dir.
+  Future<String?> localPath(SpikeModel m) async {
+    if (m.localFile == null) return null;
+    final dir = await getExternalStorageDirectory();
+    return dir == null ? null : p.join(dir.path, m.localFile!);
+  }
+
+  /// Download (network) or register (local file) the model if not present.
   Future<void> ensureInstalled(
     SpikeModel m, {
     required void Function(int percent) onProgress,
-    String? hfToken,
   }) async {
     final alreadyThere = await FlutterGemma.isModelInstalled(m.filename);
-    final builder = FlutterGemma.installModel(modelType: m.modelType)
-        .fromNetwork(m.url, token: hfToken);
+    // Route to the right engine: `.litertlm` → LiteRT-LM, `.task` → MediaPipe.
+    final fileType = m.format == ModelFormat.litertlm
+        ? ModelFileType.litertlm
+        : ModelFileType.task;
+    var builder =
+        FlutterGemma.installModel(modelType: m.modelType, fileType: fileType);
+
+    final path = await localPath(m);
+    if (path != null) {
+      builder = builder.fromFile(path); // USB-pushed local file
+    } else {
+      builder = builder.fromNetwork(m.url!);
+    }
+
     if (alreadyThere) {
-      // File is on disk — this only (re)sets it as the active model; no download.
       await builder.install();
+    } else if (path != null) {
+      await builder.install(); // local install has no download progress
     } else {
       await builder.withProgress(onProgress).install();
     }
   }
 
-  /// Load the active model into memory. On the x86_64 emulator we force CPU —
-  /// GPU/NPU backends are unavailable there (see ADR-002/003). [maxTokens] is
-  /// the context window (input + output), not the reply length.
-  Future<void> load(SpikeModel m, {int maxTokens = 1024}) async {
-    if (_loadedModelId == m.id && _model != null) return;
+  /// Load the active model. [backend] picks CPU vs GPU (GPU only usable for
+  /// `.litertlm` on a real arm64 device). [maxTokens] is the context window.
+  Future<void> load(
+    SpikeModel m, {
+    required PreferredBackend backend,
+    int maxTokens = 2048,
+  }) async {
+    final key = '${m.id}/${backend.name}';
+    if (_loadedKey == key && _model != null) return;
     await unload();
     _model = await FlutterGemma.getActiveModel(
       maxTokens: maxTokens,
-      preferredBackend: PreferredBackend.cpu,
+      preferredBackend: backend,
     );
-    _loadedModelId = m.id;
+    _loadedKey = key;
   }
 
-  /// Stream generated tokens for [prompt]. Yields text chunks as they arrive so
-  /// the UI can render progressively and we can measure real latency.
+  /// Stream generated tokens for [prompt].
   Stream<String> generate(
     String prompt, {
     String? systemInstruction,
@@ -70,6 +92,6 @@ class InferenceService {
   Future<void> unload() async {
     await _model?.close();
     _model = null;
-    _loadedModelId = null;
+    _loadedKey = null;
   }
 }
