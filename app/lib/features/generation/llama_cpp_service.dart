@@ -47,7 +47,11 @@ class LlamaCppService {
 
     final load = LlamaLoad(
       path: await _internalModelPath(fileName), // internal ext4 — native open() works
-      modelParams: ModelParams()..nGpuLayers = 0, // CPU-only on budget hardware
+      modelParams: ModelParams()
+        ..nGpuLayers = 0 // CPU-only on budget hardware
+        // main_gpu=-1 → no GPU device required (else load fails validation when
+        // there are 0 GPU devices, as on this Vulkan-off CPU build).
+        ..mainGpu = -1,
       contextParams: ContextParams()
         ..nCtx = nCtx
         ..nThreads = nThreads
