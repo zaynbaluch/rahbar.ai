@@ -162,16 +162,45 @@ class RagService {
     return GroundedPrompt(system, user, hits);
   }
 
+  /// Total grounding-context budget in characters (~4 chars/token). The RAG
+  /// prefill dominates latency AND a long KV cache slows every generated token
+  /// (on-device bench: gen at 1 K-token depth is ~half the context-free rate), so
+  /// bounding the context speeds up *both* halves. ~3000 chars ≈ 750 tokens keeps
+  /// the top excerpts intact while cutting the prefill materially.
+  static const int _contextCharBudget = 3000;
+
+  /// Cap each excerpt at 1200 chars so one long section can't eat the whole budget.
+  static const int _perExcerptCharCap = 1200;
+
   String _buildContext(List<Chunk> hits) {
     final blocks = <String>[];
+    var used = 0;
     for (var i = 0; i < hits.length; i++) {
+      if (used >= _contextCharBudget) break;
       final h = hits[i];
       final pages =
           h.pageStart == h.pageEnd ? 'p${h.pageStart}' : 'p${h.pageStart}-${h.pageEnd}';
-      blocks.add('[Excerpt ${i + 1} — Ch ${h.chapter}, ${h.title} ($pages)]\n'
-          '${h.text.trim()}');
+      final cap = _perExcerptCharCap < _contextCharBudget - used
+          ? _perExcerptCharCap
+          : _contextCharBudget - used;
+      final body = _truncateAtSentence(h.text.trim(), cap);
+      used += body.length;
+      blocks.add('[Excerpt ${i + 1} — Ch ${h.chapter}, ${h.title} ($pages)]\n$body');
     }
     return blocks.join('\n\n');
+  }
+
+  /// Truncate [text] to at most [maxChars], preferring to cut at the last sentence
+  /// end (. ! ?) or newline so the model never sees a mid-sentence fragment.
+  static String _truncateAtSentence(String text, int maxChars) {
+    if (text.length <= maxChars) return text;
+    final cut = text.substring(0, maxChars);
+    var end = cut.lastIndexOf(RegExp(r'[.!?]\s'));
+    final nl = cut.lastIndexOf('\n');
+    if (nl > end) end = nl;
+    // Only honor the boundary if it keeps a reasonable amount (>60% of the cap).
+    if (end > maxChars * 0.6) return cut.substring(0, end + 1).trim();
+    return '${cut.trim()}…';
   }
 
   /// Rough SLO list = the distinct section titles retrieved (v1, matches Python).

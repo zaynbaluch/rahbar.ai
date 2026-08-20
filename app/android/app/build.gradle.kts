@@ -30,6 +30,11 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // flutter_gemma's MediaPipe classes trip R8's missing-class check. We use
+            // llama.cpp (not MediaPipe) for inference, so just disable code shrinking
+            // rather than carry keep-rules for an engine we don't ship.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

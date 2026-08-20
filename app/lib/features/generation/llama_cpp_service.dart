@@ -62,6 +62,10 @@ class LlamaCppService {
         ..nBatch = nCtx // prefill the whole RAG prompt in one batch
         ..nThreads = nThreads
         ..nThreadsBatch = nThreads,
+        // NOTE: flash attention was measured on this SoC (bench) — it speeds prefill
+        // ~25% but slows token generation ~18%, a net wash (worse for gen-heavy
+        // lesson plans), so it stays OFF. The real lever is shrinking the RAG context
+        // (see RagService context budget), which cuts prefill AND speeds gen-at-depth.
       // GREEDY decoding for structured output (see ADR-003 bake-off). temp=0 makes
       // llama.cpp's temp sampler pick argmax; penaltyRepeat curbs the small model's
       // tendency to recycle distractors. (The `greedy` flag would skip the penalty.)
