@@ -14,8 +14,22 @@
 >   visually verified by rasterizing the PDF.
 > - Wired into `GenerationScreen`: structured question cards, show/hide key, and an
 >   **Export/print** action via the `printing` plugin.
-> Still deferred: the on-device **OMR reader/grader** (OpenCV camera pipeline) that consumes
-> the fiducials + bubbles and scores against the stored key.
+> **✅ OMR GRADER IMPLEMENTED (2026-07-09).** The grading half is now built — and in
+> **pure Dart** (the `image` package), no OpenCV, keeping the app light:
+> - `omr/omr_template.dart` — single source of truth for the sheet geometry (fiducial +
+>   bubble positions in A4 points). The PDF export draws from it and the grader samples from
+>   it, so they can never drift.
+> - PDF reworked: the A–D bubble grid is now boxed on the **top-right of the test paper**
+>   itself (no separate sheet; 4 pages → ~2), with fiducials drawn at absolute template coords
+>   on page 1. The printed answer key was **removed** (teacher reads answers in-app).
+> - `omr/omr_grader.dart` — grayscale → locate the 4 corner fiducials (darkest-window +
+>   dark-pixel centroid) → **bilinear-map** each bubble via the fiducials (so it's robust to an
+>   off-center/rotated photo) → measure interior darkness → the darkest option per row (beating
+>   the runner-up by a margin) is the mark → score against the stored key. Unit-tested on
+>   synthetic sheets incl. an off-center case (`test/omr_grader_test.dart`).
+> - `omr/grading_screen.dart` — camera capture (`image_picker`) → grade → score card +
+>   per-question right/wrong/blank. Reachable from any test via the shared `McqTestView`.
+> Real-world accuracy (print → fill → photograph) is validated by the teacher on hardware.
 
 ## Context
 

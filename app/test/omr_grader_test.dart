@@ -1,0 +1,81 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+import 'package:rahbar_ai/features/generation/mcq_parser.dart';
+import 'package:rahbar_ai/features/omr/omr_grader.dart';
+import 'package:rahbar_ai/features/omr/omr_template.dart';
+
+/// A test whose key is A B C D A B C D A B for Q1..Q10.
+McqTest _key() => McqTest(
+      topic: 'digestion',
+      questions: [
+        for (var i = 1; i <= 10; i++)
+          McqQuestion(
+            number: i,
+            difficulty: 'easy',
+            text: 'Q$i',
+            options: const {'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd'},
+            answer: 'ABCD'[(i - 1) % 4],
+          ),
+      ],
+    );
+
+/// Render a synthetic OMR sheet (white page, fiducials, bubble outlines) and fill
+/// the bubbles named in [marks]. [dx],[dy] shift everything to simulate a photo
+/// that isn't perfectly framed (tests the fiducial-relative mapping).
+img.Image _renderSheet(Map<int, String> marks,
+    {double scale = 2, int dx = 0, int dy = 0}) {
+  final w = (OmrTemplate.pageW * scale).round() + dx.abs() * 2;
+  final h = (OmrTemplate.pageH * scale).round() + dy.abs() * 2;
+  final im = img.Image(width: w, height: h);
+  img.fill(im, color: img.ColorRgb8(255, 255, 255));
+  final black = img.ColorRgb8(0, 0, 0);
+  int sx(double x) => (x * scale).round() + dx + dx.abs();
+  int sy(double y) => (y * scale).round() + dy + dy.abs();
+
+  for (final (fx, fy) in OmrTemplate.fiducials) {
+    final s = (OmrTemplate.fidSize * scale / 2).round();
+    img.fillRect(im,
+        x1: sx(fx) - s, y1: sy(fy) - s, x2: sx(fx) + s, y2: sy(fy) + s, color: black);
+  }
+  final r = (OmrTemplate.bubbleR * scale).round();
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (cx, cy) = OmrTemplate.bubbleCenter(q, c);
+      img.drawCircle(im, x: sx(cx), y: sy(cy), radius: r, color: black);
+      if (marks[q] == 'ABCD'[c]) {
+        img.fillCircle(im, x: sx(cx), y: sy(cy), radius: r - 1, color: black);
+      }
+    }
+  }
+  return im;
+}
+
+void main() {
+  group('OmrGrader', () {
+    test('reads a perfectly-framed sheet and scores against the key', () {
+      // Mark all correct except Q3 (mark A instead of C) and Q7 (leave blank).
+      final marks = {
+        for (var i = 1; i <= 10; i++) i: 'ABCD'[(i - 1) % 4],
+      }..remove(7);
+      marks[3] = 'A';
+
+      final result = OmrGrader.grade(_renderSheet(marks), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.total, 10);
+      expect(result.questions[0].marked, 'A'); // Q1 correct
+      expect(result.questions[2].marked, 'A'); // Q3 marked A (key is C) -> wrong
+      expect(result.questions[2].isRight, isFalse);
+      expect(result.questions[6].marked, isNull); // Q7 blank
+      expect(result.blank, 1);
+      expect(result.correct, 8); // 10 - Q3(wrong) - Q7(blank)
+    });
+
+    test('is robust to an off-center photo (uses fiducials, not absolute px)', () {
+      final marks = {for (var i = 1; i <= 10; i++) i: 'ABCD'[(i - 1) % 4]};
+      final result = OmrGrader.grade(_renderSheet(marks, dx: 40, dy: 25), _key());
+      expect(result.fiducialsFound, isTrue);
+      expect(result.correct, 10); // all correct despite the offset
+    });
+  });
+}
