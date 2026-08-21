@@ -99,15 +99,18 @@ class PdfExport {
         ),
       ),
     ));
+    // Title above the box and a hint below it — outside the fiducial rectangle so
+    // they never interfere with corner detection (and don't matter if the teacher
+    // photographs just the box).
     children.add(pw.Positioned(
-      left: OmrTemplate.boxLeft + 8,
-      top: OmrTemplate.boxTop + 6,
-      child: pw.Text('ANSWERS',
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+      left: OmrTemplate.boxLeft,
+      top: OmrTemplate.boxTop - 13,
+      child: pw.Text('ANSWERS  (photograph this box to grade)',
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
     ));
     children.add(pw.Positioned(
-      left: OmrTemplate.boxLeft + 8,
-      top: OmrTemplate.boxTop + 18,
+      left: OmrTemplate.boxLeft,
+      top: OmrTemplate.boxBottom + 3,
       child: pw.Text('Fill one bubble per row with a dark pen.',
           style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
     ));

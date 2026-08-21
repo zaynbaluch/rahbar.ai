@@ -19,18 +19,21 @@ McqTest _key() => McqTest(
       ],
     );
 
-/// Render a synthetic OMR sheet (white page, fiducials, bubble outlines) and fill
-/// the bubbles named in [marks]. [dx],[dy] shift everything to simulate a photo
-/// that isn't perfectly framed (tests the fiducial-relative mapping).
+/// Render a synthetic photo of **just the answer box** (as the teacher shoots it):
+/// the box region plus a framing margin, with fiducials at the box corners and the
+/// bubbles inside. [pad] is the framing margin (points); [dx],[dy] shift everything
+/// to simulate an off-center photo (tests the fiducial-relative mapping).
 img.Image _renderSheet(Map<int, String> marks,
-    {double scale = 2, int dx = 0, int dy = 0}) {
-  final w = (OmrTemplate.pageW * scale).round() + dx.abs() * 2;
-  final h = (OmrTemplate.pageH * scale).round() + dy.abs() * 2;
+    {double scale = 4, double pad = 16, int dx = 0, int dy = 0}) {
+  final originX = OmrTemplate.boxLeft - pad;
+  final originY = OmrTemplate.boxTop - pad;
+  final w = ((OmrTemplate.boxW + 2 * pad) * scale).round() + dx.abs() * 2;
+  final h = ((OmrTemplate.boxH + 2 * pad) * scale).round() + dy.abs() * 2;
   final im = img.Image(width: w, height: h);
   img.fill(im, color: img.ColorRgb8(255, 255, 255));
   final black = img.ColorRgb8(0, 0, 0);
-  int sx(double x) => (x * scale).round() + dx + dx.abs();
-  int sy(double y) => (y * scale).round() + dy + dy.abs();
+  int sx(double x) => ((x - originX) * scale).round() + dx + dx.abs();
+  int sy(double y) => ((y - originY) * scale).round() + dy + dy.abs();
 
   for (final (fx, fy) in OmrTemplate.fiducials) {
     final s = (OmrTemplate.fidSize * scale / 2).round();

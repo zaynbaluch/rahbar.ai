@@ -43,8 +43,8 @@ class _GradingScreenState extends State<GradingScreen> {
       if (decoded == null) throw 'Could not read the photo.';
       final result = OmrGrader.grade(decoded, widget.test);
       if (!result.fiducialsFound) {
-        throw 'Could not find the 4 corner markers — retake with the whole sheet '
-            'flat and well-lit.';
+        throw 'Could not find the 4 corner markers — retake with the ANSWERS box '
+            'filling the frame, flat and well-lit.';
       }
       setState(() => _result = result);
     } catch (e) {
@@ -69,8 +69,8 @@ class _GradingScreenState extends State<GradingScreen> {
               Text(widget.test.topic, style: theme.textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(
-                'Photograph a filled answer sheet — keep all four black corner '
-                'markers in frame, flat and well-lit.',
+                'Photograph the ANSWERS box on the sheet so it fills the frame — '
+                'keep all four black corner markers visible, flat and well-lit.',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline),
               ),

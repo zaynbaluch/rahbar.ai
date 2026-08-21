@@ -40,7 +40,7 @@ class OmrGrader {
   static const double _marginThreshold = 0.12;
 
   static OmrResult grade(img.Image image, McqTest key) {
-    final gray = img.grayscale(img.copyRotate(image, angle: 0));
+    final gray = img.grayscale(image);
     final w = gray.width, h = gray.height;
 
     final fids = _findFiducials(gray);
@@ -84,15 +84,17 @@ class OmrGrader {
   /// The 4 fiducial centers in photo pixels (TL, TR, BR, BL), or null if not found.
   static List<(double, double)>? _findFiducials(img.Image gray) {
     final w = gray.width, h = gray.height;
-    // Search a 32% window at each corner for the spot with the highest local
-    // darkness — the solid square beats thin text/print. Window ~ fiducial size.
-    final win = ((OmrTemplate.fidSize / OmrTemplate.pageH) * h * 1.4).round().clamp(6, 60);
-    final regionW = (w * 0.32).round(), regionH = (h * 0.32).round();
+    // Search a generous corner window for the spot with the highest local darkness
+    // — the solid square beats thin print. The teacher photographs the answer box,
+    // so the corner squares sit near the image corners (with some framing margin).
+    // Window ~ a fiducial as it appears when the box roughly fills the frame.
+    final win = ((OmrTemplate.fidSize / OmrTemplate.boxH) * h * 0.9).round().clamp(6, 80);
+    final regionW = (w * 0.45).round(), regionH = (h * 0.45).round();
     final corners = <(int, int, int, int)>[
       (0, 0, regionW, regionH), // TL
       (w - regionW, 0, w, regionH), // TR
       (w - regionW, h - regionH, w, h), // BR
-      (0, h - regionH, w, h), // BL
+      (0, h - regionH, regionW, h), // BL
     ];
     final result = <(double, double)>[];
     for (final (x0, y0, x1, y1) in corners) {
@@ -164,7 +166,8 @@ class OmrGrader {
   /// Average darkness (0..1) inside a small disc at (px,py) — the bubble interior.
   static double _sampleFill(img.Image g, double px, double py, int w, int h) {
     // Sample radius slightly under the printed bubble radius to skip the outline.
-    final r = ((OmrTemplate.bubbleR * 0.7 / OmrTemplate.pageH) * h).round().clamp(2, 30);
+    // Scale to the box (the framed region), not the whole page.
+    final r = ((OmrTemplate.bubbleR * 0.7 / OmrTemplate.boxH) * h).round().clamp(2, 40);
     final cx = px.round(), cy = py.round();
     double sum = 0;
     int count = 0;
