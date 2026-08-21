@@ -23,7 +23,7 @@ class _GradingScreenState extends State<GradingScreen> {
   String? _error;
   OmrResult? _result;
 
-  Future<void> _capture() async {
+  Future<void> _grade(ImageSource source) async {
     setState(() {
       _busy = true;
       _error = null;
@@ -31,16 +31,22 @@ class _GradingScreenState extends State<GradingScreen> {
     });
     try {
       final shot = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1600, // enough resolution for bubble detection, keeps it fast
+        source: source,
+        maxWidth: 2000, // enough resolution for bubble detection, keeps it fast
       );
       if (shot == null) {
         setState(() => _busy = false);
         return;
       }
       final bytes = await shot.readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) throw 'Could not read the photo.';
+      var decoded = img.decodeImage(bytes);
+      if (decoded == null) throw 'Could not read the image.';
+      // Preprocess: apply the photo's EXIF rotation, then cap the size so grading
+      // is fast and consistent regardless of the camera/scan resolution.
+      decoded = img.bakeOrientation(decoded);
+      if (decoded.width > 2000) {
+        decoded = img.copyResize(decoded, width: 2000);
+      }
       final result = OmrGrader.grade(decoded, widget.test);
       if (!result.fiducialsFound) {
         throw 'Could not find the 4 corner markers — retake with the ANSWERS box '
@@ -75,12 +81,26 @@ class _GradingScreenState extends State<GradingScreen> {
                     ?.copyWith(color: theme.colorScheme.outline),
               ),
               const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _busy ? null : _capture,
-                icon: const Icon(Icons.camera_alt),
-                label: Text(_busy
-                    ? 'Reading…'
-                    : (r == null ? 'Capture sheet' : 'Grade next sheet')),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : () => _grade(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt),
+                      label: Text(_busy
+                          ? 'Reading…'
+                          : (r == null ? 'Camera' : 'Next (camera)')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _grade(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Choose image'),
+                    ),
+                  ),
+                ],
               ),
               if (_busy) ...[
                 const SizedBox(height: 16),
