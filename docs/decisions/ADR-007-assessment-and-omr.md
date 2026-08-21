@@ -32,6 +32,14 @@
 > - `omr/grading_screen.dart` — camera capture (`image_picker`) → grade → score card +
 >   per-question right/wrong/blank. Reachable from any test via the shared `McqTestView`.
 > Real-world accuracy (print → fill → photograph) is validated by the teacher on hardware.
+>
+> **✅ GRADEBOOK (2026-07-09).** Graded sheets are now persisted so a teacher can grade a whole
+> class and keep a record: `omr/graded_result.dart` + `omr/gradebook_store.dart` (one JSON per
+> result, keyed by test ID — mirrors LibraryStore). The grading screen gained a student-name
+> field + Save after each sheet (and a camera/gallery source, EXIF+resize preprocessing);
+> `omr/results_screen.dart` shows the class roster with count/average/high/low. Student names are
+> entered by the teacher (OMR reads bubbles, not handwriting). Verified end-to-end on-device: a
+> prepared answer-box image graded 10/10 with every bubble correct.
 
 ## Context
 
