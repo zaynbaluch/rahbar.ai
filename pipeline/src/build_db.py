@@ -12,6 +12,7 @@ Run: uv run python -m src.build_db          # build DB
 
 from __future__ import annotations
 
+import functools
 import json
 import pathlib
 import sqlite3
@@ -39,9 +40,15 @@ def unpack(blob: bytes) -> np.ndarray:
     return np.array(struct.unpack(f"{len(blob) // 4}f", blob), dtype=np.float32)
 
 
+@functools.lru_cache(maxsize=1)
+def _embedder() -> TextEmbedding:
+    """Loading the ONNX model costs seconds; the content pipeline embeds once per
+    topic (and again per candidate question, for dedup), so keep one instance."""
+    return TextEmbedding(model_name=MODEL)
+
+
 def embed_texts(texts: list[str]) -> np.ndarray:
-    model = TextEmbedding(model_name=MODEL)
-    vecs = np.array(list(model.embed(texts)), dtype=np.float32)
+    vecs = np.array(list(_embedder().embed(texts)), dtype=np.float32)
     # L2-normalize so dot product == cosine similarity.
     vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
     return vecs

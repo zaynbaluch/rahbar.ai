@@ -1,6 +1,7 @@
 # Source PDFs & heavy data (not for VCS)
 data/raw/
 data/processed/
+data/models/
 
 # Bundled model weights (large binaries) — GGUFs are USB-pushed, not in VCS.
 app/assets/models/*

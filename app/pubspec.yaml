@@ -78,8 +78,9 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/rag/curriculum.db # prebuilt vector DB (bge-small, 384-dim, 167 chunks)
-    - assets/prompts/ # grounded lesson-plan & MCQ templates
+    - assets/rag/curriculum.db # prebuilt vector DB (bge-small, 384-dim, 341 chunks)
+    - assets/content/content_pack.db # verified MCQ bank + 5E section variants (ADR-008)
+    - assets/prompts/ # grounded templates for the on-device escape hatch
 
   # To add assets to your application, add an assets section, like this:
   # assets:

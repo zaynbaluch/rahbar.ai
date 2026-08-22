@@ -6,8 +6,12 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p third_party
+# Pin to v0.2.0 — the API the app is written against (LlamaParent, ChatMLFormat,
+# SamplerParams.grammarStr, LlamaScope.saveState). netdur's `main` has since moved
+# to 0.9.x with an incompatible restructure, so cloning main breaks the build.
+LLAMA_DART_TAG=${LLAMA_DART_TAG:-v0.2.0}
 if [ ! -d third_party/llama_cpp_dart ]; then
-  git clone --recurse-submodules --shallow-submodules \
+  git clone --branch "$LLAMA_DART_TAG" --recurse-submodules --shallow-submodules \
     https://github.com/netdur/llama_cpp_dart third_party/llama_cpp_dart
 else
   echo "third_party/llama_cpp_dart already present"

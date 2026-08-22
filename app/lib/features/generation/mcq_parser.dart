@@ -13,6 +13,7 @@ class McqQuestion {
     required this.text,
     required this.options,
     required this.answer,
+    this.itemId,
   });
 
   final int number;
@@ -21,8 +22,31 @@ class McqQuestion {
   final Map<String, String> options; // 'A'..'D' -> option text
   final String? answer; // 'A'..'D', or null if unparseable
 
+  /// The content-pack item this was sampled from, when it came from the bank rather
+  /// than the on-device model. Lets the library exclude questions a teacher has already
+  /// used when they draw a second test on the same topic.
+  final String? itemId;
+
   bool get isComplete =>
       text.isNotEmpty && options.length == 4 && answer != null;
+
+  Map<String, dynamic> toJson() => {
+        'number': number,
+        'difficulty': difficulty,
+        'text': text,
+        'options': options,
+        'answer': answer,
+        if (itemId != null) 'itemId': itemId,
+      };
+
+  factory McqQuestion.fromJson(Map<String, dynamic> j) => McqQuestion(
+        number: j['number'] as int,
+        difficulty: j['difficulty'] as String? ?? '',
+        text: j['text'] as String? ?? '',
+        options: (j['options'] as Map).map((k, v) => MapEntry('$k', '$v')),
+        answer: j['answer'] as String?,
+        itemId: j['itemId'] as String?,
+      );
 }
 
 /// A parsed test: the questions plus a coverage flag for the UI/QA.
@@ -39,6 +63,22 @@ class McqTest {
   String get keyLine => questions
       .map((q) => '${q.number}=${q.answer ?? '?'}')
       .join(' ');
+
+  /// The bank items used, so a re-draw on the same topic can avoid repeating them.
+  Set<String> get itemIds =>
+      questions.map((q) => q.itemId).whereType<String>().toSet();
+
+  Map<String, dynamic> toJson() => {
+        'topic': topic,
+        'questions': questions.map((q) => q.toJson()).toList(),
+      };
+
+  factory McqTest.fromJson(Map<String, dynamic> j) => McqTest(
+        topic: j['topic'] as String? ?? '',
+        questions: (j['questions'] as List? ?? [])
+            .map((e) => McqQuestion.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 class McqParser {

@@ -5,6 +5,8 @@ import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'mcq_grammar.dart';
+
 /// On-device generation via **llama.cpp** (GGUF), the primary runtime for budget
 /// devices after the bake-off (see docs/decisions/ADR-002/003). Uses the vendored
 /// `llama_cpp_dart` FFI binding; llama.cpp runs in its own isolate (off the UI
@@ -17,6 +19,7 @@ import 'package:path_provider/path_provider.dart';
 class LlamaCppService {
   LlamaParent? _parent;
   String? _loadedFile;
+  String? _loadedGrammar;
 
   bool get isLoaded => _parent != null;
 
@@ -39,12 +42,20 @@ class LlamaCppService {
   }
 
   /// Load a GGUF from the app's external files dir (USB-pushed).
+  ///
+  /// [grammar] is an optional GBNF string that constrains decoding (used for the
+  /// MCQ schema — see [kMcqGrammar]). The binding fixes the sampler at load time,
+  /// so switching the grammar (e.g. MCQ→lesson) reloads the model. That only
+  /// happens on a mode change, not per generation, so the cost is a rare one-off.
   Future<void> load(
     String fileName, {
+    String? grammar,
     int nThreads = 4, // 4 big cores
     int nCtx = 4096, // room for ~2 K-token RAG prompt + generation
   }) async {
-    if (_loadedFile == fileName && _parent != null) return;
+    if (_loadedFile == fileName && _loadedGrammar == grammar && _parent != null) {
+      return;
+    }
     await unload();
 
     // The Android build produces libmtmd.so (links llama + ggml).
@@ -71,7 +82,11 @@ class LlamaCppService {
       // tendency to recycle distractors. (The `greedy` flag would skip the penalty.)
       samplingParams: SamplerParams()
         ..temp = 0.0
-        ..penaltyRepeat = 1.15,
+        ..penaltyRepeat = 1.15
+        // GBNF grammar (MCQ only): forces the exact parseable schema regardless
+        // of the model's format discipline. Empty = unconstrained (lesson plans).
+        ..grammarStr = grammar ?? ''
+        ..grammarRoot = grammar == null ? '' : kMcqGrammarRoot,
       verbose: true, // surface llama.cpp's native logs (else they're silenced)
     );
     // ChatML formatter — Qwen3's template. formatMessages() wraps system+user as
@@ -80,6 +95,7 @@ class LlamaCppService {
     _parent = LlamaParent(load, ChatMLFormat());
     await _parent!.init();
     _loadedFile = fileName;
+    _loadedGrammar = grammar;
   }
 
   /// Stream a grounded generation from a **system + user** message pair (the RAG
@@ -122,5 +138,6 @@ class LlamaCppService {
     await _parent?.dispose();
     _parent = null;
     _loadedFile = null;
+    _loadedGrammar = null;
   }
 }
