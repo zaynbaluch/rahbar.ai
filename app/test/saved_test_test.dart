@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rahbar_ai/features/generation/lesson_plan.dart';
-import 'package:rahbar_ai/features/library/saved_test.dart';
+import 'package:bayaz_ai/features/generation/lesson_plan.dart';
+import 'package:bayaz_ai/features/library/saved_test.dart';
 
 void main() {
   test('SavedTest survives a JSON round-trip and re-parses to a test', () {

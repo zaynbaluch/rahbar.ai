@@ -266,7 +266,7 @@ class PdfExport {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text('Rahbar AI - General Science, Grade 6',
+        pw.Text('Bayaz AI - General Science, Grade 6',
             style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
         pw.Text('Topic: $topic',
             style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),

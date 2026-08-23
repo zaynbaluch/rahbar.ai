@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/components/brand_app_bar.dart';
 import '../../design_system/components/empty_state.dart';
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/section_header.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
@@ -221,7 +221,7 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
     );
   }
 
-  Widget _noMatch(String query) => RahbarEmptyState(
+  Widget _noMatch(String query) => BayazEmptyState(
     asset: 'assets/ui/illustrations/no_search_results.webp',
     title: 'No curriculum topic found',
     message:
@@ -301,7 +301,7 @@ class _HeroPanel extends StatelessWidget {
             child: Opacity(
               opacity: 0.16,
               child: Image.asset(
-                'assets/ui/branding/rahbar_mark_white.png',
+                'assets/ui/branding/bayaz_logo.png',
                 width: 170,
                 height: 170,
               ),
@@ -373,7 +373,7 @@ class _RecentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 245,
-      child: RahbarCard(
+      child: BayazCard(
         onTap: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => SavedTestScreen(test: test))),
@@ -497,7 +497,7 @@ class _TopicCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       onTap: onTap,
       color: const Color(0xFFFBFCFF),
       padding: const EdgeInsets.all(AppSpacing.sm),
@@ -575,7 +575,7 @@ class _CustomTopicCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       onTap: onTap,
       color: AppColors.softBlue,
       borderColor: const Color(0xFFC9D6FF),

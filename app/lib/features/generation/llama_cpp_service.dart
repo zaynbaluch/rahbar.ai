@@ -87,7 +87,14 @@ class LlamaCppService {
         // of the model's format discipline. Empty = unconstrained (lesson plans).
         ..grammarStr = grammar ?? ''
         ..grammarRoot = grammar == null ? '' : kMcqGrammarRoot,
-      verbose: true, // surface llama.cpp's native logs (else they're silenced)
+      // `llama_log_set` is a process-global native callback, not per-model.
+      // RagService's embedder loads first and (with verbose:false) binds it to
+      // its own isolate. If this load left it at verbose:true, that stale
+      // cross-isolate callback pointer gets invoked when LFM2 logs during
+      // load, and the Dart VM aborts with "Cannot invoke native callback
+      // from a different isolate" (SIGABRT). Must stay false so this load
+      // re-binds the (silent) callback to its own isolate instead.
+      verbose: false,
     );
     // ChatML formatter — Qwen3's template. formatMessages() wraps system+user as
     // <|im_start|>system…<|im_start|>user…<|im_start|>assistant. Tokenized with

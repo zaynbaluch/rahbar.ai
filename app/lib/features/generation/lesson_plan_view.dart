@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_motion.dart';
@@ -89,7 +89,7 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
     try {
       await Printing.layoutPdf(
         onLayout: (_) => PdfExport.buildLessonPlan(_plan),
-        name: 'Rahbar-${_plan.topic}-lesson-plan',
+        name: 'Bayaz-${_plan.topic}-lesson-plan',
       );
     } finally {
       if (mounted) setState(() => _printing = false);
@@ -161,7 +161,7 @@ class LessonPlanReadOnlyScreen extends StatelessWidget {
 
   Future<void> _print() => Printing.layoutPdf(
     onLayout: (_) => PdfExport.buildLessonPlan(plan),
-    name: 'Rahbar-${plan.topic}-lesson-plan',
+    name: 'Bayaz-${plan.topic}-lesson-plan',
   );
 
   @override
@@ -290,7 +290,7 @@ class _OutcomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(top: AppSpacing.xs),
@@ -332,7 +332,7 @@ class _MaterialsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       color: AppColors.softGold,
       borderColor: const Color(0xFFFFD96A),
       child: Column(
@@ -384,7 +384,7 @@ class _SectionCard extends StatelessWidget {
       duration: AppMotion.standard,
       switchInCurve: AppMotion.curve,
       switchOutCurve: AppMotion.curve,
-      child: RahbarCard(
+      child: BayazCard(
         key: ValueKey(section.id),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

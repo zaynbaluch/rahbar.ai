@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/components/brand_app_bar.dart';
 import '../../design_system/components/empty_state.dart';
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -190,7 +190,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _emptyState(bool libraryEmpty) {
     if (libraryEmpty) {
-      return const RahbarEmptyState(
+      return const BayazEmptyState(
         asset: 'assets/ui/illustrations/empty_library.webp',
         title: 'Your Library is empty',
         message:
@@ -202,7 +202,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         : _filter == 'mcq'
             ? 'assets/ui/illustrations/no_saved_tests.png'
             : 'assets/ui/illustrations/no_search_results.webp';
-    return RahbarEmptyState(
+    return BayazEmptyState(
       asset: asset,
       title: 'Nothing matches this view',
       message: 'Change the filter or clear the search to see other saved items.',
@@ -249,7 +249,7 @@ class _LibraryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = item.createdAt;
     final isTest = item.kind == 'mcq';
-    return RahbarCard(
+    return BayazCard(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => SavedTestScreen(test: item),
       )),
@@ -350,7 +350,7 @@ class _LegacyLessonScreen extends StatelessWidget {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.md),
-          child: RahbarCard(
+          child: BayazCard(
             child: SelectableText(
               test.rawOutput,
               style: const TextStyle(height: 1.5),

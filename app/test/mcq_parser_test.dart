@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rahbar_ai/features/generation/mcq_parser.dart';
+import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 
 /// Real Qwen3 1.7B output from the on-device grounded bake-off (ADR-003), the
 /// shipping model/config. Trailing spaces on options are intentional (the model

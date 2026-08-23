@@ -3,7 +3,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../design_system/components/frame_animation.dart';
-import '../../design_system/components/rahbar_card.dart';
+import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -152,10 +152,10 @@ class _GradingScreenState extends State<GradingScreen> {
             ),
             if (_busy) ...[
               const SizedBox(height: AppSpacing.md),
-              RahbarCard(
+              BayazCard(
                 child: Column(
                   children: [
-                    const RahbarFrameAnimation(
+                    const BayazFrameAnimation(
                       name: 'scanning_answers',
                       size: 150,
                       loop: true,
@@ -171,7 +171,7 @@ class _GradingScreenState extends State<GradingScreen> {
             ],
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.md),
-              RahbarCard(
+              BayazCard(
                 color: Theme.of(context).colorScheme.errorContainer,
                 borderColor: Theme.of(context).colorScheme.error,
                 child: Column(
@@ -196,7 +196,7 @@ class _GradingScreenState extends State<GradingScreen> {
               const SizedBox(height: AppSpacing.lg),
               _ResultSummary(result: result),
               const SizedBox(height: AppSpacing.sm),
-              RahbarCard(
+              BayazCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -223,7 +223,7 @@ class _GradingScreenState extends State<GradingScreen> {
               Text('Question review',
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: AppSpacing.sm),
-              RahbarCard(
+              BayazCard(
                 child: Column(
                   children: [
                     for (final question in result.questions)
@@ -283,7 +283,7 @@ class _GradingHeader extends StatelessWidget {
 class _CaptureGuide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return RahbarCard(
+    return BayazCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -317,12 +317,12 @@ class _ResultSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final percentage =
         result.total == 0 ? 0 : (100 * result.correct / result.total).round();
-    return RahbarCard(
+    return BayazCard(
       color: const Color(0xFFF3F8FF),
       borderColor: const Color(0xFFC9D6FF),
       child: Row(
         children: [
-          const RahbarFrameAnimation(
+          const BayazFrameAnimation(
             name: 'grading_complete',
             size: 116,
           ),

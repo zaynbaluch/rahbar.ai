@@ -108,7 +108,7 @@ class _ModelSpikeScreenState extends State<ModelSpikeScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rahbar AI · Generation Spike'),
+        title: const Text('Bayaz AI · Generation Spike'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(

@@ -4,8 +4,8 @@ import '../theme/app_colors.dart';
 import '../theme/app_radii.dart';
 import '../theme/app_spacing.dart';
 
-class RahbarCard extends StatelessWidget {
-  const RahbarCard({
+class BayazCard extends StatelessWidget {
+  const BayazCard({
     super.key,
     required this.child,
     this.onTap,
