@@ -1,0 +1,47 @@
+# Source PDFs & heavy data (not for VCS)
+data/raw/
+data/processed/
+data/models/
+
+# Bundled model weights (large binaries) — GGUFs are USB-pushed, not in VCS.
+app/assets/models/*
+!app/assets/models/.gitkeep
+# The prebuilt vector DB is a small (~627 KB) REQUIRED bundled asset — track it so
+# the app builds from a fresh clone without re-running the Python pipeline.
+!app/assets/rag/.gitkeep
+
+# Flutter / Dart
+app/.dart_tool/
+app/.flutter-plugins*
+app/build/
+app/.idea/
+app/.fvm/
+*.iml
+
+# Local configuration and signing secrets — never commit these.
+.env
+.env.*
+!.env.example
+app/android/local.properties
+app/android/key.properties
+*.jks
+*.keystore
+
+# Python (pipeline)
+pipeline/.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Harness runtime
+.claude/
+
+# Vendored native build deps (reproducible via scripts/setup-llama.sh)
+third_party/
+
+# Built native libs (reproduce via scripts/setup-llama.sh)
+app/android/app/src/main/jniLibs/
