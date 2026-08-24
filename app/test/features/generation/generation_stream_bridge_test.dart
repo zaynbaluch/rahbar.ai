@@ -121,4 +121,25 @@ void main() {
     await tokens.close();
     await completions.close();
   });
+
+  test('fails when the model session closes before completion', () async {
+    final tokens = StreamController<String>.broadcast();
+    final completions = StreamController<ModelCompletion>.broadcast();
+    final stream = const GenerationStreamBridge().run(
+      tokens: tokens.stream,
+      completions: completions.stream,
+      start: () async => 'prompt-1',
+      stop: () async {},
+    );
+
+    final expectation = expectLater(
+      stream,
+      emitsError(isA<LocalGenerationException>()),
+    );
+    await Future<void>.delayed(Duration.zero);
+    await completions.close();
+
+    await expectation;
+    await tokens.close();
+  });
 }

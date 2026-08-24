@@ -20,6 +20,8 @@ class LlamaCppService {
   String? _loadedFile;
   String? _loadedGrammar;
   bool _generationActive = false;
+  Completer<void>? _generationDone;
+  Future<void> _lifecycleTail = Future<void>.value();
 
   bool get isLoaded => _parent != null;
 
@@ -29,6 +31,19 @@ class LlamaCppService {
     String? grammar,
     int nThreads = 4,
     int nCtx = 4096,
+  }) =>
+      _enqueueLifecycle(() => _loadPath(
+            modelPath,
+            grammar: grammar,
+            nThreads: nThreads,
+            nCtx: nCtx,
+          ));
+
+  Future<void> _loadPath(
+    String modelPath, {
+    String? grammar,
+    required int nThreads,
+    required int nCtx,
   }) async {
     final model = File(modelPath);
     if (!await model.exists()) {
@@ -37,7 +52,7 @@ class LlamaCppService {
     if (_loadedFile == modelPath && _loadedGrammar == grammar && _parent != null) {
       return;
     }
-    await unload();
+    await _unloadCurrent();
 
     // The Android build produces libmtmd.so (links llama + ggml).
     Llama.libraryPath = 'libmtmd.so';
@@ -79,10 +94,25 @@ class LlamaCppService {
     );
     // The pinned binding does not apply the GGUF's embedded Jinja chat template,
     // so format the published LFM2 token sequence explicitly.
-    _parent = LlamaParent(load, Lfm2PromptFormat());
-    await _parent!.init();
-    _loadedFile = modelPath;
-    _loadedGrammar = grammar;
+    final parent = LlamaParent(load, Lfm2PromptFormat());
+    _parent = parent;
+    try {
+      await parent.init();
+      _loadedFile = modelPath;
+      _loadedGrammar = grammar;
+    } catch (_) {
+      if (identical(_parent, parent)) {
+        _parent = null;
+        _loadedFile = null;
+        _loadedGrammar = null;
+      }
+      try {
+        await parent.dispose();
+      } catch (_) {
+        // Preserve the original load failure.
+      }
+      rethrow;
+    }
   }
 
   /// Stream a grounded generation from a **system + user** message pair (the RAG
@@ -110,6 +140,8 @@ class LlamaCppService {
       throw StateError('A local generation is already running.');
     }
     _generationActive = true;
+    final done = Completer<void>();
+    _generationDone = done;
     try {
       yield* const GenerationStreamBridge().run(
         tokens: parent.stream,
@@ -125,13 +157,44 @@ class LlamaCppService {
       );
     } finally {
       _generationActive = false;
+      if (!done.isCompleted) done.complete();
+      if (identical(_generationDone, done)) _generationDone = null;
     }
   }
 
-  Future<void> unload() async {
-    await _parent?.dispose();
+  Future<void> unload() => _enqueueLifecycle(_unloadCurrent);
+
+  Future<void> _unloadCurrent() async {
+    final parent = _parent;
     _parent = null;
     _loadedFile = null;
     _loadedGrammar = null;
+    if (parent == null) return;
+
+    if (_generationActive || parent.isGenerating) {
+      try {
+        await parent.stop();
+      } catch (_) {
+        // Disposal below remains the final safety net.
+      }
+      final done = _generationDone;
+      if (done != null) {
+        try {
+          await done.future.timeout(const Duration(seconds: 2));
+        } on TimeoutException {
+          // The pinned binding may not emit a completion after a forced stop.
+        }
+      }
+    }
+    await parent.dispose();
+  }
+
+  Future<void> _enqueueLifecycle(Future<void> Function() action) {
+    final next = _lifecycleTail.then(
+      (_) => action(),
+      onError: (_, __) => action(),
+    );
+    _lifecycleTail = next.then<void>((_) {}, onError: (_, __) {});
+    return next;
   }
 }

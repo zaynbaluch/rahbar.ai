@@ -93,6 +93,15 @@ class GenerationStreamBridge {
           onError: (Object error, StackTrace stackTrace) {
             unawaited(finish(error: error, stackTrace: stackTrace));
           },
+          onDone: () {
+            if (!finished) {
+              unawaited(finish(
+                error: const LocalGenerationException(
+                  'The local model session ended before generation completed.',
+                ),
+              ));
+            }
+          },
         );
         unawaited(() async {
           try {
