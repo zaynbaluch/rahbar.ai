@@ -1,6 +1,6 @@
 # Current curriculum pack audit
 
-Pack: `app/assets/content/content_pack.db`
+Pack: `app\assets\content\content_pack.db`
 
 - SQLite integrity: **ok**
 - Topics: **88**
@@ -31,23 +31,11 @@ The application now repositions correct answers into balanced per-paper targets 
 
 ## Lesson-plan reference warnings
 
-- Variants with internal excerpt, figure, table, or cross-variant references: **23**
-- `ch01-1_2_1-2b0a-explore-2`: figure
-- `ch01-1_2_2-2791-explain-0`: figure
-- `ch03-3_2_2-cd0e-revision_starter-0`: excerpt
-- `ch03-3_2_2-cd0e-revision_starter-1`: excerpt
-- `ch03-3_2_2-cd0e-engage-1`: excerpt
-- `ch03-3_2_2-cd0e-explain-0`: excerpt, table
-- `ch03-3_2_2-cd0e-elaborate-0`: excerpt
-- `ch03-3_2_2-cd0e-elaborate-1`: excerpt
-- `ch03-3_2_2-cd0e-evaluate-0`: excerpt
-- `ch03-3_2_2-cd0e-evaluate-1`: excerpt
-- `ch03-3_2_2-cd0e-homework-0`: excerpt
-- `ch03-3_2_2-cd0e-homework-1`: excerpt
+- Variants with internal excerpt, figure, table, or cross-variant references: **0**
 
 ## Release blockers
 
-- Lesson-plan variants still expose internal excerpt references; regenerate the pack from verified checkpoints before release
+No structural release blockers were detected by this audit.
 
 ## Required release review
 

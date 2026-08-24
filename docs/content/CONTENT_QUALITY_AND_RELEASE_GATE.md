@@ -12,9 +12,13 @@ The bundled Class 6 General Science database is structurally valid, but it is no
 - source answer positions are heavily concentrated in B and C;
 - normalized duplicate stems occur across overlapping topics;
 - several chapter/section numbers map to multiple topic records; and
-- some lesson-plan variants expose internal excerpt references or depend on figures/tables that are not embedded in the plan.
+- lesson-plan variants no longer expose internal excerpt references or depend on numbered figures/tables that are not embedded in the plan (see provenance below).
 
 The application mitigates paper-level answer-position bias and never silently recycles saved questions. It cannot prove the educational correctness of existing generated prose. The source checkpoints and approved source textbooks required to rebuild the pack are not present in this archive, so regeneration remains an external content blocker.
+
+### Lesson-plan reference provenance
+
+The 23 lesson-plan variants that previously leaked grounding scaffolding — trailing `(Excerpt N)` citation tags and `Use Figure/Table N from the textbook` instructions — were repaired by a deterministic content-pack migration (`src/sanitize_content_pack.py`), **not** by a full regeneration from verified checkpoints, because the original generation checkpoints and processed source corpus are not included in this repository. The migration copies the packaged database, rewrites only those 23 variants through the deterministic `sanitize_plan_body` (citation tags are dropped; book-figure/table instructions are rewritten to reference the diagram the teacher draws in class), and refuses to publish unless exactly those 23 rows change, every other row is unchanged by value, SQLite integrity is `ok`, and zero variants remain flagged. A subject-teacher review of the rewritten variants is still required before release.
 
 ## Required generation pipeline
 

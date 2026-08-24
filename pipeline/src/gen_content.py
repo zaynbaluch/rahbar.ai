@@ -32,7 +32,9 @@ import time
 import numpy as np
 
 from . import checkpoint as ckpt
-from .content_validation import has_material_citation, scaffolding_reference_issues
+from .content_validation import (
+    has_material_citation, sanitize_plan_body, scaffolding_reference_issues,
+)
 from . import llm
 from .build_db import DB, embed_texts, unpack
 from .rag_prompt import REPO, _is_exercise
@@ -357,6 +359,13 @@ def run_plan_gen(topic: dict, meta: dict) -> dict:
     missing = [s for s in PLAN_SECTIONS if not sections.get(s)]
     if missing:
         raise llm.LlmError(f"plan missing sections: {missing}")
+    # Deterministically repair leaked grounding scaffolding ("(Excerpt 7)", "Use Figure
+    # 5.6 from the textbook") before the checkpoint is written, so plan_verify judges the
+    # teacher-visible text and does not exclude an otherwise good variant over a citation
+    # tag. Anything sanitising cannot make self-contained stays flagged and is excluded.
+    for variants in sections.values():
+        for v in variants:
+            v["body"] = sanitize_plan_body(v["body"])
     return {"context": ctx, "sections": sections}
 
 
