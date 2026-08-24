@@ -4,6 +4,7 @@ import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../generation/generation_screen.dart';
 import '../generation/lesson_plan_view.dart';
 import '../generation/mcq_parser.dart';
 import '../generation/mcq_test_view.dart';
@@ -94,10 +95,47 @@ class _TopicScreenState extends State<TopicScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: AppSpacing.xl),
+            Text('Need something different?',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Custom offline AI is optional and slower than the verified curriculum content. It may take 4–5 minutes and must be reviewed.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openCustom('lesson'),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('Custom lesson'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openCustom('mcq'),
+                    icon: const Icon(Icons.quiz_outlined),
+                    label: const Text('Custom MCQs'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  void _openCustom(String kind) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GenerationScreen(
+        initialTopic: widget.topic.title,
+        initialKind: kind,
+      ),
+    ));
   }
 
   void _openPlan() {

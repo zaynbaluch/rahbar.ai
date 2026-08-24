@@ -6,6 +6,8 @@ import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../chat/clarification_context.dart';
+import '../chat/clarification_screen.dart';
 import '../export/pdf_export.dart';
 import '../omr/grading_screen.dart';
 import 'mcq_parser.dart';
@@ -30,6 +32,17 @@ class McqTestScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(test.topic,
             maxLines: 1, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            tooltip: 'Ask about this test',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ClarificationScreen(
+                contextMaterial: ClarificationContext.test(test),
+              ),
+            )),
+            icon: const Icon(Icons.forum_outlined),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -137,6 +150,11 @@ class _McqTestViewState extends State<McqTestView> {
           onExport: _export,
           onGrade: () => Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => GradingScreen(test: test),
+          )),
+          onClarify: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => ClarificationScreen(
+              contextMaterial: ClarificationContext.test(test),
+            ),
           )),
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -263,6 +281,7 @@ class _ActionBar extends StatelessWidget {
     required this.onToggle,
     required this.onExport,
     required this.onGrade,
+    required this.onClarify,
   });
 
   final bool showAnswers;
@@ -273,6 +292,7 @@ class _ActionBar extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onExport;
   final VoidCallback onGrade;
+  final VoidCallback onClarify;
 
   @override
   Widget build(BuildContext context) {
@@ -298,6 +318,11 @@ class _ActionBar extends StatelessWidget {
             onPressed: onGrade,
             icon: const Icon(Icons.document_scanner_outlined),
             label: const Text('Grade sheets'),
+          ),
+          OutlinedButton.icon(
+            onPressed: onClarify,
+            icon: const Icon(Icons.forum_outlined),
+            label: const Text('Ask Bayaz'),
           ),
           TextButton.icon(
             onPressed: onToggle,

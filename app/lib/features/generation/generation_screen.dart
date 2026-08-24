@@ -1,15 +1,22 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/bayaz_card.dart';
+import '../../design_system/components/long_operation_panel.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../chat/clarification_context.dart';
+import '../chat/clarification_screen.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
+import 'lesson_plan.dart';
+import 'lesson_plan_parser.dart';
+import 'lesson_plan_view.dart';
 import 'llama_cpp_service.dart';
 import 'mcq_grammar.dart';
 import 'mcq_parser.dart';
@@ -18,9 +25,14 @@ import 'mcq_test_view.dart';
 /// Existing on-device fallback for topics outside the shipped content pack.
 /// It remains secondary because it is slower and its content is not pre-verified.
 class GenerationScreen extends StatefulWidget {
-  const GenerationScreen({super.key, this.initialTopic});
+  const GenerationScreen({
+    super.key,
+    this.initialTopic,
+    this.initialKind = 'mcq',
+  });
 
   final String? initialTopic;
+  final String initialKind;
 
   @override
   State<GenerationScreen> createState() => _GenerationScreenState();
@@ -35,13 +47,16 @@ class _GenerationScreenState extends State<GenerationScreen> {
   final _localAi = LocalAiResources();
   late final _topic = TextEditingController(text: widget.initialTopic ?? '');
 
-  String _kind = 'mcq';
+  late String _kind = widget.initialKind == 'lesson' ? 'lesson' : 'mcq';
   _Phase _phase = _Phase.idle;
   List<Chunk> _hits = [];
   String _output = '';
   final StringBuffer _buffer = StringBuffer();
   Timer? _uiTimer;
   McqTest? _test;
+  LessonPlan? _lessonPlan;
+  List<String> _missingLessonSections = const [];
+  bool _grounded = true;
   bool _saved = false;
   String? _error;
   Duration _elapsed = Duration.zero;
@@ -70,6 +85,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
       _output = '';
       _buffer.clear();
       _test = null;
+      _lessonPlan = null;
+      _missingLessonSections = const [];
+      _grounded = true;
       _saved = false;
       _hits = [];
       _chunks = 0;
@@ -78,13 +96,35 @@ class _GenerationScreenState extends State<GenerationScreen> {
     });
 
     try {
-      await _rag.init();
       if (!mounted) return;
       setState(() => _phase = _Phase.retrieving);
-      final grounded = await _rag.assemble(_kind, topic);
+      GroundedPrompt prompt;
+      try {
+        await _rag.init();
+        prompt = await _rag.assemble(_kind, topic);
+      } on FileSystemException {
+        _grounded = false;
+        prompt = GroundedPrompt(
+          'You are Bayaz AI, an offline teaching assistant for Pakistan. '
+          'The curriculum retrieval model is not installed. Do not claim curriculum '
+          'alignment. Use simple language, make uncertainty clear, and produce only '
+          'the requested format.',
+          _kind == 'mcq'
+              ? 'Create exactly 10 MCQs about "$topic". For each item output: '
+                  'Q<number>. <stem>, then A) through D) on separate lines, then '
+                  'ANSWER: <A|B|C|D>, then DIFFICULTY: <easy|medium|hard>. '
+                  'Do not add any other sections.'
+              : 'Create a practical 50-minute 5E lesson plan about "$topic". '
+                  'Use these exact Markdown headers in this order: ### Objectives, '
+                  '### Materials, ### Revision starter (5 min), ### Engage (5 min), '
+                  '### Explore (12 min), ### Explain (12 min), ### Socratic questions, '
+                  '### Elaborate (8 min), ### Evaluate (8 min), ### Homework, ### Notes.',
+          const [],
+        );
+      }
       if (!mounted) return;
       setState(() {
-        _hits = grounded.hits;
+        _hits = prompt.hits;
         _phase = _Phase.loadingModel;
       });
 
@@ -112,7 +152,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       });
 
       await for (final chunk
-          in _llama.generateChat(grounded.system, grounded.user)) {
+          in _llama.generateChat(prompt.system, prompt.user)) {
         _buffer.write(chunk);
         _chunks++;
       }
@@ -124,14 +164,26 @@ class _GenerationScreenState extends State<GenerationScreen> {
         _elapsed = stopwatch.elapsed;
         if (_kind == 'mcq') {
           _test = McqParser.parse(_output, topic: topic);
+        } else {
+          final parsed = LessonPlanParser.parse(_output, topic: topic);
+          _lessonPlan = parsed.plan;
+          _missingLessonSections = parsed.missingSections;
         }
       });
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = _friendlyError(e));
     } finally {
       _uiTimer?.cancel();
       if (mounted) setState(() => _phase = _Phase.idle);
     }
+  }
+
+  static String _friendlyError(Object error) {
+    final text = error.toString();
+    if (text.contains('No such file') || text.contains('not installed')) {
+      return 'Offline AI files are not installed. Open setup to download the language and retrieval models, then try again.';
+    }
+    return text;
   }
 
   static String _clean(String value) => value
@@ -147,7 +199,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       kind: _kind,
       topic: _topic.text.trim(),
       rawOutput: _output,
-      contentJson: test?.toJson(),
+      contentJson: test?.toJson() ?? _lessonPlan?.toJson(),
       createdAtMillis: now,
       excerptTitles: _hits.map((hit) => hit.title).toList(),
     ));
@@ -249,18 +301,19 @@ class _GenerationScreenState extends State<GenerationScreen> {
                 label: Text(_busy ? 'Working on-device…' : 'Generate'),
               ),
               const SizedBox(height: AppSpacing.md),
-              BayazCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(_phaseLabel),
-                    if (_busy) ...[
-                      const SizedBox(height: AppSpacing.sm),
-                      const LinearProgressIndicator(),
-                    ],
+              if (_busy)
+                LongOperationPanel(
+                  primaryStatus: _phaseLabel,
+                  messages: const [
+                    'Preparing the chalkboard…',
+                    'Searching the science shelf…',
+                    'Connecting the lesson pieces…',
+                    'Checking the tricky parts…',
+                    'Making it classroom-ready…',
                   ],
-                ),
-              ),
+                )
+              else
+                BayazCard(child: Text(_phaseLabel)),
               if (sections.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),
                 Text('Textbook grounding',
@@ -276,6 +329,16 @@ class _GenerationScreenState extends State<GenerationScreen> {
                         icon: Icons.menu_book_outlined,
                       ),
                   ],
+                ),
+              ],
+              if (!_grounded && (_busy || _output.isNotEmpty)) ...[
+                const SizedBox(height: AppSpacing.md),
+                BayazCard(
+                  color: AppColors.softGold,
+                  borderColor: const Color(0xFFFFD96A),
+                  child: const Text(
+                    'Ungrounded mode: the retrieval model was unavailable, so this output comes from the language model’s own knowledge. Review every fact before classroom use.',
+                  ),
                 ),
               ],
               if (_error != null) ...[
@@ -299,13 +362,26 @@ class _GenerationScreenState extends State<GenerationScreen> {
                   saved: _saved,
                   showReadyAnimation: true,
                 ),
-              ] else if (_output.isNotEmpty) ...[
+              ] else if (_lessonPlan != null && _lessonPlan!.sections.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Row(
                   children: [
                     Expanded(
                       child: Text('Generated lesson plan',
                           style: Theme.of(context).textTheme.titleLarge),
+                    ),
+                    IconButton(
+                      tooltip: 'Ask about this lesson',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ClarificationScreen(
+                            contextMaterial: ClarificationContext.lesson(
+                              _lessonPlan!,
+                            ),
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.forum_outlined),
                     ),
                     FilledButton.tonalIcon(
                       onPressed: _saved ? null : _save,
@@ -316,11 +392,35 @@ class _GenerationScreenState extends State<GenerationScreen> {
                     ),
                   ],
                 ),
+                if (_missingLessonSections.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  BayazCard(
+                    color: AppColors.softGold,
+                    borderColor: const Color(0xFFFFD96A),
+                    child: Text(
+                      'The model omitted: ${_missingLessonSections.join(', ')}. The parsed sections are shown below; review the plan before saving.',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  height: MediaQuery.sizeOf(context).height * 0.72,
+                  child: LessonPlanDocument(plan: _lessonPlan!),
+                ),
+              ] else if (_output.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
                 BayazCard(
-                  child: SelectableText(
-                    _output,
-                    style: const TextStyle(height: 1.5),
+                  color: AppColors.softGold,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Could not structure this response',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.xs),
+                      const Text('The model did not follow the required section contract. The raw response is kept below for recovery.'),
+                      const SizedBox(height: AppSpacing.sm),
+                      SelectableText(_output),
+                    ],
                   ),
                 ),
               ],

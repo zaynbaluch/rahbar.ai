@@ -6,6 +6,8 @@ import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_motion.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../chat/clarification_context.dart';
+import '../chat/clarification_screen.dart';
 import '../content/content_service.dart';
 import '../export/pdf_export.dart';
 import '../library/library_store.dart';
@@ -101,6 +103,17 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_plan.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            tooltip: 'Ask about this lesson',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ClarificationScreen(
+                contextMaterial: ClarificationContext.lesson(_plan),
+              ),
+            )),
+            icon: const Icon(Icons.forum_outlined),
+          ),
+        ],
       ),
       body: SafeArea(
         bottom: false,
@@ -170,6 +183,15 @@ class LessonPlanReadOnlyScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(plan.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(
+            tooltip: 'Ask about this lesson',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ClarificationScreen(
+                contextMaterial: ClarificationContext.lesson(plan),
+              ),
+            )),
+            icon: const Icon(Icons.forum_outlined),
+          ),
           IconButton(
             tooltip: 'Print or export PDF',
             onPressed: _print,
