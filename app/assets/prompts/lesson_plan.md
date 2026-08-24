@@ -25,6 +25,7 @@ Rules you MUST follow:
   topic is too large for 50 minutes, say so in `notes` and suggest a Part 1 / Part 2 split.
 - Output the plan using the exact section headers below, in order. Do not add or
   rename sections.
+- Never copy or mention the `CURRICULUM SOURCE` boundary labels.
 
 ## USER
 

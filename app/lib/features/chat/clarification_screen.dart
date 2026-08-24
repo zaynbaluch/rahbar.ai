@@ -7,6 +7,7 @@ import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../generation/generated_output_sanitizer.dart';
 import '../generation/llama_cpp_service.dart';
 import '../generation/local_model_handoff.dart';
 import '../rag/rag_service.dart';
@@ -130,6 +131,12 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
           _scrollToEnd();
         }
       }
+      if (mounted) {
+        setState(() => reply.text = _clean(
+              buffer.toString(),
+              finalOutput: true,
+            ));
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
@@ -154,9 +161,11 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
     });
   }
 
-  static String _clean(String value) => value
-      .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
-      .trimLeft();
+  static String _clean(String value, {bool finalOutput = false}) =>
+      GeneratedOutputSanitizer.sanitize(
+        value,
+        finalOutput: finalOutput,
+      );
 
   static String _friendlyError(Object error) {
     final text = error.toString();

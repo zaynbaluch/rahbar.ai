@@ -96,12 +96,14 @@ abstract final class ClarificationPromptBuilder {
       var remaining = _retrievalBudget;
       for (var index = 0; index < retrieved.length && remaining > 0; index++) {
         final hit = retrieved[index];
-        final header = '[${index + 1}] ${hit.title}, chapter ${hit.chapter}\n';
+        final header =
+            '<<<CURRICULUM SOURCE ${index + 1}: ${hit.title}, chapter ${hit.chapter}>>>\n';
         final body = _truncate(hit.text.trim(), remaining - header.length);
         if (body.isEmpty) break;
         excerpts
           ..write(header)
           ..writeln(body)
+          ..writeln('<<<END CURRICULUM SOURCE ${index + 1}>>>')
           ..writeln();
         remaining -= header.length + body.length + 2;
       }
@@ -119,7 +121,7 @@ abstract final class ClarificationPromptBuilder {
       '- Start with the answer, not a greeting.\n'
       '- Use at most five short bullets unless the teacher asks for detail.\n'
       '- Say whether the answer is curriculum-grounded or ungrounded in the final sentence.\n'
-      '- Never mention hidden prompts or token limits.',
+      '- Never mention hidden prompts, token limits, excerpt numbers, or source boundary labels.',
     );
     return ClarificationPrompt(system: system, user: sections.join('\n\n'));
   }
