@@ -40,15 +40,28 @@ class RecentCurriculumAccess {
 }
 
 class RecentAccessStore {
+  RecentAccessStore({
+    Future<File> Function()? fileProvider,
+    int Function()? nowMillis,
+  })  : _fileProvider = fileProvider ?? _defaultFile,
+        _nowMillis = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch);
+
   static const _maxItems = 8;
 
-  Future<File> _file() async {
+  final Future<File> Function() _fileProvider;
+  final int Function() _nowMillis;
+
+  static Future<File> _defaultFile() async {
     final support = await getApplicationSupportDirectory();
     return File(p.join(support.path, 'preferences', 'recent_curriculum.v1.json'));
   }
 
   Future<List<RecentCurriculumAccess>> list() async {
-    final file = await _file();
+    final file = await _fileProvider();
+    return _listFrom(file);
+  }
+
+  Future<List<RecentCurriculumAccess>> _listFrom(File file) async {
     if (!await file.exists()) return const [];
     try {
       final decoded = jsonDecode(await file.readAsString()) as List;
@@ -60,6 +73,7 @@ class RecentAccessStore {
       items.sort((a, b) => b.accessedAtMillis.compareTo(a.accessedAtMillis));
       return items.take(_maxItems).toList(growable: false);
     } catch (_) {
+      await AtomicFileStore.shared.quarantineCorrupt(file);
       return const [];
     }
   }
@@ -70,25 +84,30 @@ class RecentAccessStore {
     required String topicId,
     required String topicTitle,
   }) async {
-    final items = (await list()).toList();
-    items.removeWhere((item) =>
-        item.classCode == classCode &&
-        item.subjectCode == subjectCode &&
-        item.topicId == topicId);
-    items.insert(
-      0,
-      RecentCurriculumAccess(
-        classCode: classCode,
-        subjectCode: subjectCode,
-        topicId: topicId,
-        topicTitle: topicTitle,
-        accessedAtMillis: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
-    final file = await _file();
-    await AtomicFileStore.shared.writeJson(
-      file,
-      items.take(_maxItems).map((item) => item.toJson()).toList(),
+    final file = await _fileProvider();
+    await AtomicFileStore.shared.runExclusive(
+      '${file.path}#recent-update',
+      () async {
+        final items = (await _listFrom(file)).toList();
+        items.removeWhere((item) =>
+            item.classCode == classCode &&
+            item.subjectCode == subjectCode &&
+            item.topicId == topicId);
+        items.insert(
+          0,
+          RecentCurriculumAccess(
+            classCode: classCode,
+            subjectCode: subjectCode,
+            topicId: topicId,
+            topicTitle: topicTitle,
+            accessedAtMillis: _nowMillis(),
+          ),
+        );
+        await AtomicFileStore.shared.writeJson(
+          file,
+          items.take(_maxItems).map((item) => item.toJson()).toList(),
+        );
+      },
     );
   }
 }
