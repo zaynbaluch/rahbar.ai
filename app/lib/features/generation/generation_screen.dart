@@ -289,7 +289,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
     if (mounted) {
       setState(() => _saved = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved to Library')),
+        const SnackBar(content: Text('Saved in Bayaz')),
       );
     }
   }

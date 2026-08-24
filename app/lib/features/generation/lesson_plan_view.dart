@@ -146,7 +146,7 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _printing ? null : _print,
                   icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: Text(_printing ? 'Preparing…' : 'Print / PDF'),
+                  label: Text(_printing ? 'Preparing…' : 'Share'),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -198,7 +198,7 @@ class LessonPlanReadOnlyScreen extends StatelessWidget {
             icon: const Icon(Icons.forum_outlined),
           ),
           IconButton(
-            tooltip: 'Print or export PDF',
+            tooltip: 'Share',
             onPressed: _print,
             icon: const Icon(Icons.picture_as_pdf_outlined),
           ),
