@@ -32,6 +32,7 @@ class _GradingScreenState extends State<GradingScreen> {
   OmrResult? _result;
   bool _saved = false;
   int _savedCount = 0;
+  bool _reviewConfirmed = false;
 
   String get _testId => PdfExport.testId(widget.test);
 
@@ -48,6 +49,7 @@ class _GradingScreenState extends State<GradingScreen> {
       _error = null;
       _result = null;
       _saved = false;
+      _reviewConfirmed = false;
     });
     try {
       final shot = await _picker.pickImage(source: source, maxWidth: 2000);
@@ -75,9 +77,23 @@ class _GradingScreenState extends State<GradingScreen> {
     }
   }
 
+  void _setMark(int questionNumber, String? mark) {
+    final current = _result;
+    if (current == null || _saved) return;
+    setState(() {
+      _result = current.withMark(questionNumber, mark);
+    });
+  }
+
   Future<void> _saveResult() async {
     final result = _result;
     if (result == null || _saved) return;
+    if (result.needsReview > 0 && !_reviewConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Confirm that you reviewed the uncertain or blank answers.')),
+      );
+      return;
+    }
     final typedName = _name.text.trim();
     await _gradebook.save(GradedResult.fromGrading(
       testId: _testId,
@@ -208,13 +224,26 @@ class _GradingScreenState extends State<GradingScreen> {
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
+                    if (result.needsReview > 0) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _reviewConfirmed,
+                        onChanged: _saved
+                            ? null
+                            : (value) => setState(() => _reviewConfirmed = value ?? false),
+                        title: const Text('I reviewed the uncertain and blank answers'),
+                        subtitle: Text('${result.needsReview} answers require teacher confirmation.'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.sm),
                     FilledButton.icon(
                       onPressed: _saved ? null : _saveResult,
                       icon: Icon(_saved
                           ? Icons.check_circle_rounded
-                          : Icons.save_outlined),
-                      label: Text(_saved ? 'Result saved' : 'Save result'),
+                          : Icons.verified_outlined),
+                      label: Text(_saved ? 'Result saved' : 'Confirm and save result'),
                     ),
                   ],
                 ),
@@ -227,7 +256,11 @@ class _GradingScreenState extends State<GradingScreen> {
                 child: Column(
                   children: [
                     for (final question in result.questions)
-                      _QuestionResultRow(question: question),
+                      _QuestionResultRow(
+                        question: question,
+                        enabled: !_saved,
+                        onChanged: (mark) => _setMark(question.number, mark),
+                      ),
                   ],
                 ),
               ),
@@ -374,8 +407,14 @@ class _ResultSummary extends StatelessWidget {
 }
 
 class _QuestionResultRow extends StatelessWidget {
-  const _QuestionResultRow({required this.question});
+  const _QuestionResultRow({
+    required this.question,
+    required this.enabled,
+    required this.onChanged,
+  });
   final OmrQuestion question;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -401,9 +440,18 @@ class _QuestionResultRow extends StatelessWidget {
           Text('Q${question.number}',
               style: Theme.of(context).textTheme.titleSmall),
           const Spacer(),
-          Text(
-            '${question.marked ?? 'Blank'}  ·  key ${question.correct ?? '?'}',
-            style: Theme.of(context).textTheme.bodyMedium,
+          Text('Key ${question.correct ?? '?'}'),
+          const SizedBox(width: AppSpacing.sm),
+          DropdownButton<String?>(
+            value: question.marked,
+            onChanged: enabled ? onChanged : null,
+            items: const [
+              DropdownMenuItem<String?>(value: null, child: Text('Blank')),
+              DropdownMenuItem<String?>(value: 'A', child: Text('A')),
+              DropdownMenuItem<String?>(value: 'B', child: Text('B')),
+              DropdownMenuItem<String?>(value: 'C', child: Text('C')),
+              DropdownMenuItem<String?>(value: 'D', child: Text('D')),
+            ],
           ),
         ],
       ),

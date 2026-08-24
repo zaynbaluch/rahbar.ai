@@ -81,4 +81,45 @@ void main() {
       expect(result.correct, 10); // all correct despite the offset
     });
   });
+  additionalOmrTests();
+}
+
+img.Image _renderDoubleMarkSheet() {
+  final image = _renderSheet({for (var i = 1; i <= 10; i++) i: 'ABCD'[(i - 1) % 4]});
+  final scale = 4.0;
+  const pad = 16.0;
+  final originX = OmrTemplate.boxLeft - pad;
+  final originY = OmrTemplate.boxTop - pad;
+  int sx(double x) => ((x - originX) * scale).round();
+  int sy(double y) => ((y - originY) * scale).round();
+  final (cx, cy) = OmrTemplate.bubbleCenter(1, 1);
+  img.fillCircle(
+    image,
+    x: sx(cx),
+    y: sy(cy),
+    radius: (OmrTemplate.bubbleR * scale).round() - 1,
+    color: img.ColorRgb8(0, 0, 0),
+  );
+  return image;
+}
+
+void additionalOmrTests() {
+  test('treats two similarly filled bubbles as ambiguous', () {
+    final result = OmrGrader.grade(_renderDoubleMarkSheet(), _key());
+    expect(result.fiducialsFound, isTrue);
+    expect(result.questions.first.marked, isNull);
+  });
+
+  test('rejects dark corner regions without isolated square markers', () {
+    final image = img.Image(width: 800, height: 1000);
+    img.fill(image, color: img.ColorRgb8(255, 255, 255));
+    final black = img.ColorRgb8(0, 0, 0);
+    img.fillRect(image, x1: 0, y1: 0, x2: 250, y2: 250, color: black);
+    img.fillRect(image, x1: 550, y1: 0, x2: 799, y2: 250, color: black);
+    img.fillRect(image, x1: 550, y1: 750, x2: 799, y2: 999, color: black);
+    img.fillRect(image, x1: 0, y1: 750, x2: 250, y2: 999, color: black);
+
+    final result = OmrGrader.grade(image, _key());
+    expect(result.fiducialsFound, isFalse);
+  });
 }

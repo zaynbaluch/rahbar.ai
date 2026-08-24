@@ -10,11 +10,15 @@ class OmrQuestion {
     required this.marked,
     required this.correct,
     required this.fill,
+    required this.confidence,
+    this.reviewed = false,
   });
   final int number;
   final String? marked; // 'A'..'D' or null (blank/ambiguous)
   final String? correct; // key answer
   final double fill; // darkness of the chosen bubble (0..1), for diagnostics
+  final double confidence; // winner margin, 0..1
+  final bool reviewed;
   bool get isRight => marked != null && marked == correct;
 }
 
@@ -27,6 +31,27 @@ class OmrResult {
   int get total => questions.length;
   int get correct => questions.where((q) => q.isRight).length;
   int get blank => questions.where((q) => q.marked == null).length;
+  int get needsReview => questions
+      .where((q) => q.marked == null || q.confidence < 0.20)
+      .length;
+
+  OmrResult withMark(int questionNumber, String? mark) => OmrResult(
+        fiducialsFound: fiducialsFound,
+        questions: [
+          for (final question in questions)
+            if (question.number == questionNumber)
+              OmrQuestion(
+                number: question.number,
+                marked: mark,
+                correct: question.correct,
+                fill: question.fill,
+                confidence: question.confidence,
+                reviewed: true,
+              )
+            else
+              question,
+        ],
+      );
 }
 
 /// Reads a photographed OMR sheet and scores it against the stored key — no SLM.
@@ -60,25 +85,21 @@ class OmrGrader {
   }
 
   static OmrQuestion _decide(int number, List<double> fills, String? correct) {
-    var best = 0, second = -1;
-    for (var c = 1; c < fills.length; c++) {
-      if (fills[c] > fills[best]) {
-        second = best;
-        best = c;
-      }
-    }
-    final secondFill = second >= 0
-        ? fills[second]
-        : (fills..sort()).length > 1
-            ? fills[fills.length - 2]
-            : 0.0;
-    final bestFill = fills.reduce((a, b) => a > b ? a : b);
-    final marked = (bestFill >= _fillThreshold &&
-            bestFill - secondFill >= _marginThreshold)
-        ? String.fromCharCode(65 + best)
+    final ranked = [for (var i = 0; i < fills.length; i++) (index: i, fill: fills[i])]
+      ..sort((a, b) => b.fill.compareTo(a.fill));
+    final best = ranked.first;
+    final secondFill = ranked.length > 1 ? ranked[1].fill : 0.0;
+    final margin = (best.fill - secondFill).clamp(0.0, 1.0).toDouble();
+    final marked = (best.fill >= _fillThreshold && margin >= _marginThreshold)
+        ? String.fromCharCode(65 + best.index)
         : null;
     return OmrQuestion(
-        number: number, marked: marked, correct: correct, fill: bestFill);
+      number: number,
+      marked: marked,
+      correct: correct,
+      fill: best.fill,
+      confidence: margin,
+    );
   }
 
   /// The 4 fiducial centers in photo pixels (TL, TR, BR, BL), or null if not found.
@@ -102,7 +123,41 @@ class OmrGrader {
       if (spot == null) return null;
       result.add(spot);
     }
+    if (!_validFiducialGeometry(result, w, h)) return null;
     return result;
+  }
+
+  static bool _validFiducialGeometry(
+    List<(double, double)> points,
+    int width,
+    int height,
+  ) {
+    if (points.length != 4) return false;
+    double distance((double, double) a, (double, double) b) {
+      final dx = a.$1 - b.$1;
+      final dy = a.$2 - b.$2;
+      return (dx * dx + dy * dy);
+    }
+
+    final top2 = distance(points[0], points[1]);
+    final right2 = distance(points[1], points[2]);
+    final bottom2 = distance(points[3], points[2]);
+    final left2 = distance(points[0], points[3]);
+    final minHorizontal2 = width * width * 0.12;
+    final minVertical2 = height * height * 0.12;
+    if (top2 < minHorizontal2 || bottom2 < minHorizontal2 ||
+        left2 < minVertical2 || right2 < minVertical2) {
+      return false;
+    }
+    final horizontalRatio = top2 > bottom2 ? top2 / bottom2 : bottom2 / top2;
+    final verticalRatio = left2 > right2 ? left2 / right2 : right2 / left2;
+    if (horizontalRatio > 2.5 || verticalRatio > 2.5) return false;
+
+    final tl = points[0], tr = points[1], br = points[2], bl = points[3];
+    if (tl.$1 >= tr.$1 || bl.$1 >= br.$1 || tl.$2 >= bl.$2 || tr.$2 >= br.$2) {
+      return false;
+    }
+    return true;
   }
 
   /// Locate the solid fiducial square in a corner region: first find the darkest
@@ -130,6 +185,25 @@ class OmrGrader {
       }
     }
     if (bx < 0) return null;
+    final samplesPerWindow = ((win + 1) ~/ 2) * ((win + 1) ~/ 2);
+    final averageDarkness = bestDark / (samplesPerWindow * 255.0);
+    if (averageDarkness < 0.42) return null;
+    final ringPad = (win ~/ 2).clamp(4, 30);
+    double ringDark = 0;
+    int ringCount = 0;
+    for (var y = (by - ringPad).clamp(y0, y1 - 1);
+        y < (by + win + ringPad).clamp(y0 + 1, y1);
+        y += 2) {
+      for (var x = (bx - ringPad).clamp(x0, x1 - 1);
+          x < (bx + win + ringPad).clamp(x0 + 1, x1);
+          x += 2) {
+        if (x >= bx && x < bx + win && y >= by && y < by + win) continue;
+        ringDark += 255 - g.getPixel(x, y).luminance.toDouble();
+        ringCount++;
+      }
+    }
+    final ringAverage = ringCount == 0 ? 0.0 : ringDark / (ringCount * 255.0);
+    if (ringAverage > 0.38 || averageDarkness - ringAverage < 0.22) return null;
     // Centroid of dark pixels within the winning window (± a small pad).
     const pad = 4;
     double sx = 0, sy = 0, wsum = 0;
