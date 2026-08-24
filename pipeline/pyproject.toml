@@ -13,3 +13,11 @@ dependencies = [
     "pytesseract>=0.3.13",
     "wordninja>=2.0.0",
 ]
+
+[project.optional-dependencies]
+# scripts/validation/validate_repository.py parses pyproject.toml. tomllib is
+# stdlib from 3.11; older interpreters need the tomli backport.
+validation = [
+    "pyyaml>=6.0.1",
+    "tomli>=2.0.1; python_version < \"3.11\"",
+]
