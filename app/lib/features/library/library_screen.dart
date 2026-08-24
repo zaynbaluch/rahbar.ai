@@ -198,9 +198,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
     }
     final asset = _filter == 'lesson'
-        ? 'assets/ui/illustrations/no_saved_lessons.png'
+        ? 'assets/ui/illustrations/no_saved_lessons.webp'
         : _filter == 'mcq'
-            ? 'assets/ui/illustrations/no_saved_tests.png'
+            ? 'assets/ui/illustrations/no_saved_tests.webp'
             : 'assets/ui/illustrations/no_search_results.webp';
     return BayazEmptyState(
       asset: asset,

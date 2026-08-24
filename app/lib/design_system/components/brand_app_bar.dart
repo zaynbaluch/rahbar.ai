@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+import '../theme/app_radii.dart';
 import '../theme/app_spacing.dart';
 
 class BrandAppBarTitle extends StatelessWidget {
@@ -12,7 +14,19 @@ class BrandAppBarTitle extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Image.asset('assets/ui/branding/bayaz_logo.png', width: 38, height: 38),
+        Container(
+          width: 42,
+          height: 42,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(AppRadii.sm),
+          ),
+          child: Image.asset(
+            'assets/ui/branding/bayaz_logo.png',
+            fit: BoxFit.contain,
+          ),
+        ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
