@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../generation/lesson_plan.dart';
 import '../generation/mcq_parser.dart';
+import '../curriculum/teaching_context.dart';
 
 enum SavedContentSource { curriculumPack, customAi, legacy }
 
@@ -33,6 +34,7 @@ class SavedTest {
     this.contentJson,
     this.topicId,
     this.excerptTitles = const [],
+    this.teachingContext,
   });
 
   final String id; // unique (timestamp-based)
@@ -45,6 +47,7 @@ class SavedTest {
   final Map<String, dynamic>? contentJson; // structured content, regardless of origin
   final String? topicId; // content-pack topic, when it came from the bank
   final List<String> excerptTitles;
+  final TeachingContext? teachingContext;
 
   DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(createdAtMillis);
 
@@ -95,6 +98,7 @@ class SavedTest {
         if (contentJson != null) 'contentJson': jsonEncode(contentJson),
         if (topicId != null) 'topicId': topicId,
         'excerptTitles': excerptTitles,
+        if (teachingContext != null) 'teachingContext': teachingContext!.toJson(),
       };
 
   factory SavedTest.fromJson(Map<String, dynamic> j) {
@@ -123,6 +127,7 @@ class SavedTest {
       topicId: topicId,
       excerptTitles:
           (j['excerptTitles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      teachingContext: j['teachingContext'] == null ? null : TeachingContext.fromJson(Map<String,dynamic>.from(j['teachingContext'] as Map)),
     );
   }
 }
