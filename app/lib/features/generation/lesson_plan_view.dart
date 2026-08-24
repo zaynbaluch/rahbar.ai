@@ -5,6 +5,7 @@ import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_motion.dart';
+import '../../design_system/theme/app_radii.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../chat/clarification_context.dart';
 import '../chat/clarification_screen.dart';
@@ -269,40 +270,48 @@ class _PlanHeader extends StatelessWidget {
         color: AppColors.primary,
         borderRadius: BorderRadius.circular(22),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '50-minute lesson plan',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.headlineSmall?.copyWith(color: Colors.white),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '50-minute lesson plan',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineSmall?.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Grade 6 · General Science · structured around the 5E sequence',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.88),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Grade 6 · General Science · structured around the 5E sequence',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.88),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                StatusChip(
-                  label: '${plan.totalMinutes} minutes total',
-                  icon: Icons.schedule_outlined,
-                  backgroundColor: Colors.white.withValues(alpha: 0.14),
-                  foregroundColor: Colors.white,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Image.asset(
+                'assets/ui/illustrations/create_lesson_plan.webp',
+                width: 104,
+                height: 104,
+              ),
+            ],
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Image.asset(
-            'assets/ui/illustrations/create_lesson_plan.webp',
-            width: 104,
-            height: 104,
+          const SizedBox(height: AppSpacing.sm),
+          // Below the illustration rather than beside it: the column next to a
+          // 104px image is too narrow for this label on a phone, and a chip
+          // lays its label out on a single unbounded line.
+          StatusChip(
+            label: '${plan.totalMinutes} minutes total',
+            icon: Icons.schedule_outlined,
+            backgroundColor: Colors.white.withValues(alpha: 0.14),
+            foregroundColor: Colors.white,
           ),
         ],
       ),
@@ -459,22 +468,14 @@ class _SectionCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(section.body),
-            if (section.materials.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.xs,
-                children: [
-                  for (final material in section.materials)
-                    StatusChip(
-                      label: material,
-                      icon: Icons.check_box_outline_blank,
-                      backgroundColor: const Color(0xFFF0F4FC),
-                      foregroundColor: AppColors.textSecondary,
-                    ),
-                ],
+            // A material can be a full sentence, so each one is a wrapping row
+            // rather than a chip: a chip lays its label out on one unbounded
+            // line and overflows the card on a narrow phone.
+            for (final material in section.materials)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: _SectionMaterial(material: material),
               ),
-            ],
             if (canSwap) ...[
               const SizedBox(height: AppSpacing.sm),
               Align(
@@ -506,4 +507,52 @@ class _SectionCard extends StatelessWidget {
     'notes' => Icons.sticky_note_2_outlined,
     _ => Icons.circle_outlined,
   };
+}
+
+/// One item a teacher has to bring for a section.
+///
+/// The text is free-form and can run to a full sentence, so it is given the
+/// whole card width and allowed to wrap onto as many lines as it needs.
+class _SectionMaterial extends StatelessWidget {
+  const _SectionMaterial({required this.material});
+
+  final String material;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F4FC),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.check_box_outline_blank,
+              size: 15,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              material,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
