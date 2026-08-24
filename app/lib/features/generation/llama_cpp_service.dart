@@ -192,9 +192,9 @@ class LlamaCppService {
   Future<void> _enqueueLifecycle(Future<void> Function() action) {
     final next = _lifecycleTail.then(
       (_) => action(),
-      onError: (_, __) => action(),
+      onError: (_, _) => action(),
     );
-    _lifecycleTail = next.then<void>((_) {}, onError: (_, __) {});
+    _lifecycleTail = next.then<void>((_) {}, onError: (_, _) {});
     return next;
   }
 }

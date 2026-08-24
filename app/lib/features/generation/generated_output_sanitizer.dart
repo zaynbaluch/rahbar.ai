@@ -74,8 +74,9 @@ abstract final class GeneratedOutputSanitizer {
   static String _removeSourceScaffolding(String value) {
     var cleaned = value.replaceAll(
       RegExp(
-        r'(?m)^[ \t]*(?:\[Excerpt\s+\d+[^\]]*\]|<<<(?:END\s+)?CURRICULUM\s+SOURCE[^>]*>>>)[ \t]*\r?\n?',
+        r'^[ \t]*(?:\[Excerpt\s+\d+[^\]]*\]|<<<(?:END\s+)?CURRICULUM\s+SOURCE[^>]*>>>)[ \t]*\r?\n?',
         caseSensitive: false,
+        multiLine: true,
       ),
       '',
     );
@@ -137,7 +138,10 @@ abstract final class GeneratedOutputSanitizer {
       line = line.replaceAll(figurePhrase, 'the board diagram');
       line = line.replaceAll(tablePhrase, 'the board diagram');
       line = line.replaceAll(
-        RegExp(r'\bMention(?=\s+the board diagram)', caseSensitive: false),
+        RegExp(
+          r'\bMention(?=\s+(?:the board diagram|an? (?:diagram|chart) on the board))',
+          caseSensitive: false,
+        ),
         'Use',
       );
       line = line.replaceAll(

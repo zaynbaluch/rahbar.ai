@@ -3,9 +3,9 @@ import 'dart:async';
 /// Coalesces rapid updates and keeps every published write in call order.
 class DebouncedWriter<T> {
   DebouncedWriter({
-    required Future<void> Function(T value) save,
+    required this._save,
     this.delay = const Duration(milliseconds: 300),
-  }) : _save = save;
+  });
 
   final Future<void> Function(T value) _save;
   final Duration delay;
