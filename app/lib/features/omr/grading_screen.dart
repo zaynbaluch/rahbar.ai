@@ -16,6 +16,7 @@ import 'image_pick_recovery.dart';
 import 'omr_grader.dart';
 import 'omr_image_processor.dart';
 import 'results_screen.dart';
+import 'student_name_sequence.dart';
 
 class GradingScreen extends StatefulWidget {
   const GradingScreen({
@@ -25,6 +26,7 @@ class GradingScreen extends StatefulWidget {
     this.recoveryStore,
     this.picker,
     this.imageProcessor,
+    this.gradebookStore,
   });
 
   final McqTest test;
@@ -32,6 +34,7 @@ class GradingScreen extends StatefulWidget {
   final PendingImagePickStore? recoveryStore;
   final ImagePicker? picker;
   final OmrImageProcessor? imageProcessor;
+  final GradebookStore? gradebookStore;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
@@ -41,13 +44,16 @@ class _GradingScreenState extends State<GradingScreen> {
   late final ImagePicker _picker;
   late final PendingImagePickStore _recoveryStore;
   late final OmrImageProcessor _imageProcessor;
-  final _gradebook = GradebookStore();
+  late final GradebookStore _gradebook;
+  late final Future<void> _studentNamesReady;
+  final Set<String> _studentNames = {};
   final _name = TextEditingController();
   bool _busy = false;
   String? _error;
   OmrResult? _result;
   bool _saved = false;
-  int _savedCount = 0;
+  bool _saving = false;
+  int _nextStudentNumber = 1;
   bool _reviewConfirmed = false;
 
   String get _testId => PdfExport.testId(widget.test);
@@ -58,12 +64,22 @@ class _GradingScreenState extends State<GradingScreen> {
     _picker = widget.picker ?? ImagePicker();
     _recoveryStore = widget.recoveryStore ?? PendingImagePickStore();
     _imageProcessor = widget.imageProcessor ?? OmrImageProcessor();
+    _gradebook = widget.gradebookStore ?? GradebookStore();
+    _studentNamesReady = _loadExistingStudentNames();
     final initialPath = widget.initialImagePath;
     if (initialPath != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _gradePath(initialPath, clearRecovery: true);
       });
     }
+  }
+
+  Future<void> _loadExistingStudentNames() async {
+    final existing = await _gradebook.listForTest(_testId);
+    _studentNames
+      ..clear()
+      ..addAll(existing.map((result) => result.studentName));
+    _nextStudentNumber = StudentNameSequence.nextNumber(_studentNames);
   }
 
   @override
@@ -121,6 +137,7 @@ class _GradingScreenState extends State<GradingScreen> {
       });
     }
     try {
+      await _studentNamesReady;
       final bytes = await File(path).readAsBytes();
       final result = await _imageProcessor.process(bytes, widget.test);
       if (!result.fiducialsFound) {
@@ -129,7 +146,7 @@ class _GradingScreenState extends State<GradingScreen> {
       if (!mounted) return;
       setState(() {
         _result = result;
-        _name.text = 'Student ${_savedCount + 1}';
+        _name.text = 'Student $_nextStudentNumber';
       });
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -149,7 +166,7 @@ class _GradingScreenState extends State<GradingScreen> {
 
   Future<void> _saveResult() async {
     final result = _result;
-    if (result == null || _saved) return;
+    if (result == null || _saved || _saving) return;
     if (result.needsReview > 0 && !_reviewConfirmed) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Confirm that you reviewed the uncertain or blank answers.')),
@@ -157,21 +174,33 @@ class _GradingScreenState extends State<GradingScreen> {
       return;
     }
     final typedName = _name.text.trim();
-    await _gradebook.save(GradedResult.fromGrading(
-      testId: _testId,
-      testTopic: widget.test.topic,
-      studentName:
-          typedName.isEmpty ? 'Student ${_savedCount + 1}' : typedName,
-      result: result,
-    ));
-    if (!mounted) return;
-    setState(() {
-      _saved = true;
-      _savedCount++;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Result saved')),
-    );
+    final studentName =
+        typedName.isEmpty ? 'Student $_nextStudentNumber' : typedName;
+    setState(() => _saving = true);
+    try {
+      await _gradebook.save(GradedResult.fromGrading(
+        testId: _testId,
+        testTopic: widget.test.topic,
+        studentName: studentName,
+        result: result,
+      ));
+      if (!mounted) return;
+      setState(() {
+        _saved = true;
+        _studentNames.add(studentName);
+        _nextStudentNumber = StudentNameSequence.nextNumber(_studentNames);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Result saved')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save this result: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _openResults() => Navigator.of(context).push(MaterialPageRoute(
@@ -301,11 +330,17 @@ class _GradingScreenState extends State<GradingScreen> {
                     ],
                     const SizedBox(height: AppSpacing.sm),
                     FilledButton.icon(
-                      onPressed: _saved ? null : _saveResult,
+                      onPressed: _saved || _saving ? null : _saveResult,
                       icon: Icon(_saved
                           ? Icons.check_circle_rounded
                           : Icons.verified_outlined),
-                      label: Text(_saved ? 'Result saved' : 'Confirm and save result'),
+                      label: Text(
+                        _saved
+                            ? 'Result saved'
+                            : _saving
+                                ? 'Saving…'
+                                : 'Confirm and save result',
+                      ),
                     ),
                   ],
                 ),
