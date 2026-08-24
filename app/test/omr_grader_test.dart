@@ -81,6 +81,20 @@ void main() {
       expect(result.correct, 10); // all correct despite the offset
     });
   });
+
+  test('refuses to grade a paper with a mismatched question count', () {
+    final invalid = McqTest(
+      topic: 'Incomplete',
+      expectedCount: 2,
+      questions: [_key().questions.first],
+    );
+
+    expect(
+      () => OmrGrader.grade(img.Image(width: 1, height: 1), invalid),
+      throwsStateError,
+    );
+  });
+
   additionalOmrTests();
 }
 

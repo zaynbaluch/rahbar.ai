@@ -114,6 +114,8 @@ void main() {
       expect(t.id, startsWith('GS6-'));
       expect(t.count, 10);
       expect(t.completeCount, 10);
+      expect(t.expectedCount, 10);
+      expect(t.isReady, isTrue);
 
       final q1 = t.questions.first;
       expect(q1.number, 1);
@@ -153,6 +155,7 @@ void main() {
       // Q2 is empty → dropped; Q1 complete; Q3 has a placeholder + answer, no options.
       expect(t.questions.any((q) => q.number == 1 && q.isComplete), isTrue);
       expect(t.completeCount, 1);
+      expect(t.isReady, isFalse);
       final q3 = t.questions.firstWhere((q) => q.number == 3);
       expect(q3.isComplete, isFalse); // no options → incomplete, not invented
       expect(q3.answer, 'C');

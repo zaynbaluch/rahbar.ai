@@ -125,6 +125,7 @@ class _McqTestViewState extends State<McqTestView> {
   @override
   Widget build(BuildContext context) {
     final test = widget.test;
+    final ready = test.isReady;
     final counts = <String, int>{};
     for (final question in test.questions) {
       final key = question.difficulty.isEmpty ? 'unspecified' : question.difficulty;
@@ -145,12 +146,14 @@ class _McqTestViewState extends State<McqTestView> {
           saved: _saved,
           saving: _saving,
           exporting: _exporting,
-          onSave: widget.onSave == null ? null : _save,
+          onSave: widget.onSave == null || !ready ? null : _save,
           onToggle: () => setState(() => _showAnswers = !_showAnswers),
-          onExport: _export,
-          onGrade: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => GradingScreen(test: test),
-          )),
+          onExport: ready ? _export : null,
+          onGrade: ready
+              ? () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => GradingScreen(test: test),
+                  ))
+              : null,
           onClarify: () => Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => ClarificationScreen(
               contextMaterial: ClarificationContext.test(test),
@@ -182,7 +185,8 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final complete = test.completeCount == test.count;
+    final validation = test.validation;
+    final complete = validation.isReady;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -204,11 +208,21 @@ class _SummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '${test.count} questions · ID ${test.id}',
+                  '${test.count} of ${test.expectedCount} questions · ID ${test.id}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.88),
                       ),
                 ),
+                if (!complete) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    validation.summary,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.sm),
                 Wrap(
                   spacing: AppSpacing.xs,
@@ -290,8 +304,8 @@ class _ActionBar extends StatelessWidget {
   final bool exporting;
   final VoidCallback? onSave;
   final VoidCallback onToggle;
-  final VoidCallback onExport;
-  final VoidCallback onGrade;
+  final VoidCallback? onExport;
+  final VoidCallback? onGrade;
   final VoidCallback onClarify;
 
   @override

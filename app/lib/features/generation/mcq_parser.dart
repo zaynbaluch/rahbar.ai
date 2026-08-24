@@ -29,8 +29,15 @@ class McqQuestion {
   /// used when they draw a second test on the same topic.
   final String? itemId;
 
-  bool get isComplete =>
-      text.isNotEmpty && options.length == 4 && answer != null;
+  bool get isComplete {
+    const labels = {'A', 'B', 'C', 'D'};
+    return text.trim().isNotEmpty &&
+        options.keys.toSet().containsAll(labels) &&
+        labels.containsAll(options.keys) &&
+        options.values.every((value) => value.trim().isNotEmpty) &&
+        answer != null &&
+        labels.contains(answer);
+  }
 
   Map<String, dynamic> toJson() => {
         'number': number,
@@ -53,20 +60,27 @@ class McqQuestion {
 
 /// A parsed test with a persistent paper ID.
 class McqTest {
+  static const int maxSupportedQuestions = 10;
+
   McqTest({
     String? id,
     required this.topic,
     required this.questions,
+    int? expectedCount,
     this.reusedItemIds = const {},
-  }) : id = id ?? createId();
+  })  : expectedCount = expectedCount ?? questions.length,
+        id = id ?? createId();
 
   final String id;
   final String topic;
   final List<McqQuestion> questions;
+  final int expectedCount;
   final Set<String> reusedItemIds;
 
   int get count => questions.length;
   int get completeCount => questions.where((q) => q.isComplete).length;
+  McqPaperValidation get validation => McqPaperValidation.evaluate(this);
+  bool get isReady => validation.isReady;
 
   /// Answer key as "1=A 2=C …" (the OMR-gradable representation).
   String get keyLine => questions
@@ -87,6 +101,7 @@ class McqTest {
         'id': id,
         'topic': topic,
         'questions': questions.map((q) => q.toJson()).toList(),
+        'expectedCount': expectedCount,
         if (reusedItemIds.isNotEmpty) 'reusedItemIds': reusedItemIds.toList(),
       };
 
@@ -96,10 +111,59 @@ class McqTest {
         questions: (j['questions'] as List? ?? [])
             .map((e) => McqQuestion.fromJson(e as Map<String, dynamic>))
             .toList(),
+        expectedCount: j['expectedCount'] as int?,
         reusedItemIds: (j['reusedItemIds'] as List? ?? const [])
             .map((item) => item.toString())
             .toSet(),
       );
+}
+
+class McqPaperValidation {
+  const McqPaperValidation(this.issues);
+
+  final List<String> issues;
+
+  bool get isReady => issues.isEmpty;
+
+  String get summary => isReady ? 'Paper ready' : issues.first;
+
+  static McqPaperValidation evaluate(McqTest test) {
+    final issues = <String>[];
+    if (test.expectedCount <= 0 ||
+        test.expectedCount > McqTest.maxSupportedQuestions) {
+      issues.add(
+        'The expected question count must be between 1 and ${McqTest.maxSupportedQuestions}.',
+      );
+    }
+    if (test.questions.length != test.expectedCount) {
+      issues.add(
+        'Expected ${test.expectedCount} questions but found ${test.questions.length}.',
+      );
+    }
+    final expectedNumbers = <int>[
+      for (var number = 1; number <= test.expectedCount; number++) number,
+    ];
+    final actualNumbers = test.questions.map((question) => question.number).toList();
+    if (!_sameNumbers(actualNumbers, expectedNumbers)) {
+      issues.add('Question numbers must run from 1 to ${test.expectedCount}.');
+    }
+    final incomplete = test.questions
+        .where((question) => !question.isComplete)
+        .map((question) => question.number)
+        .toList(growable: false);
+    if (incomplete.isNotEmpty) {
+      issues.add('Complete every question and answer before printing or grading.');
+    }
+    return McqPaperValidation(List.unmodifiable(issues));
+  }
+
+  static bool _sameNumbers(List<int> actual, List<int> expected) {
+    if (actual.length != expected.length) return false;
+    for (var index = 0; index < actual.length; index++) {
+      if (actual[index] != expected[index]) return false;
+    }
+    return true;
+  }
 }
 
 class McqParser {
@@ -126,7 +190,12 @@ class McqParser {
   static final RegExp _keyPair = RegExp(r'(\d+)\s*[=:]\s*([A-D])', caseSensitive: false);
 
   /// Parse [raw] model output into a structured [McqTest].
-  static McqTest parse(String raw, {String topic = '', String? testId}) {
+  static McqTest parse(
+    String raw, {
+    String topic = '',
+    String? testId,
+    int expectedCount = 10,
+  }) {
     // Drop markdown code fences the model sometimes wraps the block in.
     final text = raw.replaceAll(RegExp(r'^\s*```.*$', multiLine: true), '');
 
@@ -153,7 +222,12 @@ class McqParser {
       final q = _parseBody(number, difficulty, body, keyMap[number]);
       if (q != null) questions.add(q);
     }
-    return McqTest(id: testId, topic: topic, questions: questions);
+    return McqTest(
+      id: testId,
+      topic: topic,
+      questions: questions,
+      expectedCount: expectedCount,
+    );
   }
 
   static McqQuestion? _parseBody(

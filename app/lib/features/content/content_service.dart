@@ -216,6 +216,7 @@ class ContentService {
     return McqTest(
       topic: topic.title,
       questions: questions,
+      expectedCount: target,
       reusedItemIds: reusedItemIds,
     );
   }
