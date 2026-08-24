@@ -8,7 +8,6 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../curriculum/curriculum_catalog.dart';
 import '../resources/local_ai_resources.dart';
-import '../settings/resource_management_screen.dart';
 import 'onboarding_store.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -33,7 +32,7 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _stepCount = 3;
+  static const _stepCount = 2;
 
   late final OnboardingStore _store;
   final _teacherController = TextEditingController();
@@ -41,7 +40,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   late final DebouncedWriter<OnboardingState> _drafts;
 
   OnboardingState _state = const OnboardingState();
-  LocalAiAvailability? _aiAvailability;
   bool _loading = true;
   bool _saving = false;
   String? _loadError;
@@ -79,11 +77,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final state = stored.copyWith(currentStep: step);
       _teacherController.text = state.teacherName;
       _schoolController.text = state.schoolName;
-      final availability = await _inspectAi();
       if (!mounted) return;
       setState(() {
         _state = state;
-        _aiAvailability = availability;
         _loading = false;
       });
     } catch (_) {
@@ -105,18 +101,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await _load();
   }
 
-  Future<LocalAiAvailability?> _inspectAi() async {
-    final override = widget.inspectAi;
-    if (override != null) return override();
-    final resources = LocalAiResources();
-    try {
-      return await resources.inspect();
-    } catch (_) {
-      return null;
-    } finally {
-      resources.dispose();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +181,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _step() => switch (_state.currentStep) {
         0 => _profileStep(),
         1 => _courseworkStep(),
-        _ => _offlineAiStep(),
+        _ => _courseworkStep(),
       };
 
   Widget _page({
@@ -265,9 +249,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
 
   Widget _courseworkStep() => _page(
-        title: 'Installed coursework',
+        title: 'Which classes and subjects do you teach?',
         subtitle:
-            'The current MVP includes Class 6 General Science. More modules can be added later without making this setup longer.',
+            'Choose the classes and subjects you teach so Bayaz can prepare lessons and tests for you.',
         children: [
           for (final curriculumClass in CurriculumCatalog.classes)
             BayazCard(
@@ -299,82 +283,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           const SizedBox(height: AppSpacing.md),
           const Text(
-            'Only working modules are shown. There are no placeholder classes or subjects in the app.',
+            'Only available classes and subjects are shown.',
           ),
         ],
       );
-
-  Widget _offlineAiStep() {
-    final availability = _aiAvailability;
-    final languageInstalled = availability?.languageModel.installed ?? false;
-    final embeddingInstalled = availability?.embeddingModel.installed ?? false;
-    final ready = languageInstalled && embeddingInstalled;
-    return _page(
-      title: 'Optional offline AI',
-      subtitle:
-          'Offline AI enables custom generation and clarification chat. It is not required for verified coursework.',
-      children: [
-        BayazCard(
-          borderColor: _state.offlineAiEnabled ? AppColors.primary : null,
-          child: SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            value: _state.offlineAiEnabled,
-            onChanged: (value) {
-              setState(() => _state = _state.copyWith(offlineAiEnabled: value));
-              _scheduleDraftSave();
-            },
-            title: const Text('Enable offline AI features'),
-            subtitle: const Text(
-              'Model files can be large and generation may take several minutes on budget phones.',
-            ),
-          ),
-        ),
-        if (_state.offlineAiEnabled) ...[
-          const SizedBox(height: AppSpacing.md),
-          BayazCard(
-            color: ready ? const Color(0xFFE7F6EC) : AppColors.softGold,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  ready ? 'Offline AI is ready' : 'Model setup is incomplete',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Language model: ${languageInstalled ? 'installed' : 'not installed'}',
-                ),
-                Text(
-                  'Curriculum search model: ${embeddingInstalled ? 'installed' : 'not installed'}',
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  !languageInstalled
-                      ? 'Custom generation and chat remain unavailable until a language model is installed.'
-                      : !embeddingInstalled
-                          ? 'Generation can run, but it will be marked ungrounded.'
-                          : 'Custom generation can use installed curriculum context.',
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _manageModels,
-                    icon: const Icon(Icons.download_rounded),
-                    label: const Text('Manage models'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: AppSpacing.md),
-        const Text(
-          'You can skip this step and enable offline AI later from Settings.',
-        ),
-      ],
-    );
-  }
 
   Widget _navigation() {
     final last = _state.currentStep == _stepCount - 1;
@@ -396,11 +308,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           else
             const Spacer(),
           if (_state.currentStep > 0) const Spacer(),
-          if (last && _state.offlineAiEnabled)
-            TextButton(
-              onPressed: _saving ? null : _skipOfflineAi,
-              child: const Text('Skip for now'),
-            ),
           const SizedBox(width: AppSpacing.sm),
           FilledButton.icon(
             onPressed: _saving ? null : (last ? _finish : _next),
@@ -422,10 +329,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await _saveAndShow(_snapshot(currentStep: previous));
   }
 
-  Future<void> _skipOfflineAi() async {
-    setState(() => _state = _state.copyWith(offlineAiEnabled: false));
-    await _finish();
-  }
 
   Future<void> _finish() async {
     final completed = _snapshot(
@@ -518,12 +421,4 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  Future<void> _manageModels() async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => const ResourceManagementScreen(setupMode: true),
-    ));
-    final availability = await _inspectAi();
-    if (!mounted) return;
-    setState(() => _aiAvailability = availability);
-  }
 }
