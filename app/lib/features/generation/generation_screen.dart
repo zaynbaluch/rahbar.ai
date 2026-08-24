@@ -219,14 +219,13 @@ class _GenerationScreenState extends State<GenerationScreen> {
     if (_routeLifecycle.closing) return;
     final close = _routeLifecycle.close(_cleanup);
     if (mounted) setState(() {});
-    try {
-      await close;
-    } finally {
-      if (!mounted) return;
-      setState(() => _allowPop = true);
-      await Future<void>.delayed(Duration.zero);
-      if (mounted) Navigator.of(context).maybePop();
-    }
+    await finishLocalAiRouteClose(
+      close,
+      description: 'closing the generation screen',
+      isMounted: () => mounted,
+      allowPop: () => setState(() => _allowPop = true),
+      pop: () => unawaited(Navigator.of(context).maybePop()),
+    );
   }
 
   Future<void> _cleanup() async {
