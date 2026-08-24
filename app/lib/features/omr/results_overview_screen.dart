@@ -5,8 +5,10 @@ import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/section_header.dart';
 import '../../design_system/components/status_chip.dart';
+import '../../design_system/components/recovered_data_notice.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../../core/storage/local_store_load.dart';
 import 'gradebook_store.dart';
 import 'graded_result.dart';
 import 'results_screen.dart';
@@ -20,18 +22,18 @@ class ResultsOverviewScreen extends StatefulWidget {
 
 class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
   final _store = GradebookStore();
-  late Future<List<GradedResult>> _future;
+  late Future<LocalStoreLoad<GradedResult>> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _store.listAll();
+    _future = _store.loadAll();
   }
 
-  void _reload() => setState(() => _future = _store.listAll());
+  void _reload() => setState(() => _future = _store.loadAll());
 
   Future<void> _refresh() async {
-    final next = _store.listAll();
+    final next = _store.loadAll();
     setState(() => _future = next);
     await next;
   }
@@ -44,7 +46,7 @@ class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
         title: BrandAppBarTitle(subtitle: 'Saved grading sessions'),
       ),
       body: SafeArea(
-        child: FutureBuilder<List<GradedResult>>(
+        child: FutureBuilder<LocalStoreLoad<GradedResult>>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
@@ -53,13 +55,26 @@ class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
             if (snapshot.hasError) {
               return _ErrorState(error: '${snapshot.error}', onRetry: _reload);
             }
-            final all = snapshot.data ?? const [];
+            final load = snapshot.data ??
+                const LocalStoreLoad<GradedResult>(items: []);
+            final all = load.items;
             if (all.isEmpty) {
-              return const BayazEmptyState(
-                asset: 'assets/ui/illustrations/empty_results.webp',
-                title: 'No grading results yet',
-                message:
-                    'Open a saved or newly created test, grade an answer sheet, and save the result.',
+              return Column(
+                children: [
+                  if (load.recoveredCorruptData)
+                    RecoveredDataNotice(
+                      count: load.recoveredFiles,
+                      itemLabel: 'grading result',
+                    ),
+                  const Expanded(
+                    child: BayazEmptyState(
+                      asset: 'assets/ui/illustrations/empty_results.webp',
+                      title: 'No grading results yet',
+                      message:
+                          'Open a saved or newly created test, grade an answer sheet, and save the result.',
+                    ),
+                  ),
+                ],
               );
             }
 
@@ -83,6 +98,13 @@ class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
                   AppSpacing.xl,
                 ),
                 children: [
+                  if (load.recoveredCorruptData) ...[
+                    RecoveredDataNotice(
+                      count: load.recoveredFiles,
+                      itemLabel: 'grading result',
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
                   const SectionHeader(
                     title: 'Class results',
                     subtitle:

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
+import '../../design_system/components/recovered_data_notice.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../../core/storage/local_store_load.dart';
 import 'gradebook_store.dart';
 import 'graded_result.dart';
 
@@ -20,18 +22,19 @@ class ResultsScreen extends StatefulWidget {
 
 class _ResultsScreenState extends State<ResultsScreen> {
   final _store = GradebookStore();
-  late Future<List<GradedResult>> _future;
+  late Future<LocalStoreLoad<GradedResult>> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _store.listForTest(widget.testId);
+    _future = _store.loadForTest(widget.testId);
   }
 
-  void _reload() => setState(() => _future = _store.listForTest(widget.testId));
+  void _reload() =>
+      setState(() => _future = _store.loadForTest(widget.testId));
 
   Future<void> _refresh() async {
-    final next = _store.listForTest(widget.testId);
+    final next = _store.loadForTest(widget.testId);
     setState(() => _future = next);
     await next;
   }
@@ -46,7 +49,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Class results')),
       body: SafeArea(
-        child: FutureBuilder<List<GradedResult>>(
+        child: FutureBuilder<LocalStoreLoad<GradedResult>>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
@@ -65,13 +68,26 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 ),
               );
             }
-            final results = snapshot.data ?? const [];
+            final load = snapshot.data ??
+                const LocalStoreLoad<GradedResult>(items: []);
+            final results = load.items;
             if (results.isEmpty) {
-              return const BayazEmptyState(
-                asset: 'assets/ui/illustrations/empty_results.webp',
-                title: 'No sheets saved for this paper',
-                message:
-                    'Grade an answer sheet from this test and save it to build the class summary.',
+              return Column(
+                children: [
+                  if (load.recoveredCorruptData)
+                    RecoveredDataNotice(
+                      count: load.recoveredFiles,
+                      itemLabel: 'grading result',
+                    ),
+                  const Expanded(
+                    child: BayazEmptyState(
+                      asset: 'assets/ui/illustrations/empty_results.webp',
+                      title: 'No sheets saved for this paper',
+                      message:
+                          'Grade an answer sheet from this test and save it to build the class summary.',
+                    ),
+                  ),
+                ],
               );
             }
 
@@ -95,6 +111,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   AppSpacing.xl,
                 ),
                 children: [
+                  if (load.recoveredCorruptData) ...[
+                    RecoveredDataNotice(
+                      count: load.recoveredFiles,
+                      itemLabel: 'grading result',
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
                   _ResultsHeader(
                     topic: widget.topic,
                     testId: widget.testId,

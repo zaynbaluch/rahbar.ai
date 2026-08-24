@@ -4,8 +4,10 @@ import '../../design_system/components/brand_app_bar.dart';
 import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
+import '../../design_system/components/recovered_data_notice.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../../core/storage/local_store_load.dart';
 import '../generation/lesson_plan_view.dart';
 import '../generation/mcq_test_view.dart';
 import 'library_store.dart';
@@ -21,13 +23,13 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   final _store = LibraryStore();
   final _search = TextEditingController();
-  late Future<List<SavedTest>> _future;
+  late Future<LocalStoreLoad<SavedTest>> _future;
   String _filter = 'all';
 
   @override
   void initState() {
     super.initState();
-    _future = _store.list();
+    _future = _store.load();
   }
 
   @override
@@ -36,10 +38,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.dispose();
   }
 
-  void _reload() => setState(() => _future = _store.list());
+  void _reload() => setState(() => _future = _store.load());
 
   Future<void> _refresh() async {
-    final next = _store.list();
+    final next = _store.load();
     setState(() => _future = next);
     await next;
   }
@@ -64,7 +66,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ],
       ),
       body: SafeArea(
-        child: FutureBuilder<List<SavedTest>>(
+        child: FutureBuilder<LocalStoreLoad<SavedTest>>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
@@ -73,7 +75,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
             if (snapshot.hasError) {
               return _LibraryError(error: '${snapshot.error}', onRetry: _reload);
             }
-            final all = snapshot.data ?? const [];
+            final load = snapshot.data ??
+                const LocalStoreLoad<SavedTest>(items: []);
+            final all = load.items;
             final query = _search.text.trim().toLowerCase();
             final visible = all.where((item) {
               final matchesKind = _filter == 'all' || item.kind == _filter;
@@ -84,6 +88,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
             return Column(
               children: [
+                if (load.recoveredCorruptData)
+                  RecoveredDataNotice(
+                    count: load.recoveredFiles,
+                    itemLabel: 'saved item',
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.md,
