@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'generation_stream_bridge.dart';
+import 'lfm2_prompt_format.dart';
 import 'mcq_grammar.dart';
 
 /// On-device generation via **llama.cpp** (GGUF), the primary runtime for budget
@@ -11,10 +12,9 @@ import 'mcq_grammar.dart';
 /// thread). CPU-only here — this budget Adreno GPU can't accelerate reliably.
 ///
 /// The current model profile is Liquid AI LFM2 1.2B in GGUF form with greedy
-/// decoding (temperature 0 plus repeat penalty). LFM2 uses a ChatML-like
-/// template, so system and user roles remain explicit while all generation stays
-/// on-device. Final quantization and device performance still require hardware
-/// benchmarking before a production model manifest is published.
+/// decoding (temperature 0 plus repeat penalty). The model-specific formatter
+/// preserves LFM2's published start-of-text and role tokens while all generation
+/// stays on-device.
 class LlamaCppService {
   LlamaParent? _parent;
   String? _loadedFile;
@@ -77,10 +77,9 @@ class LlamaCppService {
       // re-binds the (silent) callback to its own isolate instead.
       verbose: false,
     );
-    // LFM2 uses a ChatML-like template with im_start/im_end role tokens.
-    // The model's GGUF metadata and this formatter must be re-verified whenever
-    // the production model revision changes.
-    _parent = LlamaParent(load, ChatMLFormat());
+    // The pinned binding does not apply the GGUF's embedded Jinja chat template,
+    // so format the published LFM2 token sequence explicitly.
+    _parent = LlamaParent(load, Lfm2PromptFormat());
     await _parent!.init();
     _loadedFile = modelPath;
     _loadedGrammar = grammar;
