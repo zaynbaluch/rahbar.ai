@@ -46,12 +46,12 @@ class _BayazShellState extends State<BayazShell> {
           NavigationDestination(
             icon: Icon(Icons.folder_outlined),
             selectedIcon: Icon(Icons.folder_rounded),
-            label: 'Library',
+            label: 'My Work',
           ),
           NavigationDestination(
             icon: Icon(Icons.bar_chart_outlined),
             selectedIcon: Icon(Icons.bar_chart_rounded),
-            label: 'Results',
+            label: 'Class Results',
           ),
         ],
       ),
