@@ -14,6 +14,9 @@ import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
+import '../resources/offline_ai_gate.dart';
+import '../resources/offline_ai_navigation.dart';
+import '../resources/offline_ai_policy.dart';
 import 'generated_output_sanitizer.dart';
 import 'lesson_plan.dart';
 import 'lesson_plan_parser.dart';
@@ -31,10 +34,12 @@ class GenerationScreen extends StatefulWidget {
     super.key,
     this.initialTopic,
     this.initialKind = 'mcq',
+    this.offlineAiPolicy,
   });
 
   final String? initialTopic;
   final String initialKind;
+  final OfflineAiPolicy? offlineAiPolicy;
 
   @override
   State<GenerationScreen> createState() => _GenerationScreenState();
@@ -48,6 +53,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
   final _modelHandoff = const LocalModelHandoff();
   final _library = LibraryStore();
   final _localAi = LocalAiResources();
+  late final OfflineAiPolicy _offlineAiPolicy;
   late final _topic = TextEditingController(text: widget.initialTopic ?? '');
 
   late String _kind = widget.initialKind == 'lesson' ? 'lesson' : 'mcq';
@@ -64,6 +70,12 @@ class _GenerationScreenState extends State<GenerationScreen> {
   String? _error;
   Duration _elapsed = Duration.zero;
   int _chunks = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _offlineAiPolicy = widget.offlineAiPolicy ?? OfflineAiPolicy();
+  }
 
   bool get _busy => _phase != _Phase.idle;
   double get _tokPerSec => _elapsed.inMilliseconds == 0
@@ -99,6 +111,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
     });
 
     try {
+      await _offlineAiPolicy.requireEnabled();
       if (!mounted) return;
       setState(() => _phase = _Phase.retrieving);
       final prompt = await _modelHandoff.retrieve(
@@ -188,6 +201,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
 
   static String _friendlyError(Object error) {
     final text = error.toString();
+    if (error is OfflineAiDisabledException) {
+      return 'Offline AI is turned off. Enable it in teacher setup before generating custom content.';
+    }
     if (text.contains('No such file') || text.contains('not installed')) {
       return 'Offline AI files are not installed. Open setup to download the language and retrieval models, then try again.';
     }
@@ -235,7 +251,13 @@ class _GenerationScreenState extends State<GenerationScreen> {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OfflineAiGate(
+        title: 'Custom topic generation',
+        policy: _offlineAiPolicy,
+        enabledBuilder: _buildEnabled,
+      );
+
+  Widget _buildEnabled(BuildContext context) {
     final seen = <String>{};
     final sections = [
       for (final hit in _hits)
@@ -384,14 +406,14 @@ class _GenerationScreenState extends State<GenerationScreen> {
                     ),
                     IconButton(
                       tooltip: 'Ask about this lesson',
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ClarificationScreen(
-                            contextMaterial: ClarificationContext.lesson(
-                              _lessonPlan!,
-                            ),
+                      onPressed: () => openOfflineAiScreen(
+                        context,
+                        (_) => ClarificationScreen(
+                          contextMaterial: ClarificationContext.lesson(
+                            _lessonPlan!,
                           ),
                         ),
+                        policy: _offlineAiPolicy,
                       ),
                       icon: const Icon(Icons.forum_outlined),
                     ),

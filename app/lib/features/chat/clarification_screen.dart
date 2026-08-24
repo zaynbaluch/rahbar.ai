@@ -12,6 +12,8 @@ import '../generation/llama_cpp_service.dart';
 import '../generation/local_model_handoff.dart';
 import '../rag/rag_service.dart';
 import '../resources/local_ai_resources.dart';
+import '../resources/offline_ai_gate.dart';
+import '../resources/offline_ai_policy.dart';
 import '../settings/resource_management_screen.dart';
 import 'clarification_context.dart';
 
@@ -19,9 +21,11 @@ class ClarificationScreen extends StatefulWidget {
   const ClarificationScreen({
     super.key,
     required this.contextMaterial,
+    this.offlineAiPolicy,
   });
 
   final ClarificationContext contextMaterial;
+  final OfflineAiPolicy? offlineAiPolicy;
 
   @override
   State<ClarificationScreen> createState() => _ClarificationScreenState();
@@ -34,7 +38,14 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
   final _llama = LlamaCppService();
   final _modelHandoff = const LocalModelHandoff();
   final _resources = LocalAiResources();
+  late final OfflineAiPolicy _offlineAiPolicy;
   final _messages = <_ChatMessage>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _offlineAiPolicy = widget.offlineAiPolicy ?? OfflineAiPolicy();
+  }
 
   bool _busy = false;
   bool _grounded = false;
@@ -62,12 +73,16 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
       _modelMissing = false;
       _grounded = false;
       _phase = 'Checking offline AI…';
-      _messages.add(_ChatMessage(role: 'teacher', text: question));
-      _question.clear();
     });
-    _scrollToEnd();
 
     try {
+      await _offlineAiPolicy.requireEnabled();
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_ChatMessage(role: 'teacher', text: question));
+        _question.clear();
+      });
+      _scrollToEnd();
       final availability = await _resources.inspect();
       final model = availability.languageModel.file;
       if (!availability.languageModel.installed || model == null) {
@@ -169,6 +184,9 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
 
   static String _friendlyError(Object error) {
     final text = error.toString();
+    if (error is OfflineAiDisabledException) {
+      return 'Offline AI is turned off. Enable it in teacher setup before asking a question.';
+    }
     if (text.contains('not installed') || text.contains('No such file')) {
       return 'Offline AI is not installed or is incomplete. Open AI setup and verify the model files.';
     }
@@ -176,7 +194,15 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OfflineAiGate(
+        title: widget.contextMaterial.kind == 'general'
+            ? 'Ask Bayaz'
+            : 'Clarify ${widget.contextMaterial.title}',
+        policy: _offlineAiPolicy,
+        enabledBuilder: _buildEnabled,
+      );
+
+  Widget _buildEnabled(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(

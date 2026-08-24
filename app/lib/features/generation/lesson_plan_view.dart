@@ -8,6 +8,7 @@ import '../../design_system/theme/app_motion.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../chat/clarification_context.dart';
 import '../chat/clarification_screen.dart';
+import '../resources/offline_ai_navigation.dart';
 import '../content/content_service.dart';
 import '../export/pdf_export.dart';
 import '../library/library_store.dart';
@@ -107,11 +108,12 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
         actions: [
           IconButton(
             tooltip: 'Ask about this lesson',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => ClarificationScreen(
+            onPressed: () => openOfflineAiScreen(
+              context,
+              (_) => ClarificationScreen(
                 contextMaterial: ClarificationContext.lesson(_plan),
               ),
-            )),
+            ),
             icon: const Icon(Icons.forum_outlined),
           ),
         ],
@@ -186,11 +188,12 @@ class LessonPlanReadOnlyScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Ask about this lesson',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => ClarificationScreen(
+            onPressed: () => openOfflineAiScreen(
+              context,
+              (_) => ClarificationScreen(
                 contextMaterial: ClarificationContext.lesson(plan),
               ),
-            )),
+            ),
             icon: const Icon(Icons.forum_outlined),
           ),
           IconButton(
