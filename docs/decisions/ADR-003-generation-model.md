@@ -1,5 +1,8 @@
 # ADR-003 — Generation model: shortlist → on-device spike → pick
 
+> **Status: Partially superseded.** Candidate research remains historical evidence, but the current app uses an optional downloaded GGUF model through llama.cpp and does not make live generation the default curriculum path. See `../01-architecture.md`.
+
+
 **Status:** Accepted (on-device verified 2026-07-13) · **Date:** 2026-07-04
 
 > **⚠️ Scope narrowed by [ADR-008](ADR-008-build-time-content.md) (2026-07-13).** Everything
