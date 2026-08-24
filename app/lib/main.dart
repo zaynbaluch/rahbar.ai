@@ -1,21 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
-import 'package:flutter_gemma_mediapipe/flutter_gemma_mediapipe.dart';
 
 import 'app/bayaz_shell.dart';
 import 'core/theme.dart';
+import 'features/onboarding/onboarding_gate.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Preserve the project's existing model-spike runtimes. They are no longer
-  // exposed in the teacher navigation, but remain available to the existing
-  // internal spike code without changing its behavior.
-  await FlutterGemma.initialize(
-    inferenceEngines: const [MediaPipeEngine(), LiteRtLmEngine()],
-  );
-
   runApp(const BayazApp());
 }
 
@@ -28,7 +18,7 @@ class BayazApp extends StatelessWidget {
       title: 'Bayaz AI',
       debugShowCheckedModeBanner: false,
       theme: BayazTheme.light(),
-      home: const BayazShell(),
+      home: const OnboardingGate(child: BayazShell()),
     );
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../features/content/topic_picker_screen.dart';
+import '../features/curriculum/curriculum_home_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/omr/results_overview_screen.dart';
 
@@ -21,7 +21,7 @@ class _BayazShellState extends State<BayazShell> {
   @override
   Widget build(BuildContext context) {
     final tabs = <Widget>[
-      const TopicPickerScreen(),
+      const CurriculumHomeScreen(),
       LibraryScreen(key: ValueKey(_libraryRevision)),
       ResultsOverviewScreen(key: ValueKey(_resultsRevision)),
     ];
