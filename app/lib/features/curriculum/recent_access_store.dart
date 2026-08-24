@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/storage/atomic_file_store.dart';
+
 class RecentCurriculumAccess {
   const RecentCurriculumAccess({
     required this.classCode,
@@ -84,13 +86,9 @@ class RecentAccessStore {
       ),
     );
     final file = await _file();
-    await file.parent.create(recursive: true);
-    final temporary = File('${file.path}.tmp');
-    await temporary.writeAsString(
-      jsonEncode(items.take(_maxItems).map((item) => item.toJson()).toList()),
-      flush: true,
+    await AtomicFileStore.shared.writeJson(
+      file,
+      items.take(_maxItems).map((item) => item.toJson()).toList(),
     );
-    if (await file.exists()) await file.delete();
-    await temporary.rename(file.path);
   }
 }

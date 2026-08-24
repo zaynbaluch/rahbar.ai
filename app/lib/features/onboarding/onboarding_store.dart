@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/storage/atomic_file_store.dart';
+
 class OnboardingState {
   const OnboardingState({
     this.schemaVersion = 2,
@@ -87,21 +89,14 @@ class OnboardingStore {
         Map<String, Object?>.from(jsonDecode(await file.readAsString()) as Map),
       );
     } catch (_) {
-      final corrupt = File(
-        '${file.path}.corrupt.${DateTime.now().millisecondsSinceEpoch}',
-      );
-      await file.rename(corrupt.path);
+      await AtomicFileStore.shared.quarantineCorrupt(file);
       return const OnboardingState();
     }
   }
 
   Future<void> save(OnboardingState state) async {
     final file = await _file();
-    await file.parent.create(recursive: true);
-    final temporary = File('${file.path}.tmp');
-    await temporary.writeAsString(jsonEncode(state.toJson()), flush: true);
-    if (await file.exists()) await file.delete();
-    await temporary.rename(file.path);
+    await AtomicFileStore.shared.writeJson(file, state.toJson());
   }
 
   Future<void> reset() async {

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/storage/atomic_file_store.dart';
+
 import 'graded_result.dart';
 
 /// File-backed store for graded sheets: one JSON per result under
@@ -19,8 +21,10 @@ class GradebookStore {
 
   Future<void> save(GradedResult r) async {
     final dir = await _dir();
-    await File(p.join(dir.path, '${r.id}.json'))
-        .writeAsString(jsonEncode(r.toJson()), flush: true);
+    await AtomicFileStore.shared.writeJson(
+      File(p.join(dir.path, '${r.id}.json')),
+      r.toJson(),
+    );
   }
 
   /// All graded results, newest first. Used by the existing Results destination.
@@ -33,7 +37,7 @@ class GradebookStore {
           out.add(GradedResult.fromJson(
               jsonDecode(await e.readAsString()) as Map<String, dynamic>));
         } catch (_) {
-          // Skip a corrupt result rather than breaking the whole gradebook.
+          await AtomicFileStore.shared.quarantineCorrupt(e);
         }
       }
     }
@@ -52,7 +56,7 @@ class GradebookStore {
               jsonDecode(await e.readAsString()) as Map<String, dynamic>);
           if (r.testId == testId) out.add(r);
         } catch (_) {
-          // skip a corrupt file
+          await AtomicFileStore.shared.quarantineCorrupt(e);
         }
       }
     }

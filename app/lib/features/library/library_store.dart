@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/storage/atomic_file_store.dart';
+
 import 'saved_test.dart';
 
 /// File-backed store for saved tests: one JSON file per test under
@@ -21,7 +23,7 @@ class LibraryStore {
   Future<void> save(SavedTest test) async {
     final dir = await _dir();
     final f = File(p.join(dir.path, '${test.id}.json'));
-    await f.writeAsString(jsonEncode(test.toJson()), flush: true);
+    await AtomicFileStore.shared.writeJson(f, test.toJson());
   }
 
   /// All saved tests, newest first.
@@ -34,7 +36,7 @@ class LibraryStore {
           tests.add(SavedTest.fromJson(
               jsonDecode(await e.readAsString()) as Map<String, dynamic>));
         } catch (_) {
-          // Skip a corrupt file rather than break the whole library.
+          await AtomicFileStore.shared.quarantineCorrupt(e);
         }
       }
     }
