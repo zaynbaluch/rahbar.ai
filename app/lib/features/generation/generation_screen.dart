@@ -9,6 +9,7 @@ import '../../design_system/theme/app_spacing.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
+import '../resources/local_ai_resources.dart';
 import 'llama_cpp_service.dart';
 import 'mcq_grammar.dart';
 import 'mcq_parser.dart';
@@ -28,11 +29,10 @@ class GenerationScreen extends StatefulWidget {
 enum _Phase { idle, preparing, retrieving, loadingModel, generating }
 
 class _GenerationScreenState extends State<GenerationScreen> {
-  static const String _modelFile = 'lfm2-1.2b.gguf';
-
   final _rag = RagService();
   final _llama = LlamaCppService();
   final _library = LibraryStore();
+  final _localAi = LocalAiResources();
   late final _topic = TextEditingController(text: widget.initialTopic ?? '');
 
   String _kind = 'mcq';
@@ -56,8 +56,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
   void dispose() {
     _uiTimer?.cancel();
     _topic.dispose();
-    _rag.dispose();
-    _llama.unload();
+    unawaited(_rag.dispose());
+    unawaited(_llama.unload());
+    _localAi.dispose();
     super.dispose();
   }
 
@@ -87,8 +88,15 @@ class _GenerationScreenState extends State<GenerationScreen> {
         _phase = _Phase.loadingModel;
       });
 
-      await _llama.load(
-        _modelFile,
+      final availability = await _localAi.inspect();
+      if (!availability.languageModel.installed ||
+          availability.languageModel.file == null) {
+        throw StateError(
+          'The managed offline language model is not installed. Open setup to download it.',
+        );
+      }
+      await _llama.loadPath(
+        availability.languageModel.file!.path,
         grammar: _kind == 'mcq' ? kMcqGrammar : null,
       );
       if (!mounted) return;
