@@ -30,12 +30,17 @@ class _ResultsScreenState extends State<ResultsScreen> {
     _future = _store.loadForTest(widget.testId);
   }
 
-  void _reload() =>
-      setState(() => _future = _store.loadForTest(widget.testId));
+  void _reload() {
+    setState(() {
+      _future = _store.loadForTest(widget.testId);
+    });
+  }
 
   Future<void> _refresh() async {
     final next = _store.loadForTest(widget.testId);
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 

@@ -14,27 +14,37 @@ import 'graded_result.dart';
 import 'results_screen.dart';
 
 class ResultsOverviewScreen extends StatefulWidget {
-  const ResultsOverviewScreen({super.key});
+  const ResultsOverviewScreen({super.key, this.store});
+
+  /// Overridden by tests, which cannot let real file reads settle.
+  final GradebookStore? store;
 
   @override
   State<ResultsOverviewScreen> createState() => _ResultsOverviewScreenState();
 }
 
 class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
-  final _store = GradebookStore();
+  late final GradebookStore _store;
   late Future<LocalStoreLoad<GradedResult>> _future;
 
   @override
   void initState() {
     super.initState();
+    _store = widget.store ?? GradebookStore();
     _future = _store.loadAll();
   }
 
-  void _reload() => setState(() => _future = _store.loadAll());
+  void _reload() {
+    setState(() {
+      _future = _store.loadAll();
+    });
+  }
 
   Future<void> _refresh() async {
     final next = _store.loadAll();
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 

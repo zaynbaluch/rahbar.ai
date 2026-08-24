@@ -14,14 +14,17 @@ import 'library_store.dart';
 import 'saved_test.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+  const LibraryScreen({super.key, this.store});
+
+  /// Overridden by tests, which cannot let real file reads settle.
+  final LibraryStore? store;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  final _store = LibraryStore();
+  late final LibraryStore _store;
   final _search = TextEditingController();
   late Future<LocalStoreLoad<SavedTest>> _future;
   String _filter = 'all';
@@ -29,6 +32,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   void initState() {
     super.initState();
+    _store = widget.store ?? LibraryStore();
     _future = _store.load();
   }
 
@@ -38,11 +42,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.dispose();
   }
 
-  void _reload() => setState(() => _future = _store.load());
+  void _reload() {
+    setState(() {
+      _future = _store.load();
+    });
+  }
 
   Future<void> _refresh() async {
     final next = _store.load();
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     await next;
   }
 
