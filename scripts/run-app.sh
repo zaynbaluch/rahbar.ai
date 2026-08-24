@@ -1,47 +1,55 @@
 #!/usr/bin/env bash
-# Boot the budget-device emulator, install, and launch the Rahbar AI app.
-# Usage:  bash scripts/run-app.sh
-set -e
+# Build, install, and launch Bayaz AI on a connected Android device or emulator.
+# Usage: bash scripts/run-app.sh [--release] [--no-build]
+set -euo pipefail
 
-export ANDROID_SDK_ROOT=/opt/android-sdk
-export ANDROID_AVD_HOME="$HOME/.config/.android/avd"
-export ANDROID_SDK_HOME="$HOME/.config/.android"
-export PATH="$HOME/development/flutter/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/emulator:/opt/android-sdk/cmdline-tools/latest/bin:$PATH"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DIR="$REPO_ROOT/app"
+BUILD_MODE="debug"
+NO_BUILD=0
 
-APK="app/build/app/outputs/flutter-apk/app-debug.apk"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --release) BUILD_MODE="release" ;;
+    --no-build) NO_BUILD=1 ;;
+    -h|--help)
+      sed -n '1,4p' "$0"
+      exit 0
+      ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
 
-# 1. Boot the emulator if not already running.
-if ! adb devices | grep -q emulator; then
-  echo "▶ Booting emulator (a window will open)…"
-  nohup emulator -avd rahbar_budget_device -no-snapshot -netdelay none -netspeed full >/tmp/rahbar-emulator.log 2>&1 &
-  disown
+for command in flutter adb; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "Required command not found: $command" >&2
+    echo "Run: bash scripts/bootstrap-toolchain.sh" >&2
+    exit 127
+  fi
+done
+
+if [[ ! -d "$REPO_ROOT/third_party/llama_cpp_dart" ]]; then
+  echo "Missing third_party/llama_cpp_dart." >&2
+  echo "Run: bash scripts/setup-llama.sh" >&2
+  exit 1
 fi
 
-echo "▶ Waiting for device to finish booting…"
-adb wait-for-device
-until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do sleep 3; done
-echo "✓ Emulator ready."
+APK="$APP_DIR/build/app/outputs/flutter-apk/app-${BUILD_MODE}.apk"
 
-# 2. Build the APK if missing.
-if [ ! -f "$APK" ]; then
-  echo "▶ APK not found — building (first build is slow)…"
-  flutter build apk --debug -t app/lib/main.dart
+if ! adb devices | awk 'NR>1 && $2 == "device" {found=1} END {exit !found}'; then
+  echo "No ready Android device or emulator is connected." >&2
+  echo "Start an emulator or connect a device with USB debugging enabled." >&2
+  exit 1
 fi
 
-# 3. Install + launch.
-echo "▶ Installing app…"
+cd "$APP_DIR"
+if [[ $NO_BUILD -eq 0 || ! -f "$APK" ]]; then
+  flutter pub get
+  flutter build apk "--$BUILD_MODE" -t lib/main.dart
+fi
+
 adb install -r "$APK"
-echo "▶ Launching app…"
 adb shell am start -n com.rahbarai.rahbar_ai/.MainActivity
 
-cat <<'EOF'
-
-✓ App launched on the emulator.
-  In the app:
-    1. Pick a model (start with "SmolLM 135M" — smallest/fastest).
-    2. Optionally edit the prompt.
-    3. Tap "Generate on-device".
-  First run downloads the model (~135 MB, one time), then generates OFFLINE.
-  (Note: generation currently uses the model's own knowledge — RAG grounding
-   from the textbook is the next milestone, not wired in yet.)
-EOF
+echo "Bayaz AI launched ($BUILD_MODE)."
