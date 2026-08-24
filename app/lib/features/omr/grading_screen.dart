@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -11,20 +13,31 @@ import '../export/pdf_export.dart';
 import '../generation/mcq_parser.dart';
 import 'gradebook_store.dart';
 import 'graded_result.dart';
+import 'image_pick_recovery.dart';
 import 'omr_grader.dart';
 import 'results_screen.dart';
 
 class GradingScreen extends StatefulWidget {
-  const GradingScreen({super.key, required this.test});
+  const GradingScreen({
+    super.key,
+    required this.test,
+    this.initialImagePath,
+    this.recoveryStore,
+    this.picker,
+  });
 
   final McqTest test;
+  final String? initialImagePath;
+  final PendingImagePickStore? recoveryStore;
+  final ImagePicker? picker;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
 }
 
 class _GradingScreenState extends State<GradingScreen> {
-  final _picker = ImagePicker();
+  late final ImagePicker _picker;
+  late final PendingImagePickStore _recoveryStore;
   final _gradebook = GradebookStore();
   final _name = TextEditingController();
   bool _busy = false;
@@ -35,6 +48,19 @@ class _GradingScreenState extends State<GradingScreen> {
   bool _reviewConfirmed = false;
 
   String get _testId => PdfExport.testId(widget.test);
+
+  @override
+  void initState() {
+    super.initState();
+    _picker = widget.picker ?? ImagePicker();
+    _recoveryStore = widget.recoveryStore ?? PendingImagePickStore();
+    final initialPath = widget.initialImagePath;
+    if (initialPath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _gradePath(initialPath, clearRecovery: true);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -52,14 +78,55 @@ class _GradingScreenState extends State<GradingScreen> {
       _reviewConfirmed = false;
     });
     try {
-      final shot = await _picker.pickImage(source: source, maxWidth: 2000);
-      if (shot == null) return;
-      final bytes = await shot.readAsBytes();
+      await _recoveryStore.begin(widget.test, source);
+      final shot = await _picker.pickImage(
+        source: source,
+        maxWidth: 2000,
+        maxHeight: 2000,
+      );
+      if (shot == null) {
+        await _recoveryStore.clear();
+        return;
+      }
+      await _gradePath(
+        shot.path,
+        clearRecovery: true,
+        alreadyBusy: true,
+      );
+    } catch (error) {
+      await _recoveryStore.clear();
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _gradePath(
+    String path, {
+    required bool clearRecovery,
+    bool alreadyBusy = false,
+  }) async {
+    if (_busy && !alreadyBusy) return;
+    if (!alreadyBusy) {
+      setState(() {
+        _busy = true;
+        _error = null;
+        _result = null;
+        _saved = false;
+        _reviewConfirmed = false;
+      });
+    }
+    try {
+      final bytes = await File(path).readAsBytes();
       var decoded = img.decodeImage(bytes);
       if (decoded == null) throw 'Could not read the selected image.';
       decoded = img.bakeOrientation(decoded);
-      if (decoded.width > 2000) {
-        decoded = img.copyResize(decoded, width: 2000);
+      if (decoded.width > 2000 || decoded.height > 2000) {
+        decoded = img.copyResize(
+          decoded,
+          width: decoded.width >= decoded.height ? 2000 : null,
+          height: decoded.height > decoded.width ? 2000 : null,
+        );
       }
       final result = OmrGrader.grade(decoded, widget.test);
       if (!result.fiducialsFound) {
@@ -70,10 +137,11 @@ class _GradingScreenState extends State<GradingScreen> {
         _result = result;
         _name.text = 'Student ${_savedCount + 1}';
       });
-    } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (clearRecovery) await _recoveryStore.clear();
+      if (!alreadyBusy && mounted) setState(() => _busy = false);
     }
   }
 
