@@ -7,8 +7,8 @@ Use the versions pinned by the repository configuration and setup documents:
 - Flutter 3.44.4 stable
 - Dart 3.12.2
 - Android Gradle Plugin 8.11.1
-- Gradle 8.13
-- Kotlin 2.2.20
+- Gradle 9.1.0
+- Kotlin 2.3.20
 - Java 17
 - Android NDK 28.2.13676358
 
