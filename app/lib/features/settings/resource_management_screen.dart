@@ -167,6 +167,7 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
             _ResourceCard(
               resource: resource,
               installed: _installed[resource.id] ?? resource.isBundled,
+              downloading: _tokens.containsKey(resource.id),
               progress: _progress[resource.id],
               error: _errors[resource.id],
               onInstall: () => _install(resource),
@@ -193,6 +194,7 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
             _ResourceCard(
               resource: resource,
               installed: _installed[resource.id] ?? false,
+              downloading: _tokens.containsKey(resource.id),
               progress: _progress[resource.id],
               error: _errors[resource.id],
               onInstall: () => _install(resource),
@@ -205,9 +207,9 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
         const SizedBox(height: AppSpacing.md),
         const BayazCard(
           child: Text(
-            'Provider URLs and exact SHA-256 checksums must be added to '
-            'assets/config/runtime_manifest.json before a model can be downloaded. '
-            'Bayaz does not host model files in this app repository.',
+            'Model downloads come from approved provider files and are checked '
+            'against the exact size and SHA-256 stored in this app. Bayaz does not '
+            'host model files in this repository.',
           ),
         ),
       ],
@@ -215,6 +217,7 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
   }
 
   Future<void> _install(ResourceDescriptor resource) async {
+    if (_tokens.containsKey(resource.id)) return;
     if (!resource.isDownloadable) {
       await showDialog<void>(
         context: context,
@@ -326,6 +329,7 @@ class _ResourceCard extends StatelessWidget {
   const _ResourceCard({
     required this.resource,
     required this.installed,
+    required this.downloading,
     required this.onInstall,
     required this.onCancel,
     required this.onRemove,
@@ -336,6 +340,7 @@ class _ResourceCard extends StatelessWidget {
 
   final ResourceDescriptor resource;
   final bool installed;
+  final bool downloading;
   final DownloadProgress? progress;
   final String? error;
   final VoidCallback onInstall;
@@ -345,7 +350,6 @@ class _ResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final downloading = progress != null;
     final size = resource.sizeBytes <= 0
         ? 'Size not configured'
         : _formatBytes(resource.sizeBytes);
