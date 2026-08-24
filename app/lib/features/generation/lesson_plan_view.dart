@@ -68,6 +68,7 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
         SavedTest(
           id: now.toString(),
           kind: 'lesson',
+          source: SavedContentSource.curriculumPack,
           topic: _plan.topic,
           topicId: _plan.topicId,
           createdAtMillis: now,

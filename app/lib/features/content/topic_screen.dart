@@ -230,6 +230,7 @@ class _TopicScreenState extends State<TopicScreen> {
     await _library.save(SavedTest(
       id: test.id,
       kind: 'mcq',
+      source: SavedContentSource.curriculumPack,
       topic: widget.topic.title,
       topicId: widget.topic.id,
       createdAtMillis: now,
