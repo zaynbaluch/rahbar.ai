@@ -236,10 +236,10 @@ def check_android_baseline() -> CheckResult:
         'id("com.android.application") version "8.11.1"': settings,
         'id("org.jetbrains.kotlin.android") version "2.3.20"': settings,
         "gradle-9.1.0-all.zip": wrapper,
-        'ndkVersion = "27.0.12077973"': build,
+        'ndkVersion = "28.2.13676358"': build,
         "JavaVersion.VERSION_17": build,
         'abiFilters += listOf("arm64-v8a")': build,
-        'ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-27.0.12077973}"': native_setup,
+        'ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-28.2.13676358}"': native_setup,
         'ANDROID_PLATFORM="${ANDROID_PLATFORM:-android-24}"': native_setup,
     }
     missing = [needle for needle, haystack in expected.items() if needle not in haystack]
@@ -258,7 +258,7 @@ def check_android_baseline() -> CheckResult:
     return CheckResult(
         "Android build baseline",
         "PASS",
-        "AGP 8.11.1, Kotlin 2.3.20, Gradle 9.1.0, NDK 27, Java 17, native API 24, arm64-only",
+        "AGP 8.11.1, Kotlin 2.3.20, Gradle 9.1.0, NDK 28.2.13676358, Java 17, native API 24, arm64-only",
     )
 
 
