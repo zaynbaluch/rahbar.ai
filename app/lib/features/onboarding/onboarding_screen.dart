@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/storage/debounced_writer.dart';
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
@@ -28,6 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _store = OnboardingStore();
   final _teacherController = TextEditingController();
   final _schoolController = TextEditingController();
+  late final DebouncedWriter<OnboardingState> _drafts;
 
   OnboardingState _state = const OnboardingState();
   LocalAiAvailability? _aiAvailability;
@@ -37,11 +39,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    _drafts = DebouncedWriter<OnboardingState>(save: _store.save);
     _load();
   }
 
   @override
   void dispose() {
+    _drafts.dispose();
     _teacherController.dispose();
     _schoolController.dispose();
     super.dispose();
@@ -165,7 +169,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               labelText: 'Teacher name',
               prefixIcon: Icon(Icons.person_outline_rounded),
             ),
-            onChanged: (_) => _saveDraft(),
+            onChanged: (_) => _scheduleDraftSave(),
           ),
           const SizedBox(height: AppSpacing.md),
           TextField(
@@ -175,7 +179,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               labelText: 'School name (optional)',
               prefixIcon: Icon(Icons.school_outlined),
             ),
-            onChanged: (_) => _saveDraft(),
+            onChanged: (_) => _scheduleDraftSave(),
           ),
         ],
       );
@@ -330,22 +334,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _next() async {
     final next = (_state.currentStep + 1).clamp(0, _stepCount - 1).toInt();
-    final updated = _state.copyWith(
-      currentStep: next,
-      teacherName: _teacherController.text.trim(),
-      schoolName: _schoolController.text.trim(),
-    );
-    await _store.save(updated);
-    if (!mounted) return;
-    setState(() => _state = updated);
+    await _saveAndShow(_snapshot(currentStep: next));
   }
 
   Future<void> _back() async {
     final previous = (_state.currentStep - 1).clamp(0, _stepCount - 1).toInt();
-    final updated = _state.copyWith(currentStep: previous);
-    await _store.save(updated);
-    if (!mounted) return;
-    setState(() => _state = updated);
+    await _saveAndShow(_snapshot(currentStep: previous));
   }
 
   Future<void> _skipOfflineAi() async {
@@ -354,14 +348,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _finish() async {
-    setState(() => _saving = true);
-    final completed = _state.copyWith(
+    final completed = _snapshot(
       currentStep: _stepCount - 1,
       completed: true,
-      teacherName: _teacherController.text.trim(),
-      schoolName: _schoolController.text.trim(),
     );
-    await _store.save(completed);
+    setState(() => _saving = true);
+    await _drafts.flush(completed);
     if (!mounted) return;
     setState(() {
       _state = completed;
@@ -374,13 +366,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  Future<void> _saveDraft() async {
-    final updated = _state.copyWith(
-      teacherName: _teacherController.text.trim(),
-      schoolName: _schoolController.text.trim(),
-    );
+  OnboardingState _snapshot({int? currentStep, bool? completed}) =>
+      _state.copyWith(
+        currentStep: currentStep,
+        completed: completed,
+        teacherName: _teacherController.text.trim(),
+        schoolName: _schoolController.text.trim(),
+      );
+
+  void _scheduleDraftSave() {
+    final updated = _snapshot();
     _state = updated;
-    await _store.save(updated);
+    _drafts.schedule(updated);
+  }
+
+  Future<void> _saveAndShow(OnboardingState updated) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await _drafts.flush(updated);
+    if (!mounted) return;
+    setState(() {
+      _state = updated;
+      _saving = false;
+    });
   }
 
   Future<void> _manageModels() async {
