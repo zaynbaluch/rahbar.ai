@@ -9,26 +9,45 @@ import '../onboarding/onboarding_store.dart';
 import 'resource_management_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.onboardingStore});
+
+  final OnboardingStore? onboardingStore;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _onboarding = OnboardingStore();
+  late final OnboardingStore _onboarding;
   OnboardingState? _profile;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
+    _onboarding = widget.onboardingStore ?? OnboardingStore();
     _load();
   }
 
   Future<void> _load() async {
-    final profile = await _onboarding.read();
-    if (!mounted) return;
-    setState(() => _profile = profile);
+    if (mounted) setState(() => _loadError = null);
+    try {
+      final profile = await _onboarding.read();
+      if (!mounted) return;
+      setState(() => _profile = profile);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadError = 'Setup data could not be read.');
+    }
+  }
+
+  Future<void> _resetSetup() async {
+    try {
+      await _onboarding.reset();
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _loadError = 'Setup data could not be reset.');
+    }
   }
 
   @override
@@ -37,9 +56,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Setup')),
       body: SafeArea(
-        child: profile == null
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
+        child: _loadError != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.storage_rounded, size: 48),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(_loadError!, textAlign: TextAlign.center),
+                      const SizedBox(height: AppSpacing.md),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        children: [
+                          OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                          FilledButton(
+                            onPressed: _resetSetup,
+                            child: const Text('Reset setup'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : profile == null
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
                   AppSpacing.sm,
@@ -140,7 +184,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _editOnboarding() async {
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => const OnboardingScreen(reconfigure: true),
+      builder: (_) => OnboardingScreen(
+        reconfigure: true,
+        store: _onboarding,
+      ),
     ));
     await _load();
   }
