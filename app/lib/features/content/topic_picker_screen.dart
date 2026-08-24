@@ -168,9 +168,10 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
             );
           },
         ),
-        const SectionHeader(
+        SectionHeader(
           title: 'Choose a curriculum topic',
-          subtitle: '${widget.className} ${widget.subjectName} · verified offline content',
+          subtitle:
+              '${widget.className} ${widget.subjectName} · verified offline content',
         ),
         const SizedBox(height: AppSpacing.sm),
         TextField(
@@ -218,12 +219,14 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
   }
 
   void _openTopic(Topic topic) {
-    unawaited(RecentAccessStore().record(
-      classCode: widget.classCode,
-      subjectCode: widget.subjectCode,
-      topicId: topic.id,
-      topicTitle: topic.title,
-    ));
+    unawaited(
+      RecentAccessStore().record(
+        classCode: widget.classCode,
+        subjectCode: widget.subjectCode,
+        topicId: topic.id,
+        topicTitle: topic.title,
+      ),
+    );
     Navigator.of(context)
         .push(
           MaterialPageRoute(
