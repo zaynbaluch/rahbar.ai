@@ -32,6 +32,7 @@ import time
 import numpy as np
 
 from . import checkpoint as ckpt
+from .content_validation import has_material_citation, scaffolding_reference_issues
 from . import llm
 from .build_db import DB, embed_texts, unpack
 from .rag_prompt import REPO, _is_exercise
@@ -362,21 +363,17 @@ def run_plan_gen(topic: dict, meta: dict) -> dict:
 def run_plan_verify(topic: dict, plan: dict) -> dict:
     """Groundedness + swap-safety. Cross-references are the one thing that would break
     variant swapping, and they are cheap to catch with a string check."""
-    bad_refs = ("as above", "as described above", "same apparatus", "same activity",
-                "the demonstration above", "continuing from", "as in the previous")
     flagged = []
     for section, variants in plan["sections"].items():
         for v in variants:
-            low = v["body"].lower()
-            for ref in (*bad_refs, *LEAKAGE):
-                if ref in low:
-                    flagged.append({"section": section, "label": v["label"],
-                                    "note": f"bad reference: {ref!r}"})
-                    break
+            issues = scaffolding_reference_issues(v["body"])
+            if issues:
+                flagged.append({"section": section, "label": v["label"],
+                                "note": f"bad reference: {', '.join(issues)}"})
             # Materials is a shopping list. A citation here ("Ch 4, 4.1.2 Alimentary
             # Canal") means the teacher is told to bring a textbook section to class.
             for m in v.get("materials", []):
-                if any(c in m.lower() for c in ("excerpt", "chapter", "ch ", "section")):
+                if has_material_citation(m):
                     flagged.append({"section": section, "label": v["label"],
                                     "note": f"materials contains a citation: {m!r}"})
                     break

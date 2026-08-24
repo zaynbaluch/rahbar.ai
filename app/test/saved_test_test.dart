@@ -81,6 +81,28 @@ ANSWER: B
     expect(reopened.materials, ['iron filings', 'sand']);
   });
 
+  test('reused item metadata survives structured test storage', () {
+    final paper = McqTest(
+      id: 'paper-with-repeat',
+      topic: 'Cells',
+      reusedItemIds: const {'item-1'},
+      questions: const [
+        McqQuestion(
+          number: 1,
+          difficulty: 'easy',
+          text: 'What is a cell?',
+          options: {'A': 'Unit of life', 'B': 'Rock', 'C': 'Gas', 'D': 'Metal'},
+          answer: 'A',
+          itemId: 'item-1',
+        ),
+      ],
+    );
+    final restored = McqTest.fromJson(paper.toJson());
+
+    expect(restored.reusedItemIds, {'item-1'});
+    expect(restored.itemIds, {'item-1'});
+  });
+
   test('older structured tests fall back to the saved file ID', () {
     final saved = SavedTest(
       id: 'legacy-paper-id',

@@ -155,22 +155,61 @@ class _TopicScreenState extends State<TopicScreen> {
     try {
       final used = await _usedItemIds(widget.topic.id);
       if (!mounted) return;
-      final test = widget.content.sampleTest(widget.topic.id, exclude: used);
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => McqTestScreen(
-          test: test,
-          showReadyAnimation: true,
-          onSave: () => _saveTest(test),
-        ),
-      ));
-    } on StateError catch (e) {
+      McqTest test;
+      try {
+        test = widget.content.sampleTest(widget.topic.id, exclude: used);
+      } on InsufficientUnusedItemsException catch (shortage) {
+        final reuse = await _confirmReuse(shortage);
+        if (reuse != true || !mounted) return;
+        test = widget.content.sampleTest(
+          widget.topic.id,
+          exclude: used,
+          allowReuse: true,
+        );
+      }
+      await _presentTest(test);
+    } on StateError catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
+        SnackBar(content: Text(error.message)),
       );
     } finally {
       if (mounted) setState(() => _openingTest = false);
     }
+  }
+
+  Future<bool?> _confirmReuse(InsufficientUnusedItemsException shortage) =>
+      showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Some questions will repeat'),
+          content: Text(
+            'Only ${shortage.availableUnused} unused verified questions remain. '
+            'A ${shortage.required}-question paper needs ${shortage.reuseCount} '
+            'previously used question${shortage.reuseCount == 1 ? '' : 's'}. '
+            'Bayaz will still reshuffle safe answer positions.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Create with repeats'),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _presentTest(McqTest test) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => McqTestScreen(
+        test: test,
+        showReadyAnimation: true,
+        onSave: () => _saveTest(test),
+      ),
+    ));
   }
 
   Future<Set<String>> _usedItemIds(String topicId) async {
