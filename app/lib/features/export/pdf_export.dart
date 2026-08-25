@@ -352,7 +352,9 @@ class PdfExport {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Bayaz AI - General Science, Grade 6',
+          teachingLabel(teachingContext).isEmpty
+              ? 'Bayaz AI'
+              : 'Bayaz AI - ${teachingLabel(teachingContext)}',
           style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
         ),
         pw.Text(

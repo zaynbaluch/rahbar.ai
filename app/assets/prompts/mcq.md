@@ -17,8 +17,8 @@ Rules you MUST follow:
   that are not in the excerpts.
 - Exactly **{{count}} questions**. Each has **4 options** labelled A, B, C, D with **exactly
   one correct answer**. Distractors must be plausible but clearly wrong per the excerpts.
-- **Mixed difficulty**: about 4 easy (recall), 4 medium (understand/apply), 2 hard
-  (analyse). Tag each question's difficulty.
+- **Mixed difficulty**: roughly 40% easy (recall), 40% medium (understand/apply),
+  and 20% hard (analyse). Tag each question's difficulty.
 - Simple, clear English suitable for 11–12 year-olds. One idea per question.
 - Output **only** the format below — no preamble, no explanations outside the format.
 - Never copy or mention the `CURRICULUM SOURCE` boundary labels.
