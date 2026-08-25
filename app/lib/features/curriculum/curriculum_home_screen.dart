@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/bayaz_card.dart';
+import '../../design_system/components/brand_app_bar.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../content/topic_picker_screen.dart';
@@ -142,6 +143,24 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.4;
     final tiles = _homeTiles();
     return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 72,
+        title: Tooltip(
+          message: 'Open Settings',
+          child: Semantics(
+            button: true,
+            label: 'Open Settings',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _openSettings,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                child: BrandAppBarTitle(),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -153,29 +172,6 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Semantics(
-                  button: true,
-                  label: 'Open Settings',
-                  child: Tooltip(
-                    message: 'Open Settings',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: _openSettings,
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xs),
-                        child: Image.asset(
-                          'assets/ui/branding/bayaz_logo.png',
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
               if (largeText)
                 Expanded(
                   child: SingleChildScrollView(
@@ -393,7 +389,9 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
       ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
     }
     if (!mounted) return;
-    setState(() => _teacher = _onboardingStore.read());
+    setState(() {
+      _teacher = _onboardingStore.read();
+    });
   }
 
   Future<void> _openWorkflow(TopicPickerMode mode) async {
