@@ -1,4 +1,5 @@
 import 'omr_grader.dart';
+import '../curriculum/teaching_context.dart';
 
 /// One graded answer sheet, persisted so a teacher can grade a whole class and
 /// keep a record. Keyed by the test ID (the same ID printed on the sheet). The
@@ -14,7 +15,8 @@ class GradedResult {
     required this.marks,
     required this.correctAnswers,
     required this.createdAtMillis,
-    this.schemaVersion = 2,
+    this.schemaVersion = 3,
+    this.teachingContext,
   });
 
   final String id;
@@ -30,6 +32,7 @@ class GradedResult {
   final String correctAnswers;
   final int createdAtMillis;
   final int schemaVersion;
+  final TeachingContext? teachingContext;
 
   int get pct => total == 0 ? 0 : (100 * correct / total).round();
   DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(createdAtMillis);
@@ -64,6 +67,7 @@ class GradedResult {
         'correctAnswers': correctAnswers,
         'createdAtMillis': createdAtMillis,
         'schemaVersion': schemaVersion,
+        if (teachingContext != null) 'teachingContext': teachingContext!.toJson(),
       };
 
   factory GradedResult.fromJson(Map<String, dynamic> j) => GradedResult(
@@ -77,5 +81,6 @@ class GradedResult {
         correctAnswers: j['correctAnswers'] as String? ?? '',
         createdAtMillis: j['createdAtMillis'] as int? ?? 0,
         schemaVersion: j['schemaVersion'] as int? ?? 1,
+        teachingContext: j['teachingContext'] == null ? null : TeachingContext.fromJson(Map<String,dynamic>.from(j['teachingContext'] as Map)),
       );
 }
