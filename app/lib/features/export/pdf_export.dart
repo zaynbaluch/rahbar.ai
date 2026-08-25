@@ -30,7 +30,10 @@ class PdfExport {
   /// Persistent paper ID printed on the sheet and reused by the gradebook.
   static String testId(McqTest test) => test.id;
 
-  static Future<Uint8List> build(McqTest test) async {
+  static Future<Uint8List> build(
+    McqTest test, {
+    TeachingContext? teachingContext,
+  }) async {
     final validation = test.validation;
     if (!validation.isReady) {
       throw InvalidMcqPaperException(validation.issues);
@@ -38,7 +41,7 @@ class PdfExport {
     final doc = pw.Document();
     final id = testId(test);
     final qs = test.questions;
-    doc.addPage(_paperPage(test, id, qs));
+    doc.addPage(_paperPage(test, id, qs, teachingContext));
     return doc.save();
   }
 
@@ -158,8 +161,14 @@ class PdfExport {
     ),
   );
 
-  static pw.Page _paperPage(McqTest test, String id, List<McqQuestion> qs) {
+  static pw.Page _paperPage(
+    McqTest test,
+    String id,
+    List<McqQuestion> qs,
+    TeachingContext? teachingContext,
+  ) {
     final n = qs.length;
+    final layout = OmrTemplate.layoutFor(n);
     return pw.MultiPage(
       // The OMR layer (fiducials + bubbles) is drawn in the page foreground at
       // absolute OmrTemplate coordinates, only on page 1 (the graded page).
@@ -167,7 +176,7 @@ class PdfExport {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(30),
         buildForeground: (context) =>
-            context.pageNumber == 1 ? _omrLayer(n) : pw.SizedBox(),
+            context.pageNumber == 1 ? _omrLayer(n, layout) : pw.SizedBox(),
       ),
       build: (context) => [
         // Reserve the top-right block where the OMR grid is drawn on top.
@@ -178,7 +187,7 @@ class PdfExport {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _header(test.topic, id),
+                  _header(test.topic, id, teachingContext),
                   pw.SizedBox(height: 10),
                   _studentFields(),
                   pw.SizedBox(height: 10),
@@ -193,10 +202,7 @@ class PdfExport {
                 ],
               ),
             ),
-            pw.SizedBox(
-              width: OmrTemplate.boxW + 12,
-              height: OmrTemplate.boxH + 8,
-            ),
+            pw.SizedBox(width: layout.boxW + 12, height: layout.boxH + 8),
           ],
         ),
         pw.Divider(height: 18),
@@ -206,18 +212,18 @@ class PdfExport {
   }
 
   // ---- OMR foreground: fiducials + boxed bubble grid at absolute coords ----
-  static pw.Widget _omrLayer(int n) {
+  static pw.Widget _omrLayer(int n, OmrLayout layout) {
     final children = <pw.Widget>[];
 
     // Corner fiducial markers.
-    for (final (fx, fy) in OmrTemplate.fiducials) {
+    for (final (fx, fy) in layout.fiducials) {
       children.add(
         pw.Positioned(
-          left: fx - OmrTemplate.fidSize / 2,
-          top: fy - OmrTemplate.fidSize / 2,
+          left: fx - layout.fidSize / 2,
+          top: fy - layout.fidSize / 2,
           child: pw.Container(
-            width: OmrTemplate.fidSize,
-            height: OmrTemplate.fidSize,
+            width: layout.fidSize,
+            height: layout.fidSize,
             color: PdfColors.black,
           ),
         ),
@@ -227,11 +233,11 @@ class PdfExport {
     // Answer box.
     children.add(
       pw.Positioned(
-        left: OmrTemplate.boxLeft,
-        top: OmrTemplate.boxTop,
+        left: layout.boxLeft,
+        top: layout.boxTop,
         child: pw.Container(
-          width: OmrTemplate.boxW,
-          height: OmrTemplate.boxH,
+          width: layout.boxW,
+          height: layout.boxH,
           decoration: pw.BoxDecoration(
             border: pw.Border.all(width: 0.8, color: PdfColors.grey600),
             borderRadius: pw.BorderRadius.circular(4),
@@ -244,8 +250,8 @@ class PdfExport {
     // photographs just the box).
     children.add(
       pw.Positioned(
-        left: OmrTemplate.boxLeft,
-        top: OmrTemplate.boxTop - 13,
+        left: layout.boxLeft,
+        top: layout.boxTop - 13,
         child: pw.Text(
           'ANSWERS  (photograph this box to grade)',
           style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
@@ -254,8 +260,8 @@ class PdfExport {
     );
     children.add(
       pw.Positioned(
-        left: OmrTemplate.boxLeft,
-        top: OmrTemplate.boxBottom + 3,
+        left: layout.boxLeft,
+        top: layout.boxBottom + 3,
         child: pw.Text(
           'Fill one bubble per row with a dark pen.',
           style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700),
@@ -264,11 +270,11 @@ class PdfExport {
     );
 
     // Column labels A B C D.
-    for (var c = 0; c < OmrTemplate.options; c++) {
+    for (var c = 0; c < layout.options; c++) {
       children.add(
         pw.Positioned(
-          left: OmrTemplate.colX(c) - 2.5,
-          top: OmrTemplate.colLabelY - 5,
+          left: layout.colX(c) - 2.5,
+          top: layout.colLabelY - 5,
           child: pw.Text(_letters[c], style: const pw.TextStyle(fontSize: 7)),
         ),
       );
@@ -278,23 +284,23 @@ class PdfExport {
     for (var q = 1; q <= n; q++) {
       children.add(
         pw.Positioned(
-          left: OmrTemplate.qLabelX,
-          top: OmrTemplate.rowY(q) - 4,
+          left: layout.qLabelX,
+          top: layout.rowY(q) - 4,
           child: pw.Text(
             'Q$q',
             style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
           ),
         ),
       );
-      for (var c = 0; c < OmrTemplate.options; c++) {
-        final (cx, cy) = OmrTemplate.bubbleCenter(q, c);
+      for (var c = 0; c < layout.options; c++) {
+        final (cx, cy) = layout.bubbleCenter(q, c);
         children.add(
           pw.Positioned(
-            left: cx - OmrTemplate.bubbleR,
-            top: cy - OmrTemplate.bubbleR,
+            left: cx - layout.bubbleR,
+            top: cy - layout.bubbleR,
             child: pw.Container(
-              width: OmrTemplate.bubbleR * 2,
-              height: OmrTemplate.bubbleR * 2,
+              width: layout.bubbleR * 2,
+              height: layout.bubbleR * 2,
               decoration: pw.BoxDecoration(
                 shape: pw.BoxShape.circle,
                 border: pw.Border.all(width: 0.9, color: PdfColors.black),
@@ -337,7 +343,11 @@ class PdfExport {
     );
   }
 
-  static pw.Widget _header(String topic, String id) {
+  static pw.Widget _header(
+    String topic,
+    String id,
+    TeachingContext? teachingContext,
+  ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
