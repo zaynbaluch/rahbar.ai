@@ -15,6 +15,7 @@ class OnboardingState {
     this.schoolName = '',
     this.selectedClasses = const ['6'],
     this.selectedSubjects = const ['general_science'],
+    this.selectedSubjectsByClass = const {'6': ['general_science']},
     this.offlineAiEnabled = false,
   });
 
@@ -25,6 +26,7 @@ class OnboardingState {
   final String schoolName;
   final List<String> selectedClasses;
   final List<String> selectedSubjects;
+  final Map<String, List<String>> selectedSubjectsByClass;
   final bool offlineAiEnabled;
 
   OnboardingState copyWith({
@@ -34,6 +36,7 @@ class OnboardingState {
     String? schoolName,
     List<String>? selectedClasses,
     List<String>? selectedSubjects,
+    Map<String, List<String>>? selectedSubjectsByClass,
     bool? offlineAiEnabled,
   }) =>
       OnboardingState(
@@ -44,6 +47,7 @@ class OnboardingState {
         schoolName: schoolName ?? this.schoolName,
         selectedClasses: selectedClasses ?? this.selectedClasses,
         selectedSubjects: selectedSubjects ?? this.selectedSubjects,
+        selectedSubjectsByClass: selectedSubjectsByClass ?? this.selectedSubjectsByClass,
         offlineAiEnabled: offlineAiEnabled ?? this.offlineAiEnabled,
       );
 
@@ -55,6 +59,7 @@ class OnboardingState {
         'school_name': schoolName,
         'selected_classes': selectedClasses,
         'selected_subjects': selectedSubjects,
+        'selected_subjects_by_class': selectedSubjectsByClass,
         'offline_ai_enabled': offlineAiEnabled,
       };
 
@@ -71,6 +76,8 @@ class OnboardingState {
             (json['selected_subjects'] as List? ?? const ['general_science'])
                 .map((item) => item.toString())
                 .toList(growable: false),
+        selectedSubjectsByClass: ((json['selected_subjects_by_class'] as Map?) ?? const {})
+            .map((key, value) => MapEntry(key.toString(), (value as List).map((e) => e.toString()).toList())),
         offlineAiEnabled: json['offline_ai_enabled'] as bool? ?? false,
       );
 }
