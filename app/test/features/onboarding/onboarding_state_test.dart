@@ -18,6 +18,7 @@ void main() {
     expect(restored.currentStep, 2);
     expect(restored.teacherName, 'Teacher One');
     expect(restored.offlineAiEnabled, isTrue);
+    expect(restored.selectedSubjectsByClass['6'], ['general_science']);
   });
 
   test('copyWith can complete onboarding without losing selections', () {
@@ -44,5 +45,6 @@ void main() {
 
     expect(restored.teacherName, 'Teacher One');
     expect(restored.schemaVersion, 2);
+    expect(restored.selectedSubjectsByClass['6'], ['general_science']);
   });
 }

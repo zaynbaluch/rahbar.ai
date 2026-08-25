@@ -86,6 +86,7 @@ class SavedTest {
         contentJson: contentJson ?? this.contentJson,
         topicId: topicId,
         excerptTitles: excerptTitles,
+        teachingContext: teachingContext,
       );
 
   Map<String, dynamic> toJson() => {

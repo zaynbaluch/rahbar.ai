@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 import 'package:bayaz_ai/features/omr/image_pick_recovery.dart';
+import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -126,5 +127,12 @@ void main() {
 
     expect(await service.recover(), isNull);
     expect(await store.read(), isNull);
+  });
+
+  test('pending image pick preserves teaching context', () async {
+    const context = TeachingContext(classCode: '6', className: 'Class 6', subjectCode: 'science', subjectName: 'Science');
+    await store.begin(_test(), ImageSource.camera, teachingContext: context);
+    final pending = await store.read();
+    expect(pending?.teachingContext?.subjectName, 'Science');
   });
 }
