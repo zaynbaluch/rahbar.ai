@@ -84,6 +84,12 @@ class LocalAiResources {
         onProgress: onProgress,
       );
 
+  Future<bool> isAutoDownloadSuppressed() =>
+      _manager.isAutoDownloadSuppressed();
+
+  Future<void> setAutoDownloadSuppressed(bool suppressed) =>
+      _manager.setAutoDownloadSuppressed(suppressed);
+
   Future<File> _installFirst(
     ResourceKind kind, {
     DownloadCancellationToken? cancellationToken,

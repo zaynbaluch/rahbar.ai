@@ -127,7 +127,7 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
         await _manager.remove(resource.id);
       }
     }
-    await _downloads.refresh();
+    await _downloads.markDownloadsRemovedByUser();
     if (!mounted) return;
     setState(() {
       _installed.clear();

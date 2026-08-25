@@ -92,6 +92,28 @@ class ResourceDownloadManager {
     return File(p.join(directory.path, resource.fileName));
   }
 
+  Future<File> _autoDownloadSuppressionFile() async {
+    final support = await getApplicationSupportDirectory();
+    return File(p.join(
+      support.path,
+      'preferences',
+      'offline_ai_auto_download_suppressed.v1',
+    ));
+  }
+
+  Future<bool> isAutoDownloadSuppressed() async =>
+      (await _autoDownloadSuppressionFile()).exists();
+
+  Future<void> setAutoDownloadSuppressed(bool suppressed) async {
+    final file = await _autoDownloadSuppressionFile();
+    if (suppressed) {
+      await file.parent.create(recursive: true);
+      if (!await file.exists()) await file.writeAsString('1', flush: true);
+      return;
+    }
+    if (await file.exists()) await file.delete();
+  }
+
   Future<bool> verifyIntegrity(ResourceDescriptor resource) async {
     if (resource.isBundled) return true;
     final file = await installedFile(resource);

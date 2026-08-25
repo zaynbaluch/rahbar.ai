@@ -52,11 +52,11 @@ class BackgroundAiDownloadController {
   /// Starts the automatic setup policy. The developer switch suppresses only
   /// this automatic action; an explicit teacher download remains available.
   Future<void> startIfNeeded() async {
-    if (!autoDownloadEnabled) {
+    if (!autoDownloadEnabled || await _resources.isAutoDownloadSuppressed()) {
       await refresh();
       return;
     }
-    await downloadMissing();
+    await _joinDownloadMissing();
   }
 
   /// Re-inspects the managed files without starting a download.
@@ -77,7 +77,19 @@ class BackgroundAiDownloadController {
 
   /// Downloads every missing Offline AI resource. Concurrent callers join the
   /// same operation instead of launching competing downloads.
-  Future<void> downloadMissing() {
+  Future<void> downloadMissing() async {
+    await _joinDownloadMissing();
+    if (_state.completed) {
+      await _resources.setAutoDownloadSuppressed(false);
+    }
+  }
+
+  Future<void> markDownloadsRemovedByUser() async {
+    await _resources.setAutoDownloadSuppressed(true);
+    await refresh();
+  }
+
+  Future<void> _joinDownloadMissing() {
     final active = _activeOperation;
     if (active != null) return active;
 

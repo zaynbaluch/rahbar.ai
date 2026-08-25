@@ -61,6 +61,12 @@ class ResourceManager {
 
   Future<void> remove(String id) => _downloads.remove(_find(id));
 
+  Future<bool> isAutoDownloadSuppressed() =>
+      _downloads.isAutoDownloadSuppressed();
+
+  Future<void> setAutoDownloadSuppressed(bool suppressed) =>
+      _downloads.setAutoDownloadSuppressed(suppressed);
+
   ResourceDescriptor _find(String id) => manifest.resources.firstWhere(
     (resource) => resource.id == id,
     orElse: () => throw StateError('Unknown resource: $id'),
