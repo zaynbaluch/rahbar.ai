@@ -189,25 +189,21 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
             color: AppColors.surface,
             border: Border(top: BorderSide(color: AppColors.outline)),
           ),
-          child: Row(
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _sharing ? null : _share,
-                  icon: const Icon(Icons.ios_share_rounded),
-                  label: Text(_sharing ? 'Sharing…' : 'Share'),
-                ),
+              OutlinedButton.icon(
+                onPressed: _sharing ? null : _share,
+                icon: const Icon(Icons.ios_share_rounded),
+                label: Text(_sharing ? 'Sharing…' : 'Share'),
               ),
-              if (!_saved) ...[
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: const Icon(Icons.bookmark_add_outlined),
-                    label: Text(_saving ? 'Saving…' : 'Save in Bayaz'),
-                  ),
+              if (!_saved)
+                FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: Text(_saving ? 'Saving…' : 'Save in Bayaz'),
                 ),
-              ],
             ],
           ),
         ),
@@ -378,17 +374,20 @@ class _MaterialsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(
                 Icons.inventory_2_outlined,
                 color: AppColors.warningText,
               ),
               const SizedBox(width: AppSpacing.xs),
-              Text(
-                'What to bring',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: AppColors.warningText),
+              Expanded(
+                child: Text(
+                  'What to bring',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppColors.warningText,
+                  ),
+                ),
               ),
             ],
           ),
@@ -447,29 +446,32 @@ class _SectionCard extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        LessonPlan.sectionTitles[section.section] ??
-                            section.section,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (canSwap && section.variantLabel.isNotEmpty)
-                        Text(
-                          section.variantLabel,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
+                  child: Text(
+                    LessonPlan.sectionTitles[section.section] ??
+                        section.section,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                if (section.minutes > 0)
-                  StatusChip(
-                    label: '${section.minutes} min',
-                    icon: Icons.schedule_outlined,
-                  ),
               ],
             ),
+            if (section.minutes > 0 ||
+                (canSwap && section.variantLabel.isNotEmpty))
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    if (canSwap && section.variantLabel.isNotEmpty)
+                      Text(section.variantLabel),
+                    if (section.minutes > 0)
+                      StatusChip(
+                        label: '${section.minutes} min',
+                        icon: Icons.schedule_outlined,
+                      ),
+                  ],
+                ),
+              ),
             const SizedBox(height: AppSpacing.sm),
             Text(section.body),
             // A material can be a full sentence, so each one is a wrapping row
