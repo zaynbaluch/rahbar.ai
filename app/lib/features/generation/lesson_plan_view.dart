@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import '../chat/clarification_context.dart';
 import '../chat/clarification_screen.dart';
 import '../content/content_service.dart';
 import '../curriculum/teaching_context.dart';
+import '../curriculum/recent_work_store.dart';
 import '../export/pdf_export.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
@@ -88,9 +90,10 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
         await override();
       } else {
         final now = DateTime.now().millisecondsSinceEpoch;
+        final id = now.toString();
         await _library.save(
           SavedTest(
-            id: now.toString(),
+            id: id,
             kind: 'lesson',
             source: widget.content == null
                 ? SavedContentSource.customAi
@@ -101,6 +104,11 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
             contentJson: _plan.toJson(),
             teachingContext: widget.teachingContext,
           ),
+        );
+        unawaited(
+          RecentWorkStore()
+              .update(RecentWorkReference(type: 'lesson', id: id))
+              .catchError((_) {}),
         );
       }
       if (!mounted) return;

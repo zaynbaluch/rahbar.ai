@@ -6,6 +6,7 @@ import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/recovered_data_notice.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../curriculum/recent_work_store.dart';
 import '../generation/lesson_plan_view.dart';
 import '../generation/mcq_test_view.dart';
 import '../omr/gradebook_store.dart';
@@ -19,12 +20,14 @@ class LibraryScreen extends StatefulWidget {
     this.gradebookStore,
     this.onPrepareLesson,
     this.onCreateTest,
+    this.recentWorkStore,
   });
 
   final LibraryStore? store;
   final GradebookStore? gradebookStore;
   final VoidCallback? onPrepareLesson;
   final VoidCallback? onCreateTest;
+  final RecentWorkStore? recentWorkStore;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -34,6 +37,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   late final LibraryStore _store = widget.store ?? LibraryStore();
   late final GradebookStore _gradebook =
       widget.gradebookStore ?? GradebookStore();
+  late final RecentWorkStore _recentWork =
+      widget.recentWorkStore ?? RecentWorkStore();
   final _search = TextEditingController();
   late Future<LocalStoreLoad<SavedTest>> _future = _store.load();
   String _filter = 'all';
@@ -54,6 +59,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _delete(SavedTest item) async {
     await _store.delete(item.id);
+    await _recentWork.invalidateTarget(item.id);
     _reload();
   }
 

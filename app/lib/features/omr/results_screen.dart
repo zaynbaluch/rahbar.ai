@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/storage/local_store_load.dart';
@@ -6,6 +8,7 @@ import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/recovered_data_notice.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../curriculum/recent_work_store.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import 'gradebook_store.dart';
@@ -85,11 +88,13 @@ class ResultsScreen extends StatefulWidget {
     required this.topic,
     this.store,
     this.libraryStore,
+    this.recentWorkStore,
   });
   final String testId;
   final String topic;
   final GradebookStore? store;
   final LibraryStore? libraryStore;
+  final RecentWorkStore? recentWorkStore;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -104,8 +109,23 @@ class _ResultsData {
 class _ResultsScreenState extends State<ResultsScreen> {
   late final GradebookStore _store = widget.store ?? GradebookStore();
   late final LibraryStore _library = widget.libraryStore ?? LibraryStore();
+  late final RecentWorkStore _recentWork =
+      widget.recentWorkStore ?? RecentWorkStore();
   late Future<_ResultsData> _future = _load();
   final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_markRecent().catchError((_) {}));
+  }
+
+  Future<void> _markRecent() async {
+    await _recentWork.clearActiveGrading();
+    await _recentWork.update(
+      RecentWorkReference(type: 'results', id: widget.testId),
+    );
+  }
 
   @override
   void dispose() {
