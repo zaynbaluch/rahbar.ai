@@ -125,6 +125,31 @@ void main() {
     },
   );
 
+  test('exports a valid fifteen-question OMR paper', () async {
+    final paper = McqTest(
+      topic: 'Cells',
+      expectedCount: 15,
+      questions: [
+        for (var i = 1; i <= 15; i++)
+          McqQuestion(
+            number: i,
+            difficulty: 'easy',
+            text: 'Question $i?',
+            options: const {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
+            answer: 'A',
+          ),
+      ],
+    );
+    final bytes = await PdfExport.build(
+      paper,
+      teachingContext: const TeachingContext(
+        className: 'Class 6',
+        subjectName: 'General Science',
+      ),
+    );
+    expect(bytes.lengthInBytes, greaterThan(2000));
+  });
+
   test('lesson PDF teaching header comes from route context', () {
     expect(
       PdfExport.teachingLabel(

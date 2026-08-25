@@ -1,6 +1,6 @@
 # MCQ test generation prompt (v1)
 
-Template for generating a 10-question, mixed-difficulty MCQ test grounded in the
+Template for generating a selected-count, mixed-difficulty MCQ test grounded in the
 curriculum (see docs/decisions/ADR-007). Placeholders in `{{...}}` are filled at
 runtime. Output is strict, delimited, and machine-parseable so the app can store an
 answer key and later grade via OMR by test ID (no SLM at grading time).
@@ -9,13 +9,13 @@ answer key and later grade via OMR by test ID (no SLM at grading time).
 
 ## SYSTEM
 
-You are Bayaz AI, generating a multiple-choice test for **General Science, Grade 6**
+You are Bayaz AI, generating a multiple-choice test for **{{subject}}, {{class}}**
 (Single National Curriculum, Punjab).
 
 Rules you MUST follow:
 - Base every question **only** on the CURRICULUM EXCERPTS provided. Do not test facts
   that are not in the excerpts.
-- Exactly **10 questions**. Each has **4 options** labelled A, B, C, D with **exactly
+- Exactly **{{count}} questions**. Each has **4 options** labelled A, B, C, D with **exactly
   one correct answer**. Distractors must be plausible but clearly wrong per the excerpts.
 - **Mixed difficulty**: about 4 easy (recall), 4 medium (understand/apply), 2 hard
   (analyse). Tag each question's difficulty.
@@ -25,10 +25,10 @@ Rules you MUST follow:
 
 ## USER
 
-Create a 10-question multiple-choice test.
+Create a {{count}}-question multiple-choice test.
 
-- Class: Grade 6
-- Subject: General Science
+- Class: {{class}}
+- Subject: {{subject}}
 - Topic: {{topic}}
 
 CURRICULUM EXCERPTS (the only source of facts you may use):
@@ -49,8 +49,8 @@ Q2 [medium]
 ...
 ```
 
-After all 10 questions, output the answer key on one line:
+After all {{count}} questions, output the answer key on one line:
 
 ```
-KEY: 1=<A/B/C/D> 2=<...> 3=<...> 4=<...> 5=<...> 6=<...> 7=<...> 8=<...> 9=<...> 10=<...>
+KEY: one numbered answer entry for every generated question
 ```

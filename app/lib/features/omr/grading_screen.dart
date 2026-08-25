@@ -8,6 +8,7 @@ import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../curriculum/teaching_context.dart';
 import '../export/pdf_export.dart';
 import '../generation/mcq_parser.dart';
 import 'gradebook_store.dart';
@@ -27,6 +28,7 @@ class GradingScreen extends StatefulWidget {
     this.picker,
     this.imageProcessor,
     this.gradebookStore,
+    this.teachingContext,
   });
 
   final McqTest test;
@@ -35,6 +37,7 @@ class GradingScreen extends StatefulWidget {
   final ImagePicker? picker;
   final OmrImageProcessor? imageProcessor;
   final GradebookStore? gradebookStore;
+  final TeachingContext? teachingContext;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
@@ -98,7 +101,11 @@ class _GradingScreenState extends State<GradingScreen> {
       _reviewConfirmed = false;
     });
     try {
-      await _recoveryStore.begin(widget.test, source);
+      await _recoveryStore.begin(
+        widget.test,
+        source,
+        teachingContext: widget.teachingContext,
+      );
       final shot = await _picker.pickImage(
         source: source,
         maxWidth: 2000,
@@ -108,11 +115,7 @@ class _GradingScreenState extends State<GradingScreen> {
         await _recoveryStore.clear();
         return;
       }
-      await _gradePath(
-        shot.path,
-        clearRecovery: true,
-        alreadyBusy: true,
-      );
+      await _gradePath(shot.path, clearRecovery: true, alreadyBusy: true);
     } catch (error) {
       await _recoveryStore.clear();
       if (mounted) setState(() => _error = '$error');
@@ -169,30 +172,38 @@ class _GradingScreenState extends State<GradingScreen> {
     if (result == null || _saved || _saving) return;
     if (result.needsReview > 0 && !_reviewConfirmed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Confirm that you reviewed the uncertain or blank answers.')),
+        const SnackBar(
+          content: Text(
+            'Confirm that you reviewed the uncertain or blank answers.',
+          ),
+        ),
       );
       return;
     }
     final typedName = _name.text.trim();
-    final studentName =
-        typedName.isEmpty ? 'Student $_nextStudentNumber' : typedName;
+    final studentName = typedName.isEmpty
+        ? 'Student $_nextStudentNumber'
+        : typedName;
     setState(() => _saving = true);
     try {
-      await _gradebook.save(GradedResult.fromGrading(
-        testId: _testId,
-        testTopic: widget.test.topic,
-        studentName: studentName,
-        result: result,
-      ));
+      await _gradebook.save(
+        GradedResult.fromGrading(
+          testId: _testId,
+          testTopic: widget.test.topic,
+          studentName: studentName,
+          result: result,
+          teachingContext: widget.teachingContext,
+        ),
+      );
       if (!mounted) return;
       setState(() {
         _saved = true;
         _studentNames.add(studentName);
         _nextStudentNumber = StudentNameSequence.nextNumber(_studentNames);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Result saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Result saved')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -203,12 +214,11 @@ class _GradingScreenState extends State<GradingScreen> {
     }
   }
 
-  void _openResults() => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => ResultsScreen(
-          testId: _testId,
-          topic: widget.test.topic,
-        ),
-      ));
+  void _openResults() => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => ResultsScreen(testId: _testId, topic: widget.test.topic),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -249,8 +259,7 @@ class _GradingScreenState extends State<GradingScreen> {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed:
-                        _busy ? null : () => _grade(ImageSource.gallery),
+                    onPressed: _busy ? null : () => _grade(ImageSource.gallery),
                     icon: const Icon(Icons.photo_library_outlined),
                     label: const Text('Choose image'),
                   ),
@@ -268,8 +277,10 @@ class _GradingScreenState extends State<GradingScreen> {
                       loop: true,
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    Text('Reading the answer bubbles…',
-                        style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      'Reading the answer bubbles…',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: AppSpacing.xs),
                     const LinearProgressIndicator(),
                   ],
@@ -286,11 +297,15 @@ class _GradingScreenState extends State<GradingScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.error_outline,
-                            color: Theme.of(context).colorScheme.error),
+                        Icon(
+                          Icons.error_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                         const SizedBox(width: AppSpacing.xs),
-                        Text('Could not grade this image',
-                            style: Theme.of(context).textTheme.titleSmall),
+                        Text(
+                          'Could not grade this image',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.xs),
@@ -322,32 +337,42 @@ class _GradingScreenState extends State<GradingScreen> {
                         value: _reviewConfirmed,
                         onChanged: _saved
                             ? null
-                            : (value) => setState(() => _reviewConfirmed = value ?? false),
-                        title: const Text('I reviewed the uncertain and blank answers'),
-                        subtitle: Text('${result.needsReview} answers require teacher confirmation.'),
+                            : (value) => setState(
+                                () => _reviewConfirmed = value ?? false,
+                              ),
+                        title: const Text(
+                          'I reviewed the uncertain and blank answers',
+                        ),
+                        subtitle: Text(
+                          '${result.needsReview} answers require teacher confirmation.',
+                        ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                     ],
                     const SizedBox(height: AppSpacing.sm),
                     FilledButton.icon(
                       onPressed: _saved || _saving ? null : _saveResult,
-                      icon: Icon(_saved
-                          ? Icons.check_circle_rounded
-                          : Icons.verified_outlined),
+                      icon: Icon(
+                        _saved
+                            ? Icons.check_circle_rounded
+                            : Icons.verified_outlined,
+                      ),
                       label: Text(
                         _saved
                             ? 'Result saved'
                             : _saving
-                                ? 'Saving…'
-                                : 'Confirm and save result',
+                            ? 'Saving…'
+                            : 'Confirm and save result',
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              Text('Question review',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Question review',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: AppSpacing.sm),
               BayazCard(
                 child: Column(
@@ -386,16 +411,16 @@ class _GradingHeader extends StatelessWidget {
         children: [
           Text(
             test.topic,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'Grade only papers printed from this exact test.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.88),
-                ),
+              color: Colors.white.withValues(alpha: 0.88),
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           StatusChip(
@@ -417,8 +442,10 @@ class _CaptureGuide extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Capture the ANSWERS box',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Capture the ANSWERS box',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'Keep all four black markers visible. Use even lighting, hold the phone parallel to the paper, and avoid shadows.',
@@ -445,17 +472,15 @@ class _ResultSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final percentage =
-        result.total == 0 ? 0 : (100 * result.correct / result.total).round();
+    final percentage = result.total == 0
+        ? 0
+        : (100 * result.correct / result.total).round();
     return BayazCard(
       color: const Color(0xFFF3F8FF),
       borderColor: const Color(0xFFC9D6FF),
       child: Row(
         children: [
-          const BayazFrameAnimation(
-            name: 'grading_complete',
-            size: 116,
-          ),
+          const BayazFrameAnimation(name: 'grading_complete', size: 116),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -464,11 +489,13 @@ class _ResultSummary extends StatelessWidget {
                 Text(
                   '${result.correct}/${result.total}',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: AppColors.primary,
-                      ),
+                    color: AppColors.primary,
+                  ),
                 ),
-                Text('$percentage% score',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '$percentage% score',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 Wrap(
                   spacing: AppSpacing.xs,
@@ -481,10 +508,12 @@ class _ResultSummary extends StatelessWidget {
                       foregroundColor: AppColors.success,
                     ),
                     StatusChip(
-                      label: '${result.total - result.correct - result.blank} incorrect',
+                      label:
+                          '${result.total - result.correct - result.blank} incorrect',
                       icon: Icons.cancel_outlined,
-                      backgroundColor:
-                          Theme.of(context).colorScheme.errorContainer,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.errorContainer,
                       foregroundColor: Theme.of(context).colorScheme.error,
                     ),
                     if (result.blank > 0)
@@ -520,13 +549,13 @@ class _QuestionResultRow extends StatelessWidget {
     final color = blank
         ? AppColors.textSecondary
         : correct
-            ? AppColors.success
-            : Theme.of(context).colorScheme.error;
+        ? AppColors.success
+        : Theme.of(context).colorScheme.error;
     final icon = blank
         ? Icons.help_outline
         : correct
-            ? Icons.check_circle_rounded
-            : Icons.cancel_rounded;
+        ? Icons.check_circle_rounded
+        : Icons.cancel_rounded;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -534,8 +563,10 @@ class _QuestionResultRow extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 21),
           const SizedBox(width: AppSpacing.sm),
-          Text('Q${question.number}',
-              style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            'Q${question.number}',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const Spacer(),
           Text('Key ${question.correct ?? '?'}'),
           const SizedBox(width: AppSpacing.sm),

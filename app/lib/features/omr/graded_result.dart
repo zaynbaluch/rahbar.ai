@@ -44,6 +44,7 @@ class GradedResult {
     required String testTopic,
     required String studentName,
     required OmrResult result,
+    TeachingContext? teachingContext,
   }) {
     return GradedResult(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -55,6 +56,7 @@ class GradedResult {
       marks: result.questions.map((q) => q.marked ?? '').join('|'),
       correctAnswers: result.questions.map((q) => q.correct ?? '').join('|'),
       createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      teachingContext: teachingContext,
     );
   }
 

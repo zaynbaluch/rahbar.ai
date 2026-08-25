@@ -26,15 +26,24 @@ class _Content extends ContentService {
   List<Topic> listTopics() => topics;
 
   @override
-  LessonPlan assemblePlan(String topicId, {Map<String, String> prefer = const {}, int? seed}) =>
-      const LessonPlan(
-        topicId: 'cells',
-        topic: 'Cells',
-        slos: ['Identify a cell.'],
-        sections: [
-          PlanSection(id: 'engage-1', section: 'engage', variantLabel: 'one', minutes: 5, body: 'Ask what living things are made of.'),
-        ],
-      );
+  LessonPlan assemblePlan(
+    String topicId, {
+    Map<String, String> prefer = const {},
+    int? seed,
+  }) => const LessonPlan(
+    topicId: 'cells',
+    topic: 'Cells',
+    slos: ['Identify a cell.'],
+    sections: [
+      PlanSection(
+        id: 'engage-1',
+        section: 'engage',
+        variantLabel: 'one',
+        minutes: 5,
+        body: 'Ask what living things are made of.',
+      ),
+    ],
+  );
 
   @override
   Map<String, List<PlanSection>> variantsFor(String topicId) => const {};
@@ -51,14 +60,18 @@ const _context = TeachingContext(
 );
 
 void main() {
-  testWidgets('lesson picker is focused and opens a lesson directly', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: TopicPickerScreen(
-        mode: TopicPickerMode.lesson,
-        teachingContext: _context,
-        content: _Content(),
+  testWidgets('lesson picker is focused and opens a lesson directly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TopicPickerScreen(
+          mode: TopicPickerMode.lesson,
+          teachingContext: _context,
+          content: _Content(),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Prepare Lesson'), findsOneWidget);
@@ -74,33 +87,85 @@ void main() {
     expect(find.byType(LessonPlanScreen), findsOneWidget);
   });
 
-  testWidgets('ambiguous workflow context is shown with Change', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: TopicPickerScreen(
-        mode: TopicPickerMode.lesson,
-        teachingContext: _context,
-        showContextChange: true,
-        content: _Content(),
+  testWidgets('ambiguous workflow context is shown with Change', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TopicPickerScreen(
+          mode: TopicPickerMode.lesson,
+          teachingContext: _context,
+          showContextChange: true,
+          content: _Content(),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Class 6 · General Science'), findsOneWidget);
     expect(find.text('Change'), findsOneWidget);
   });
 
-  testWidgets('no-match lesson search offers the custom lesson with query carried', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: TopicPickerScreen(
-        mode: TopicPickerMode.lesson,
-        teachingContext: _context,
-        content: _Content(),
-      ),
-    ));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Volcanoes');
-    await tester.pump();
+  testWidgets(
+    'curriculum test topic opens count-only setup with verified limits',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TopicPickerScreen(
+            mode: TopicPickerMode.test,
+            teachingContext: _context,
+            content: _Content(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cells'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Create a custom lesson'), findsOneWidget);
+      expect(find.text('Number of questions'), findsOneWidget);
+      expect(find.text('5'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('15'), findsOneWidget);
+      expect(find.text('Create test'), findsOneWidget);
+      expect(find.textContaining('difficulty'), findsNothing);
+      final fifteen = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, '15'),
+      );
+      expect(fifteen.onSelected, isNull);
+      final ten = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, '10'),
+      );
+      expect(ten.selected, isTrue);
+    },
+  );
+
+  test('curriculum test counts never exceed verified availability', () {
+    expect(availableTestCounts(16), [5, 10, 15]);
+    expect(availableTestCounts(12), [5, 10]);
+    expect(availableTestCounts(7), [5]);
+    expect(availableTestCounts(4), isEmpty);
+    expect(defaultTestCount(12), 10);
+    expect(defaultTestCount(7), 5);
+    expect(defaultTestCount(4), isNull);
   });
+
+  testWidgets(
+    'no-match lesson search offers the custom lesson with query carried',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TopicPickerScreen(
+            mode: TopicPickerMode.lesson,
+            teachingContext: _context,
+            content: _Content(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Volcanoes');
+      await tester.pump();
+
+      expect(find.text('Create a custom lesson'), findsOneWidget);
+    },
+  );
 }
