@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/bayaz_card.dart';
-import '../../design_system/components/section_header.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
-import '../onboarding/onboarding_screen.dart';
+import '../curriculum/curriculum_catalog.dart';
 import '../onboarding/onboarding_store.dart';
 import 'resource_management_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.onboardingStore});
-
   final OnboardingStore? onboardingStore;
 
   @override
@@ -18,177 +16,531 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final OnboardingStore _onboarding;
-  OnboardingState? _profile;
-  String? _loadError;
+  late final OnboardingStore _onboarding =
+      widget.onboardingStore ?? OnboardingStore();
+  late Future<OnboardingState> _profile = _onboarding.read();
+
+  void _reload() => setState(() {
+    _profile = _onboarding.read();
+  });
 
   @override
-  void initState() {
-    super.initState();
-    _onboarding = widget.onboardingStore ?? OnboardingStore();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (mounted) setState(() => _loadError = null);
-    try {
-      final profile = await _onboarding.read();
-      if (!mounted) return;
-      setState(() => _profile = profile);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadError = 'Setup data could not be read.');
-    }
-  }
-
-  Future<void> _resetSetup() async {
-    try {
-      await _onboarding.reset();
-      await _load();
-    } catch (_) {
-      if (mounted) setState(() => _loadError = 'Setup data could not be reset.');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = _profile;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Setup')),
-      body: SafeArea(
-        child: _loadError != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.storage_rounded, size: 48),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(_loadError!, textAlign: TextAlign.center),
-                      const SizedBox(height: AppSpacing.md),
-                      Wrap(
-                        spacing: AppSpacing.sm,
-                        children: [
-                          OutlinedButton(onPressed: _load, child: const Text('Retry')),
-                          FilledButton(
-                            onPressed: _resetSetup,
-                            child: const Text('Reset setup'),
-                          ),
-                        ],
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Settings')),
+    body: SafeArea(
+      child: FutureBuilder<OnboardingState>(
+        future: _profile,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: OutlinedButton(
+                onPressed: _reload,
+                child: const Text('Try again'),
+              ),
+            );
+          }
+          final state = snapshot.data ?? const OnboardingState();
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.xl,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SettingsSectionTitle('Profile'),
+                _SettingsCard(
+                  children: [
+                    _SettingsRow(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Teacher name',
+                      value: state.teacherName.trim().isEmpty
+                          ? 'Not set'
+                          : state.teacherName,
+                      onTap: () => _editText(
+                        title: 'Teacher name',
+                        value: state.teacherName,
+                        onSave: (value) => _onboarding.save(
+                          state.copyWith(teacherName: value),
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                    _SettingsRow(
+                      icon: Icons.school_outlined,
+                      title: 'School',
+                      value: state.schoolName.trim().isEmpty
+                          ? 'Not set'
+                          : state.schoolName,
+                      onTap: () => _editText(
+                        title: 'School',
+                        value: state.schoolName,
+                        onSave: (value) =>
+                            _onboarding.save(state.copyWith(schoolName: value)),
+                      ),
+                    ),
+                  ],
                 ),
-              )
-            : profile == null
-                ? const Center(child: CircularProgressIndicator())
-                : ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                  AppSpacing.xl,
-                ),
-                children: [
-                  const SectionHeader(
-                    title: 'Teacher setup',
-                    subtitle: 'Profile, coursework, and optional offline AI',
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  BayazCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const CircleAvatar(
-                            backgroundColor: AppColors.softBlue,
-                            child: Icon(
-                              Icons.person_outline_rounded,
-                              color: AppColors.primary,
+                const SizedBox(height: AppSpacing.lg),
+                const _SettingsSectionTitle('Teaching'),
+                _SettingsCard(
+                  children: [
+                    _SettingsRow(
+                      icon: Icons.menu_book_outlined,
+                      title: 'Classes & subjects',
+                      value: _teachingSummary(state),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TeachingSettingsScreen(
+                              store: _onboarding,
+                              initial: state,
                             ),
                           ),
-                          title: Text(
-                            profile.teacherName.trim().isEmpty
-                                ? 'Teacher profile'
-                                : profile.teacherName,
-                          ),
-                          subtitle: Text(
-                            profile.schoolName.trim().isEmpty
-                                ? 'School not specified'
-                                : profile.schoolName,
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: OutlinedButton.icon(
-                            onPressed: _editOnboarding,
-                            icon: const Icon(Icons.edit_outlined),
-                            label: const Text('Review setup'),
-                          ),
-                        ),
-                      ],
+                        );
+                        _reload();
+                      },
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  const SectionHeader(
-                    title: 'Downloads',
-                    subtitle: 'Manage optional offline AI models',
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  BayazCard(
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => const ResourceManagementScreen(),
-                    )),
-                    child: const ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        Icons.download_for_offline_outlined,
-                        color: AppColors.primary,
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const _SettingsSectionTitle('Offline features'),
+                _SettingsCard(
+                  children: [
+                    _SettingsRow(
+                      icon: Icons.offline_bolt_outlined,
+                      title: 'Offline AI',
+                      value: 'Manage offline downloads',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ResourceManagementScreen(),
+                        ),
                       ),
-                      title: Text('Manage offline resources'),
-                      subtitle: Text(
-                        'Class 6 coursework is included. AI models are optional.',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const _SettingsSectionTitle('Data & support'),
+                _SettingsCard(
+                  children: [
+                    _SettingsRow(
+                      icon: Icons.phone_android_outlined,
+                      title: 'Data on this device',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DataOnDeviceScreen(),
+                        ),
                       ),
-                      trailing: Icon(Icons.chevron_right_rounded),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  const SectionHeader(
-                    title: 'Data on this device',
-                    subtitle: 'The current MVP has no cloud analytics or background sync',
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  const BayazCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Lessons, tests, grading results, generated content, and chat '
-                          'remain on this device unless the teacher deliberately exports a file.',
+                    _SettingsRow(
+                      icon: Icons.bug_report_outlined,
+                      title: 'Report a problem',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ReportProblemScreen(),
                         ),
-                        SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'The app does not automatically upload teaching activity or run '
-                          'background synchronization.',
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const _SettingsSectionTitle('About'),
+                _SettingsCard(
+                  children: [
+                    _SettingsRow(
+                      icon: Icons.info_outline_rounded,
+                      title: 'About Bayaz AI',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AboutBayazScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
+
+  Future<void> _editText({
+    required String title,
+    required String value,
+    required Future<void> Function(String value) onSave,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TextSettingScreen(
+          title: title,
+          initialValue: value,
+          onSave: onSave,
+        ),
+      ),
+    );
+    _reload();
+  }
+
+  String _teachingSummary(OnboardingState state) {
+    final classes = CurriculumCatalog.classes
+        .where((item) => state.selectedClasses.contains(item.code))
+        .toList(growable: false);
+    if (classes.isEmpty) return 'Not set';
+    if (classes.length == 1) {
+      final codes =
+          state.selectedSubjectsByClass[classes.first.code] ?? const [];
+      final names = classes.first.subjects
+          .where((subject) => codes.contains(subject.code))
+          .map((subject) => subject.name)
+          .join(', ');
+      return names.isEmpty
+          ? classes.first.name
+          : '${classes.first.name} · $names';
+    }
+    return '${classes.length} classes';
+  }
+}
+
+class TextSettingScreen extends StatefulWidget {
+  const TextSettingScreen({
+    super.key,
+    required this.title,
+    required this.initialValue,
+    required this.onSave,
+  });
+  final String title;
+  final String initialValue;
+  final Future<void> Function(String value) onSave;
+
+  @override
+  State<TextSettingScreen> createState() => _TextSettingScreenState();
+}
+
+class _TextSettingScreenState extends State<TextSettingScreen> {
+  late final _controller = TextEditingController(text: widget.initialValue);
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await widget.onSave(_controller.text.trim());
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.title)),
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              decoration: InputDecoration(labelText: widget.title),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: Text(_saving ? 'Saving…' : 'Save'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class TeachingSettingsScreen extends StatefulWidget {
+  const TeachingSettingsScreen({
+    super.key,
+    required this.store,
+    required this.initial,
+  });
+  final OnboardingStore store;
+  final OnboardingState initial;
+
+  @override
+  State<TeachingSettingsScreen> createState() => _TeachingSettingsScreenState();
+}
+
+class _TeachingSettingsScreenState extends State<TeachingSettingsScreen> {
+  late final Set<String> _classes = widget.initial.selectedClasses.toSet();
+  late final Map<String, Set<String>> _subjects = {
+    for (final entry in widget.initial.selectedSubjectsByClass.entries)
+      entry.key: entry.value.toSet(),
+  };
+  bool _saving = false;
+
+  Future<void> _save() async {
+    if (_saving || _classes.isEmpty) return;
+    setState(() => _saving = true);
+    final byClass = <String, List<String>>{
+      for (final code in _classes)
+        code: (_subjects[code] ?? <String>{}).toList(growable: false),
+    };
+    final flat = byClass.values.expand((values) => values).toSet().toList();
+    await widget.store.save(
+      widget.initial.copyWith(
+        selectedClasses: _classes.toList(growable: false),
+        selectedSubjects: flat,
+        selectedSubjectsByClass: byClass,
+      ),
+    );
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Classes & subjects')),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        children: [
+          for (final item in CurriculumCatalog.classes) ...[
+            CheckboxListTile(
+              value: _classes.contains(item.code),
+              title: Text(item.name),
+              contentPadding: EdgeInsets.zero,
+              onChanged: (selected) => setState(() {
+                if (selected == true) {
+                  _classes.add(item.code);
+                  _subjects.putIfAbsent(
+                    item.code,
+                    () => item.subjects.map((s) => s.code).toSet(),
+                  );
+                } else {
+                  _classes.remove(item.code);
+                }
+              }),
+            ),
+            if (_classes.contains(item.code))
+              Padding(
+                padding: const EdgeInsets.only(left: AppSpacing.md),
+                child: Column(
+                  children: [
+                    for (final subject in item.subjects)
+                      CheckboxListTile(
+                        value: (_subjects[item.code] ?? <String>{}).contains(
+                          subject.code,
+                        ),
+                        title: Text(subject.name),
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (selected) => setState(() {
+                          final values = _subjects.putIfAbsent(
+                            item.code,
+                            () => <String>{},
+                          );
+                          if (selected == true) {
+                            values.add(subject.code);
+                          } else {
+                            values.remove(subject.code);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
               ),
+            const Divider(),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(
+            onPressed: _saving || _classes.isEmpty ? null : _save,
+            child: Text(_saving ? 'Saving…' : 'Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class DataOnDeviceScreen extends StatelessWidget {
+  const DataOnDeviceScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Data on this device')),
+    body: const SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.md),
+        child: BayazCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Bayaz keeps your saved lessons, tests, class results, and teaching settings on this device.',
+              ),
+              SizedBox(height: AppSpacing.sm),
+              Text(
+                'Nothing is automatically uploaded or synchronized in this build. Files leave the device only when you deliberately share them.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class ReportProblemScreen extends StatefulWidget {
+  const ReportProblemScreen({super.key});
+  @override
+  State<ReportProblemScreen> createState() => _ReportProblemScreenState();
+}
+
+class _ReportProblemScreenState extends State<ReportProblemScreen> {
+  final _details = TextEditingController();
+  @override
+  void dispose() {
+    _details.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report not sent'),
+        content: const Text(
+          'No report destination is configured in this build. Bayaz has not uploaded your description or any device data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _editOnboarding() async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => OnboardingScreen(
-        reconfigure: true,
-        store: _onboarding,
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Report a problem')),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        children: [
+          const Text(
+            'Describe what happened. Diagnostic information stays on this device unless a future build provides an explicit way to send it.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _details,
+            minLines: 4,
+            maxLines: 8,
+            decoration: const InputDecoration(
+              labelText: 'What went wrong? (optional)',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(onPressed: _send, child: const Text('Send report')),
+        ],
       ),
-    ));
-    await _load();
-  }
+    ),
+  );
+}
+
+class AboutBayazScreen extends StatelessWidget {
+  const AboutBayazScreen({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('About Bayaz AI')),
+    body: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/ui/branding/bayaz_logo.png',
+                width: 120,
+                semanticLabel: 'Bayaz AI',
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Bayaz AI',
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineSmall?.copyWith(color: AppColors.primary),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              const Text(
+                'An offline-first teaching assistant for preparing lessons, creating tests, grading papers, and understanding class results.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              const Text('Version 1.0.0'),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SettingsSectionTitle extends StatelessWidget {
+  const _SettingsSectionTitle(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+    child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+  );
+}
+
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => BayazCard(
+    child: Column(
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          children[i],
+          if (i != children.length - 1) const Divider(height: 1),
+        ],
+      ],
+    ),
+  );
+}
+
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.value,
+  });
+  final IconData icon;
+  final String title;
+  final String? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(icon, color: AppColors.primary),
+    title: Text(title),
+    subtitle: value == null ? null : Text(value!),
+    trailing: const Icon(Icons.chevron_right_rounded),
+    onTap: onTap,
+  );
 }
