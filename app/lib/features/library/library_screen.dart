@@ -83,10 +83,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return _LibraryError(error: '${snapshot.error}', onRetry: _reload);
+              return _LibraryError(
+                error: '${snapshot.error}',
+                onRetry: _reload,
+              );
             }
-            final load = snapshot.data ??
-                const LocalStoreLoad<SavedTest>(items: []);
+            final load =
+                snapshot.data ?? const LocalStoreLoad<SavedTest>(items: []);
             final all = load.items;
             final query = _search.text.trim().toLowerCase();
             final visible = all.where((item) {
@@ -181,17 +184,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 background: Container(
                                   alignment: Alignment.centerRight,
                                   padding: const EdgeInsets.only(
-                                      right: AppSpacing.lg),
+                                    right: AppSpacing.lg,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .errorContainer,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.errorContainer,
                                     borderRadius: BorderRadius.circular(16),
                                   ),
-                                  child: Icon(Icons.delete_outline,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onErrorContainer),
+                                  child: Icon(
+                                    Icons.delete_outline,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
+                                  ),
                                 ),
                                 child: _LibraryCard(item: item),
                               );
@@ -219,12 +225,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final asset = _filter == 'lesson'
         ? 'assets/ui/illustrations/no_saved_lessons.webp'
         : _filter == 'mcq'
-            ? 'assets/ui/illustrations/no_saved_tests.webp'
-            : 'assets/ui/illustrations/no_search_results.webp';
+        ? 'assets/ui/illustrations/no_saved_tests.webp'
+        : 'assets/ui/illustrations/no_search_results.webp';
     return BayazEmptyState(
       asset: asset,
       title: 'Nothing matches this view',
-      message: 'Change the filter or clear the search to see other saved items.',
+      message:
+          'Change the filter or clear the search to see other saved items.',
       action: TextButton.icon(
         onPressed: () {
           _search.clear();
@@ -269,9 +276,9 @@ class _LibraryCard extends StatelessWidget {
     final date = item.createdAt;
     final isTest = item.kind == 'mcq';
     return BayazCard(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SavedTestScreen(test: item),
-      )),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => SavedTestScreen(test: item))),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -308,8 +315,9 @@ class _LibraryCard extends StatelessWidget {
                       icon: isTest
                           ? Icons.checklist_rounded
                           : Icons.menu_book_rounded,
-                      backgroundColor:
-                          isTest ? AppColors.softGold : AppColors.softBlue,
+                      backgroundColor: isTest
+                          ? AppColors.softGold
+                          : AppColors.softBlue,
                       foregroundColor: isTest
                           ? AppColors.warningText
                           : AppColors.navy,
@@ -343,8 +351,10 @@ class _LibraryCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded,
-              color: AppColors.textSecondary),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.textSecondary,
+          ),
         ],
       ),
     );
@@ -363,7 +373,10 @@ class SavedTestScreen extends StatelessWidget {
     }
     final structured = test.toLessonPlan();
     if (structured != null) {
-      return LessonPlanReadOnlyScreen(plan: structured);
+      return LessonPlanReadOnlyScreen(
+        plan: structured,
+        teachingContext: test.teachingContext,
+      );
     }
     return _LegacyLessonScreen(test: test);
   }
@@ -377,8 +390,7 @@ class _LegacyLessonScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(test.topic,
-            maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(test.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -408,15 +420,22 @@ class _LibraryError extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline,
-                size: 44, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline,
+              size: 44,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: AppSpacing.sm),
-            Text('Could not open My Work',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Could not open My Work',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.xs),
-            Text(error,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: AppSpacing.md),
             OutlinedButton.icon(
               onPressed: onRetry,
