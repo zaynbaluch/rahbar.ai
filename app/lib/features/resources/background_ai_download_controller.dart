@@ -50,6 +50,11 @@ class BackgroundAiDownloadController {
     }
   }
 
+  Future<void> retry() async {
+    _state = const BackgroundAiDownloadState();
+    await startIfNeeded();
+  }
+
   void _set(BackgroundAiDownloadState value) {
     _state = value;
     _updates.add(value);
