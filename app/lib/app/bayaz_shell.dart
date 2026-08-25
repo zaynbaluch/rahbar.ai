@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../features/curriculum/curriculum_home_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/omr/results_overview_screen.dart';
+import '../features/omr/grade_papers_screen.dart';
 import '../features/resources/background_ai_download_controller.dart';
 
 class BayazShell extends StatefulWidget {
@@ -56,7 +57,9 @@ class _BayazShellState extends State<BayazShell> {
     final tabs = <Widget>[
       CurriculumHomeScreen(
         backgroundAiController: _backgroundAi,
-        onGradePapers: () => _selectTab(1),
+        onGradePapers: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const GradePapersScreen())),
         onContinueRecent: () => _selectTab(1),
       ),
       LibraryScreen(key: ValueKey(_libraryRevision)),
