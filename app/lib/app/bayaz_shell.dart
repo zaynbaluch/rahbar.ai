@@ -1,13 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/curriculum/curriculum_home_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/omr/results_overview_screen.dart';
+import '../features/resources/background_ai_download_controller.dart';
 
-/// The three existing teacher workflows: prepare, reopen, and review grading.
-/// No destination advertises functionality that is not backed by current storage.
 class BayazShell extends StatefulWidget {
-  const BayazShell({super.key});
+  const BayazShell({
+    super.key,
+    this.backgroundAiController,
+    this.autoStartAi = true,
+  });
+
+  final BackgroundAiDownloadController? backgroundAiController;
+  final bool autoStartAi;
 
   @override
   State<BayazShell> createState() => _BayazShellState();
@@ -17,11 +25,40 @@ class _BayazShellState extends State<BayazShell> {
   int _index = 0;
   int _libraryRevision = 0;
   int _resultsRevision = 0;
+  late final BackgroundAiDownloadController _backgroundAi;
+  late final bool _ownsBackgroundAi;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsBackgroundAi = widget.backgroundAiController == null;
+    _backgroundAi =
+        widget.backgroundAiController ?? BackgroundAiDownloadController();
+    if (widget.autoStartAi) unawaited(_backgroundAi.startIfNeeded());
+  }
+
+  @override
+  void dispose() {
+    if (_ownsBackgroundAi) _backgroundAi.dispose();
+    super.dispose();
+  }
+
+  void _selectTab(int value) {
+    setState(() {
+      _index = value;
+      if (value == 1) _libraryRevision++;
+      if (value == 2) _resultsRevision++;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final tabs = <Widget>[
-      const CurriculumHomeScreen(),
+      CurriculumHomeScreen(
+        backgroundAiController: _backgroundAi,
+        onGradePapers: () => _selectTab(1),
+        onContinueRecent: () => _selectTab(1),
+      ),
       LibraryScreen(key: ValueKey(_libraryRevision)),
       ResultsOverviewScreen(key: ValueKey(_resultsRevision)),
     ];
@@ -30,13 +67,7 @@ class _BayazShellState extends State<BayazShell> {
       body: IndexedStack(index: _index, children: tabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) {
-          setState(() {
-            _index = value;
-            if (value == 1) _libraryRevision++;
-            if (value == 2) _resultsRevision++;
-          });
-        },
+        onDestinationSelected: _selectTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
