@@ -59,8 +59,9 @@ class _LongOperationPanelState extends State<LongOperationPanel> {
 
   void _start() {
     _timer?.cancel();
-    if (widget.messages.length <= 1 && widget.animationNames.length <= 1)
+    if (widget.messages.length <= 1 && widget.animationNames.length <= 1) {
       return;
+    }
     _timer = Timer.periodic(widget.rotateEvery, (_) {
       if (!mounted) return;
       setState(() => _index++);
