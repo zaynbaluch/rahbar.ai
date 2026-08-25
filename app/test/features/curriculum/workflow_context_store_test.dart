@@ -15,8 +15,18 @@ void main() {
 
   test('lesson and test contexts persist independently', () async {
     final store = WorkflowContextStore(fileProvider: () async => file);
-    const lesson = TeachingContext(classCode: '6', className: 'Class 6', subjectCode: 'science', subjectName: 'Science');
-    const testContext = TeachingContext(classCode: '7', className: 'Class 7', subjectCode: 'math', subjectName: 'Math');
+    const lesson = TeachingContext(
+      classCode: '6',
+      className: 'Class 6',
+      subjectCode: 'science',
+      subjectName: 'Science',
+    );
+    const testContext = TeachingContext(
+      classCode: '7',
+      className: 'Class 7',
+      subjectCode: 'math',
+      subjectName: 'Math',
+    );
     await store.save('lesson', lesson);
     await store.save('test', testContext);
 

@@ -21,19 +21,25 @@ class _FailingStore extends OnboardingStore {
 }
 
 void main() {
-  testWidgets('startup shows retry and reset instead of spinning forever',
-      (tester) async {
+  testWidgets('startup shows retry and reset instead of spinning forever', (
+    tester,
+  ) async {
     final store = _FailingStore();
-    await tester.pumpWidget(MaterialApp(
-      home: OnboardingGate(
-        store: store,
-        inspectAi: () async => null,
-        child: const Text('App'),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingGate(
+          store: store,
+          inspectAi: () async => null,
+          child: const Text('App'),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Bayaz could not read setup data on this device.'), findsOneWidget);
+    expect(
+      find.text('Bayaz could not read setup data on this device.'),
+      findsOneWidget,
+    );
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('Reset setup'), findsOneWidget);
 
@@ -42,6 +48,6 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(store.resetCalls, 1);
-    expect(find.text('Welcome to Bayaz AI'), findsOneWidget);
+    expect(find.text('Welcome to Bayaz'), findsOneWidget);
   });
 }

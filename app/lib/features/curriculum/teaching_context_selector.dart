@@ -10,10 +10,12 @@ Future<TeachingContext?> showTeachingContextSelector(
   required Map<String, List<String>> selectedSubjectsByClass,
   TeachingContext? initial,
 }) {
-  final configured = classes.where((c) {
-    final subjects = selectedSubjectsByClass[c.code] ?? const <String>[];
-    return subjects.any((code) => c.subjects.any((s) => s.code == code));
-  }).toList(growable: false);
+  final configured = classes
+      .where((c) {
+        final subjects = selectedSubjectsByClass[c.code] ?? const <String>[];
+        return subjects.any((code) => c.subjects.any((s) => s.code == code));
+      })
+      .toList(growable: false);
   if (configured.isEmpty) return Future.value(null);
   return showModalBottomSheet<TeachingContext>(
     context: context,
@@ -37,10 +39,12 @@ class _TeachingContextSelectorSheet extends StatefulWidget {
   final TeachingContext? initial;
 
   @override
-  State<_TeachingContextSelectorSheet> createState() => _TeachingContextSelectorSheetState();
+  State<_TeachingContextSelectorSheet> createState() =>
+      _TeachingContextSelectorSheetState();
 }
 
-class _TeachingContextSelectorSheetState extends State<_TeachingContextSelectorSheet> {
+class _TeachingContextSelectorSheetState
+    extends State<_TeachingContextSelectorSheet> {
   late CurriculumClass _class;
   CurriculumSubject? _subject;
 
@@ -55,8 +59,11 @@ class _TeachingContextSelectorSheetState extends State<_TeachingContextSelectorS
   }
 
   List<CurriculumSubject> get _subjects {
-    final allowed = widget.selectedSubjectsByClass[_class.code] ?? const <String>[];
-    return _class.subjects.where((s) => allowed.contains(s.code)).toList(growable: false);
+    final allowed =
+        widget.selectedSubjectsByClass[_class.code] ?? const <String>[];
+    return _class.subjects
+        .where((s) => allowed.contains(s.code))
+        .toList(growable: false);
   }
 
   void _syncSubject({String? preferred}) {
@@ -127,14 +134,14 @@ class _TeachingContextSelectorSheetState extends State<_TeachingContextSelectorS
               onPressed: _subject == null
                   ? null
                   : () => Navigator.pop(
-                        context,
-                        TeachingContext(
-                          classCode: _class.code,
-                          className: _class.name,
-                          subjectCode: _subject!.code,
-                          subjectName: _subject!.name,
-                        ),
+                      context,
+                      TeachingContext(
+                        classCode: _class.code,
+                        className: _class.name,
+                        subjectCode: _subject!.code,
+                        subjectName: _subject!.name,
                       ),
+                    ),
               child: const Text('Done'),
             ),
           ],

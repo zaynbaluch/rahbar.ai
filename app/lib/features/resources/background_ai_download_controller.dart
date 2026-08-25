@@ -24,8 +24,8 @@ class BackgroundAiDownloadController {
   BackgroundAiDownloadController({
     LocalAiResources? resources,
     bool? autoDownloadEnabled,
-  })  : _resources = resources ?? LocalAiResources(),
-        autoDownloadEnabled = autoDownloadEnabled ?? !autoDownloadDisabled;
+  }) : _resources = resources ?? LocalAiResources(),
+       autoDownloadEnabled = autoDownloadEnabled ?? !autoDownloadDisabled;
 
   static const bool autoDownloadDisabled = bool.fromEnvironment(
     'BAYAZ_DISABLE_AUTO_AI_DOWNLOAD',
@@ -61,19 +61,23 @@ class BackgroundAiDownloadController {
           _set(const BackgroundAiDownloadState(running: true));
           return;
         }
-        _set(BackgroundAiDownloadState(
-          running: true,
-          progress: ((completedSteps + local) / totalSteps).clamp(0.0, 1.0),
-        ));
+        _set(
+          BackgroundAiDownloadState(
+            running: true,
+            progress: ((completedSteps + local) / totalSteps).clamp(0.0, 1.0),
+          ),
+        );
       }
 
       if (missingEmbedding) {
         await _resources.installEmbeddingModel(onProgress: updateProgress);
         completedSteps++;
-        _set(BackgroundAiDownloadState(
-          running: true,
-          progress: totalSteps == 0 ? null : completedSteps / totalSteps,
-        ));
+        _set(
+          BackgroundAiDownloadState(
+            running: true,
+            progress: totalSteps == 0 ? null : completedSteps / totalSteps,
+          ),
+        );
       }
       if (missingLanguage) {
         await _resources.installLanguageModel(onProgress: updateProgress);

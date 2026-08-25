@@ -7,16 +7,16 @@ import '../curriculum/teaching_context.dart';
 enum SavedContentSource { curriculumPack, customAi, legacy }
 
 String _sourceWireName(SavedContentSource source) => switch (source) {
-      SavedContentSource.curriculumPack => 'curriculum_pack',
-      SavedContentSource.customAi => 'custom_ai',
-      SavedContentSource.legacy => 'legacy',
-    };
+  SavedContentSource.curriculumPack => 'curriculum_pack',
+  SavedContentSource.customAi => 'custom_ai',
+  SavedContentSource.legacy => 'legacy',
+};
 
 SavedContentSource _sourceFromWire(String? value) => switch (value) {
-      'curriculum_pack' => SavedContentSource.curriculumPack,
-      'custom_ai' => SavedContentSource.customAi,
-      _ => SavedContentSource.legacy,
-    };
+  'curriculum_pack' => SavedContentSource.curriculumPack,
+  'custom_ai' => SavedContentSource.customAi,
+  _ => SavedContentSource.legacy,
+};
 
 /// A test or lesson plan saved to the on-device library.
 ///
@@ -44,12 +44,14 @@ class SavedTest {
   final SavedContentSource source;
 
   final String rawOutput; // SLM path: the model's text, re-parsed on open
-  final Map<String, dynamic>? contentJson; // structured content, regardless of origin
+  final Map<String, dynamic>?
+  contentJson; // structured content, regardless of origin
   final String? topicId; // content-pack topic, when it came from the bank
   final List<String> excerptTitles;
   final TeachingContext? teachingContext;
 
-  DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(createdAtMillis);
+  DateTime get createdAt =>
+      DateTime.fromMillisecondsSinceEpoch(createdAtMillis);
 
   bool get fromPack => source == SavedContentSource.curriculumPack;
   bool get fromCustomAi => source == SavedContentSource.customAi;
@@ -77,41 +79,42 @@ class SavedTest {
       contentJson == null ? null : LessonPlan.fromJson(contentJson!);
 
   SavedTest copyWith({Map<String, dynamic>? contentJson}) => SavedTest(
-        id: id,
-        kind: kind,
-        topic: topic,
-        createdAtMillis: createdAtMillis,
-        source: source,
-        rawOutput: rawOutput,
-        contentJson: contentJson ?? this.contentJson,
-        topicId: topicId,
-        excerptTitles: excerptTitles,
-        teachingContext: teachingContext,
-      );
+    id: id,
+    kind: kind,
+    topic: topic,
+    createdAtMillis: createdAtMillis,
+    source: source,
+    rawOutput: rawOutput,
+    contentJson: contentJson ?? this.contentJson,
+    topicId: topicId,
+    excerptTitles: excerptTitles,
+    teachingContext: teachingContext,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind,
-        'topic': topic,
-        'createdAtMillis': createdAtMillis,
-        'source': _sourceWireName(source),
-        'rawOutput': rawOutput,
-        if (contentJson != null) 'contentJson': jsonEncode(contentJson),
-        if (topicId != null) 'topicId': topicId,
-        'excerptTitles': excerptTitles,
-        if (teachingContext != null) 'teachingContext': teachingContext!.toJson(),
-      };
+    'id': id,
+    'kind': kind,
+    'topic': topic,
+    'createdAtMillis': createdAtMillis,
+    'source': _sourceWireName(source),
+    'rawOutput': rawOutput,
+    if (contentJson != null) 'contentJson': jsonEncode(contentJson),
+    if (topicId != null) 'topicId': topicId,
+    'excerptTitles': excerptTitles,
+    if (teachingContext != null) 'teachingContext': teachingContext!.toJson(),
+  };
 
   factory SavedTest.fromJson(Map<String, dynamic> j) {
     final raw = j['contentJson'];
     final contentJson = raw == null
         ? null
         : (raw is String
-            ? jsonDecode(raw) as Map<String, dynamic>
-            : Map<String, dynamic>.from(raw as Map));
+              ? jsonDecode(raw) as Map<String, dynamic>
+              : Map<String, dynamic>.from(raw as Map));
     final topicId = j['topicId'] as String?;
     final savedSource = j['source'] as String?;
-    final source = savedSource == null &&
+    final source =
+        savedSource == null &&
             contentJson != null &&
             topicId != null &&
             topicId.trim().isNotEmpty
@@ -127,8 +130,13 @@ class SavedTest {
       contentJson: contentJson,
       topicId: topicId,
       excerptTitles:
-          (j['excerptTitles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      teachingContext: j['teachingContext'] == null ? null : TeachingContext.fromJson(Map<String,dynamic>.from(j['teachingContext'] as Map)),
+          (j['excerptTitles'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      teachingContext: j['teachingContext'] == null
+          ? null
+          : TeachingContext.fromJson(
+              Map<String, dynamic>.from(j['teachingContext'] as Map),
+            ),
     );
   }
 }

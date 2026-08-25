@@ -22,7 +22,7 @@ class RecentWorkReference {
 
 class RecentWorkStore {
   RecentWorkStore({Future<File> Function()? fileProvider})
-      : _fileProvider = fileProvider ?? _defaultFile;
+    : _fileProvider = fileProvider ?? _defaultFile;
 
   final Future<File> Function() _fileProvider;
 

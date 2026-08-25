@@ -6,19 +6,49 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _Store extends OnboardingStore {
   OnboardingState state = const OnboardingState();
-  @override Future<OnboardingState> read() async => state;
-  @override Future<void> save(OnboardingState next) async => state = next;
+  @override
+  Future<OnboardingState> read() async => state;
+  @override
+  Future<void> save(OnboardingState next) async => state = next;
 }
 
 const _classes = [
-  CurriculumClass(code: '6', name: 'Class 6', subjects: [
-    CurriculumSubject(code: 'science', name: 'Science', moduleId: 's6', description: ''),
-    CurriculumSubject(code: 'math', name: 'Math', moduleId: 'm6', description: ''),
-  ]),
-  CurriculumClass(code: '7', name: 'Class 7', subjects: [
-    CurriculumSubject(code: 'science', name: 'Science', moduleId: 's7', description: ''),
-    CurriculumSubject(code: 'english', name: 'English', moduleId: 'e7', description: ''),
-  ]),
+  CurriculumClass(
+    code: '6',
+    name: 'Class 6',
+    subjects: [
+      CurriculumSubject(
+        code: 'science',
+        name: 'Science',
+        moduleId: 's6',
+        description: '',
+      ),
+      CurriculumSubject(
+        code: 'math',
+        name: 'Math',
+        moduleId: 'm6',
+        description: '',
+      ),
+    ],
+  ),
+  CurriculumClass(
+    code: '7',
+    name: 'Class 7',
+    subjects: [
+      CurriculumSubject(
+        code: 'science',
+        name: 'Science',
+        moduleId: 's7',
+        description: '',
+      ),
+      CurriculumSubject(
+        code: 'english',
+        name: 'English',
+        moduleId: 'e7',
+        description: '',
+      ),
+    ],
+  ),
 ];
 
 void main() {
@@ -32,7 +62,11 @@ void main() {
 
   testWidgets('different subjects can be configured per class', (tester) async {
     final store = _Store();
-    await tester.pumpWidget(MaterialApp(home: OnboardingScreen(store: store, classes: _classes)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingScreen(store: store, classes: _classes),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Ayesha');
     await tester.tap(find.text('Continue'));
@@ -43,7 +77,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text('Do you teach the same subjects in these classes?'), findsOneWidget);
+    expect(
+      find.text('Do you teach the same subjects in these classes?'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('No, they are different'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
@@ -65,4 +102,34 @@ void main() {
     expect(store.state.selectedSubjectsByClass['7'], contains('english'));
     expect(store.state.offlineAiEnabled, isTrue);
   });
+
+  testWidgets(
+    'same-subject choice applies one mapping to every selected class',
+    (tester) async {
+      final store = _Store();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OnboardingScreen(store: store, classes: _classes),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Class 7'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Yes, same subjects'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      expect(find.text('What subjects do you teach?'), findsOneWidget);
+      await tester.tap(find.text('Finish'));
+      await tester.pumpAndSettle();
+      expect(
+        store.state.selectedSubjectsByClass['6'],
+        store.state.selectedSubjectsByClass['7'],
+      );
+    },
+  );
 }
