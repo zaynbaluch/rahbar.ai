@@ -31,12 +31,13 @@ void main() {
     expect(find.text('Profile'), findsOneWidget);
     expect(find.text('Teaching'), findsOneWidget);
     expect(find.text('Offline features'), findsOneWidget);
-    expect(find.text('Data & support'), findsOneWidget);
+    expect(find.text('Data & support'), findsNothing);
+    expect(find.text('Support'), findsOneWidget);
     expect(find.text('About'), findsOneWidget);
     expect(find.text('Teacher name'), findsOneWidget);
     expect(find.text('Classes & subjects'), findsOneWidget);
     expect(find.text('Offline AI'), findsOneWidget);
-    expect(find.text('Data on this device'), findsOneWidget);
+    expect(find.text('Data on this device'), findsNothing);
     expect(find.text('Report a problem'), findsOneWidget);
     expect(find.text('Review setup'), findsNothing);
     expect(find.textContaining('model'), findsNothing);
