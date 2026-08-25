@@ -5,11 +5,17 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../curriculum/curriculum_catalog.dart';
 import '../onboarding/onboarding_store.dart';
+import '../resources/background_ai_download_controller.dart';
 import 'resource_management_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.onboardingStore});
+  const SettingsScreen({
+    super.key,
+    this.onboardingStore,
+    this.downloadController,
+  });
   final OnboardingStore? onboardingStore;
+  final BackgroundAiDownloadController? downloadController;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -117,7 +123,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       value: 'Manage offline downloads',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const ResourceManagementScreen(),
+                          builder: (_) => ResourceManagementScreen(
+                            downloadController: widget.downloadController,
+                          ),
                         ),
                       ),
                     ),
