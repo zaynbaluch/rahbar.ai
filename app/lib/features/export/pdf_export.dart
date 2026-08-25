@@ -11,21 +11,32 @@ import '../omr/omr_template.dart';
 /// the left, a compact **OMR answer grid** (A–D bubbles) boxed on the top-right of
 /// the same sheet (no separate answer sheet). Fiducials + bubbles are drawn at
 /// exact [OmrTemplate] coordinates so the camera grader can sample them. The answer
-/// key is NOT printed (the teacher reads it in the app); the test ID ties a scanned
-/// sheet back to its stored key so grading needs no SLM (see ADR-007).
+/// key is NOT printed (the teacher reads it in the app). The persistent test ID keeps
+/// printed papers and saved grading results associated with the same paper; the teacher
+/// still opens that exact test before using the current camera grader.
+class InvalidMcqPaperException implements Exception {
+  const InvalidMcqPaperException(this.issues);
+
+  final List<String> issues;
+
+  @override
+  String toString() => issues.join(' ');
+}
+
 class PdfExport {
   static const _letters = ['A', 'B', 'C', 'D'];
 
-  /// Short, human-readable test ID (printed on the sheet, used for grading lookup).
-  static String testId(String topic) {
-    final h = topic.hashCode & 0xffff;
-    return 'GS6-${h.toRadixString(16).toUpperCase().padLeft(4, '0')}';
-  }
+  /// Persistent paper ID printed on the sheet and reused by the gradebook.
+  static String testId(McqTest test) => test.id;
 
   static Future<Uint8List> build(McqTest test) async {
+    final validation = test.validation;
+    if (!validation.isReady) {
+      throw InvalidMcqPaperException(validation.issues);
+    }
     final doc = pw.Document();
-    final id = testId(test.topic);
-    final qs = test.questions.where((q) => q.isComplete).toList();
+    final id = testId(test);
+    final qs = test.questions;
     doc.addPage(_paperPage(test, id, qs));
     return doc.save();
   }
@@ -155,7 +166,7 @@ class PdfExport {
           ],
         ),
         pw.Divider(height: 18),
-        for (var i = 0; i < n; i++) _question(i + 1, qs[i]),
+        for (final question in qs) _question(question.number, question),
       ],
     );
   }
@@ -268,7 +279,7 @@ class PdfExport {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text('Rahbar AI - General Science, Grade 6',
+        pw.Text('Bayaz AI - General Science, Grade 6',
             style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
         pw.Text('Topic: $topic',
             style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),

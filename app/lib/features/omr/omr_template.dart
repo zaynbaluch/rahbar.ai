@@ -56,7 +56,7 @@ class OmrTemplate {
 
   // --- Fiducial-normalized coordinates (for the grader). ---
   // The grader locates the 4 fiducial (box-corner) centers in the photo, then maps
-  // any page point to the photo via bilinear blend using these normalized coords.
+  // any page point to the photo with a projective transform using these coords.
   static double get _spanX => boxRight - boxLeft;
   static double get _spanY => boxBottom - boxTop;
 

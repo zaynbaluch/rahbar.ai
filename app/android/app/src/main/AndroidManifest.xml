@@ -3,9 +3,11 @@
          on-device model weights are fetched once when online). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="rahbar_ai"
+        android:label="Bayaz AI"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
