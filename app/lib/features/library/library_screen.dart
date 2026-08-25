@@ -107,18 +107,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   child: BayazEmptyState(
                     asset: 'assets/ui/illustrations/empty_library.webp',
                     title: 'Nothing saved yet',
-                    message:
-                        'Lessons and tests you save or share will appear here.',
+                    message: '',
                     action: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         FilledButton(
                           onPressed: widget.onPrepareLesson,
-                          child: const Text('Prepare lesson'),
+                          child: const Text('Create Lesson'),
                         ),
-                        TextButton(
+                        const SizedBox(height: AppSpacing.sm),
+                        OutlinedButton(
                           onPressed: widget.onCreateTest,
-                          child: const Text('Create test'),
+                          child: const Text('Create Test'),
                         ),
                       ],
                     ),
