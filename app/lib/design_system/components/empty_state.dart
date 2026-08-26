@@ -29,13 +29,19 @@ class BayazEmptyState extends StatelessWidget {
             children: [
               Image.asset(asset, height: 190, fit: BoxFit.contain),
               const SizedBox(height: AppSpacing.lg),
-              Text(title,
-                  style: theme.textTheme.titleLarge,
-                  textAlign: TextAlign.center),
-              const SizedBox(height: AppSpacing.xs),
-              Text(message,
+              Text(
+                title,
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  message,
                   style: theme.textTheme.bodyMedium,
-                  textAlign: TextAlign.center),
+                  textAlign: TextAlign.center,
+                ),
+              ],
               if (action != null) ...[
                 const SizedBox(height: AppSpacing.lg),
                 action!,

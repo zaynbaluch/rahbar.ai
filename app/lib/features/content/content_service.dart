@@ -31,9 +31,8 @@ class Topic {
   final List<String> slos;
   final int nItems; // verified MCQs available for this topic
 
-  bool get hasTest => nItems >= 10;
+  bool get hasTest => nItems >= 5;
 }
-
 
 class InsufficientUnusedItemsException implements Exception {
   const InsufficientUnusedItemsException({
@@ -114,16 +113,16 @@ class ContentService {
   }
 
   Topic _topic(Row r) => Topic(
-        id: r['id'] as String,
-        chapter: r['chapter'] as int,
-        sectionNo: r['section_no'] as String,
-        title: r['title'] as String,
-        summary: (r['summary'] as String?) ?? '',
-        slos: ((jsonDecode(r['slos'] as String? ?? '[]')) as List)
-            .map((e) => e.toString())
-            .toList(),
-        nItems: r['n_items'] as int,
-      );
+    id: r['id'] as String,
+    chapter: r['chapter'] as int,
+    sectionNo: r['section_no'] as String,
+    title: r['title'] as String,
+    summary: (r['summary'] as String?) ?? '',
+    slos: ((jsonDecode(r['slos'] as String? ?? '[]')) as List)
+        .map((e) => e.toString())
+        .toList(),
+    nItems: r['n_items'] as int,
+  );
 
   // ---------------------------------------------------------------- MCQ sampling
 
@@ -155,11 +154,20 @@ class ContentService {
       [topicId],
     );
     if (rows.isEmpty) {
-      throw StateError('No verified questions are available for "${topic.title}".');
+      throw StateError(
+        'No verified questions are available for "${topic.title}".',
+      );
     }
 
-    final target = min(n, rows.length);
-    final unused = rows.where((row) => !exclude.contains(row['id'] as String)).toList();
+    if (rows.length < n) {
+      throw StateError(
+        'Only ${rows.length} verified questions are available for "${topic.title}".',
+      );
+    }
+    final target = n;
+    final unused = rows
+        .where((row) => !exclude.contains(row['id'] as String))
+        .toList();
     if (unused.length < target && !allowReuse) {
       throw InsufficientUnusedItemsException(
         topicTitle: topic.title,
@@ -174,10 +182,15 @@ class ContentService {
     // the verified bank permits it.
     final picked = _pickRows(unused, target, mix, rng);
     if (picked.length < target) {
-      final reused = rows
-          .where((row) => exclude.contains(row['id'] as String) && !picked.contains(row))
-          .toList()
-        ..shuffle(rng);
+      final reused =
+          rows
+              .where(
+                (row) =>
+                    exclude.contains(row['id'] as String) &&
+                    !picked.contains(row),
+              )
+              .toList()
+            ..shuffle(rng);
       picked.addAll(reused.take(target - picked.length));
     }
     picked.shuffle(rng);
@@ -204,14 +217,16 @@ class ContentService {
         random: rng,
       );
       if (exclude.contains(itemId)) reusedItemIds.add(itemId);
-      questions.add(McqQuestion(
-        number: i + 1,
-        difficulty: row['difficulty'] as String,
-        text: row['stem'] as String,
-        options: balanced.options,
-        answer: balanced.answer,
-        itemId: itemId,
-      ));
+      questions.add(
+        McqQuestion(
+          number: i + 1,
+          difficulty: row['difficulty'] as String,
+          text: row['stem'] as String,
+          options: balanced.options,
+          answer: balanced.answer,
+          itemId: itemId,
+        ),
+      );
     }
     return McqTest(
       topic: topic.title,
@@ -242,7 +257,8 @@ class ContentService {
       picked.addAll(band.take(min(entry.value, target - picked.length)));
     }
     if (picked.length < target) {
-      final rest = pool.where((row) => !picked.contains(row)).toList()..shuffle(rng);
+      final rest = pool.where((row) => !picked.contains(row)).toList()
+        ..shuffle(rng);
       picked.addAll(rest.take(target - picked.length));
     }
     return picked;

@@ -32,7 +32,9 @@ void main() {
 
     expect(paper.isReady, isFalse);
     expect(
-      paper.validation.issues.any((issue) => issue.contains('Question numbers')),
+      paper.validation.issues.any(
+        (issue) => issue.contains('Question numbers'),
+      ),
       isTrue,
     );
   });
@@ -46,7 +48,12 @@ void main() {
           number: 1,
           difficulty: 'easy',
           text: 'What is a cell?',
-          options: const {'A': 'Unit of life', 'B': '', 'C': 'Gas', 'D': 'Rock'},
+          options: const {
+            'A': 'Unit of life',
+            'B': '',
+            'C': 'Gas',
+            'D': 'Rock',
+          },
           answer: 'A',
         ),
       ],
@@ -69,19 +76,30 @@ void main() {
     expect(restored.isReady, isTrue);
   });
 
-  test('papers reject counts beyond the printable answer grid', () {
+  test('fifteen-question papers are supported', () {
+    final paper = McqTest(
+      topic: 'Long paper',
+      expectedCount: 15,
+      questions: List.generate(15, (index) => _question(index + 1)),
+    );
+
+    expect(paper.isReady, isTrue);
+  });
+
+  test('papers reject counts beyond fifteen', () {
     final paper = McqTest(
       topic: 'Too many questions',
-      expectedCount: 11,
-      questions: List.generate(11, (index) => _question(index + 1)),
+      expectedCount: 16,
+      questions: List.generate(16, (index) => _question(index + 1)),
     );
 
     expect(paper.isReady, isFalse);
-    expect(paper.validation.summary, contains('between 1 and 10'));
+    expect(paper.validation.summary, contains('between 1 and 15'));
   });
 }
 
-String _questionBlock(int index) => '''
+String _questionBlock(int index) =>
+    '''
 Q${index + 1} [easy]
 Question ${index + 1}?
 A) One
@@ -92,9 +110,9 @@ ANSWER: A
 ''';
 
 McqQuestion _question(int number) => McqQuestion(
-      number: number,
-      difficulty: 'easy',
-      text: 'Question $number?',
-      options: const {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
-      answer: 'A',
-    );
+  number: number,
+  difficulty: 'easy',
+  text: 'Question $number?',
+  options: const {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
+  answer: 'A',
+);

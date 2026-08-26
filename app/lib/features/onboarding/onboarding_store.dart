@@ -15,6 +15,9 @@ class OnboardingState {
     this.schoolName = '',
     this.selectedClasses = const ['6'],
     this.selectedSubjects = const ['general_science'],
+    this.selectedSubjectsByClass = const {
+      '6': ['general_science'],
+    },
     this.offlineAiEnabled = false,
   });
 
@@ -25,6 +28,7 @@ class OnboardingState {
   final String schoolName;
   final List<String> selectedClasses;
   final List<String> selectedSubjects;
+  final Map<String, List<String>> selectedSubjectsByClass;
   final bool offlineAiEnabled;
 
   OnboardingState copyWith({
@@ -34,31 +38,35 @@ class OnboardingState {
     String? schoolName,
     List<String>? selectedClasses,
     List<String>? selectedSubjects,
+    Map<String, List<String>>? selectedSubjectsByClass,
     bool? offlineAiEnabled,
-  }) =>
-      OnboardingState(
-        schemaVersion: schemaVersion,
-        currentStep: currentStep ?? this.currentStep,
-        completed: completed ?? this.completed,
-        teacherName: teacherName ?? this.teacherName,
-        schoolName: schoolName ?? this.schoolName,
-        selectedClasses: selectedClasses ?? this.selectedClasses,
-        selectedSubjects: selectedSubjects ?? this.selectedSubjects,
-        offlineAiEnabled: offlineAiEnabled ?? this.offlineAiEnabled,
-      );
+  }) => OnboardingState(
+    schemaVersion: schemaVersion,
+    currentStep: currentStep ?? this.currentStep,
+    completed: completed ?? this.completed,
+    teacherName: teacherName ?? this.teacherName,
+    schoolName: schoolName ?? this.schoolName,
+    selectedClasses: selectedClasses ?? this.selectedClasses,
+    selectedSubjects: selectedSubjects ?? this.selectedSubjects,
+    selectedSubjectsByClass:
+        selectedSubjectsByClass ?? this.selectedSubjectsByClass,
+    offlineAiEnabled: offlineAiEnabled ?? this.offlineAiEnabled,
+  );
 
   Map<String, Object?> toJson() => {
-        'schema_version': schemaVersion,
-        'current_step': currentStep,
-        'completed': completed,
-        'teacher_name': teacherName,
-        'school_name': schoolName,
-        'selected_classes': selectedClasses,
-        'selected_subjects': selectedSubjects,
-        'offline_ai_enabled': offlineAiEnabled,
-      };
+    'schema_version': schemaVersion,
+    'current_step': currentStep,
+    'completed': completed,
+    'teacher_name': teacherName,
+    'school_name': schoolName,
+    'selected_classes': selectedClasses,
+    'selected_subjects': selectedSubjects,
+    'selected_subjects_by_class': selectedSubjectsByClass,
+    'offline_ai_enabled': offlineAiEnabled,
+  };
 
-  factory OnboardingState.fromJson(Map<String, Object?> json) => OnboardingState(
+  factory OnboardingState.fromJson(Map<String, Object?> json) =>
+      OnboardingState(
         schemaVersion: 2,
         currentStep: json['current_step'] as int? ?? 0,
         completed: json['completed'] as bool? ?? false,
@@ -71,7 +79,10 @@ class OnboardingState {
             (json['selected_subjects'] as List? ?? const ['general_science'])
                 .map((item) => item.toString())
                 .toList(growable: false),
-        offlineAiEnabled: json['offline_ai_enabled'] as bool? ?? false,
+        selectedSubjectsByClass: _subjectsByClassFromJson(json),
+        offlineAiEnabled: (json['completed'] as bool?) == true
+            ? true
+            : (json['offline_ai_enabled'] as bool? ?? false),
       );
 }
 
@@ -103,4 +114,28 @@ class OnboardingStore {
     final file = await _file();
     if (await file.exists()) await file.delete();
   }
+}
+
+Map<String, List<String>> _subjectsByClassFromJson(Map<String, Object?> json) {
+  final raw = json['selected_subjects_by_class'] as Map?;
+  if (raw != null && raw.isNotEmpty) {
+    return raw.map(
+      (key, value) => MapEntry(
+        key.toString(),
+        (value as List? ?? const [])
+            .map((e) => e.toString())
+            .toList(growable: false),
+      ),
+    );
+  }
+  final classes = (json['selected_classes'] as List? ?? const ['6'])
+      .map((e) => e.toString())
+      .toList(growable: false);
+  final subjects =
+      (json['selected_subjects'] as List? ?? const ['general_science'])
+          .map((e) => e.toString())
+          .toList(growable: false);
+  return {
+    for (final classCode in classes) classCode: List<String>.of(subjects),
+  };
 }

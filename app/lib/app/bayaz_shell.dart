@@ -1,13 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/curriculum/curriculum_home_screen.dart';
+import '../features/content/topic_picker_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/omr/results_overview_screen.dart';
+import '../features/resources/background_ai_download_controller.dart';
 
-/// The three existing teacher workflows: prepare, reopen, and review grading.
-/// No destination advertises functionality that is not backed by current storage.
 class BayazShell extends StatefulWidget {
-  const BayazShell({super.key});
+  const BayazShell({
+    super.key,
+    this.backgroundAiController,
+    this.autoStartAi = true,
+  });
+
+  final BackgroundAiDownloadController? backgroundAiController;
+  final bool autoStartAi;
 
   @override
   State<BayazShell> createState() => _BayazShellState();
@@ -17,12 +26,38 @@ class _BayazShellState extends State<BayazShell> {
   int _index = 0;
   int _libraryRevision = 0;
   int _resultsRevision = 0;
+  late final BackgroundAiDownloadController _backgroundAi;
+
+  @override
+  void initState() {
+    super.initState();
+    _backgroundAi =
+        widget.backgroundAiController ?? BackgroundAiDownloadController.shared;
+    if (widget.autoStartAi) unawaited(_backgroundAi.startIfNeeded());
+  }
+
+  void _selectTab(int value) {
+    setState(() {
+      _index = value;
+      if (value == 1) _libraryRevision++;
+      if (value == 2) _resultsRevision++;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final tabs = <Widget>[
-      const CurriculumHomeScreen(),
-      LibraryScreen(key: ValueKey(_libraryRevision)),
+      CurriculumHomeScreen(
+        backgroundAiController: _backgroundAi,
+        onOpenMyWork: () => _selectTab(1),
+      ),
+      LibraryScreen(
+        key: ValueKey(_libraryRevision),
+        onPrepareLesson: () =>
+            launchTeacherWorkflow(context, TopicPickerMode.lesson),
+        onCreateTest: () =>
+            launchTeacherWorkflow(context, TopicPickerMode.test),
+      ),
       ResultsOverviewScreen(key: ValueKey(_resultsRevision)),
     ];
 
@@ -30,13 +65,7 @@ class _BayazShellState extends State<BayazShell> {
       body: IndexedStack(index: _index, children: tabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) {
-          setState(() {
-            _index = value;
-            if (value == 1) _libraryRevision++;
-            if (value == 2) _resultsRevision++;
-          });
-        },
+        onDestinationSelected: _selectTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -46,12 +75,12 @@ class _BayazShellState extends State<BayazShell> {
           NavigationDestination(
             icon: Icon(Icons.folder_outlined),
             selectedIcon: Icon(Icons.folder_rounded),
-            label: 'Library',
+            label: 'My Work',
           ),
           NavigationDestination(
             icon: Icon(Icons.bar_chart_outlined),
             selectedIcon: Icon(Icons.bar_chart_rounded),
-            label: 'Results',
+            label: 'Class Results',
           ),
         ],
       ),

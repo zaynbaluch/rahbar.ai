@@ -4,8 +4,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bayaz_ai/features/generation/lesson_plan.dart';
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 import 'package:bayaz_ai/features/library/saved_test.dart';
+import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
 
 void main() {
+  test('teaching context round-trips and copyWith preserves it', () {
+    const context = TeachingContext(
+      classCode: '6',
+      className: 'Class 6',
+      subjectCode: 'science',
+      subjectName: 'Science',
+    );
+    const saved = SavedTest(
+      id: 'ctx',
+      kind: 'lesson',
+      topic: 'Cells',
+      createdAtMillis: 1,
+      teachingContext: context,
+    );
+    final restored = SavedTest.fromJson(saved.toJson());
+    expect(restored.teachingContext?.subjectName, 'Science');
+    expect(saved.copyWith().teachingContext, context);
+  });
+
   test('SavedTest survives a JSON round-trip and re-parses to a test', () {
     const raw = '''
 Q1 [easy]
@@ -125,38 +145,43 @@ ANSWER: B
     expect(saved.toMcqTest().id, 'legacy-paper-id');
   });
 
-  test('legacy pack entries infer curriculum provenance only with a topic ID', () {
-    final saved = SavedTest.fromJson({
-      'id': 'old-pack',
-      'kind': 'mcq',
-      'topic': 'Cells',
-      'topicId': 'cells',
-      'contentJson': jsonEncode({
+  test(
+    'legacy pack entries infer curriculum provenance only with a topic ID',
+    () {
+      final saved = SavedTest.fromJson({
+        'id': 'old-pack',
+        'kind': 'mcq',
         'topic': 'Cells',
-        'questions': const <Map<String, dynamic>>[],
-      }),
-    });
+        'topicId': 'cells',
+        'contentJson': jsonEncode({
+          'topic': 'Cells',
+          'questions': const <Map<String, dynamic>>[],
+        }),
+      });
 
-    expect(saved.source, SavedContentSource.curriculumPack);
-    expect(saved.fromPack, isTrue);
-  });
+      expect(saved.source, SavedContentSource.curriculumPack);
+      expect(saved.fromPack, isTrue);
+    },
+  );
 
-  test('structured legacy entries without a topic ID are not marked verified', () {
-    final saved = SavedTest.fromJson({
-      'id': 'old-custom',
-      'kind': 'mcq',
-      'topic': 'Cells',
-      'contentJson': jsonEncode({
+  test(
+    'structured legacy entries without a topic ID are not marked verified',
+    () {
+      final saved = SavedTest.fromJson({
+        'id': 'old-custom',
+        'kind': 'mcq',
         'topic': 'Cells',
-        'questions': const <Map<String, dynamic>>[],
-      }),
-    });
+        'contentJson': jsonEncode({
+          'topic': 'Cells',
+          'questions': const <Map<String, dynamic>>[],
+        }),
+      });
 
-    expect(saved.source, SavedContentSource.legacy);
-    expect(saved.fromPack, isFalse);
-    expect(saved.toMcqTest().expectedCount, 10);
-  });
-
+      expect(saved.source, SavedContentSource.legacy);
+      expect(saved.fromPack, isFalse);
+      expect(saved.toMcqTest().expectedCount, 10);
+    },
+  );
 
   test('structured custom output keeps its review provenance', () {
     final saved = SavedTest(

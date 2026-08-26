@@ -42,3 +42,107 @@ Record per device and condition:
 - crash and memory behaviour.
 
 Release only after the team defines numerical thresholds and signs a test report. Every false acceptance must be treated more seriously than a false rejection because the teacher can retake a rejected image, while a silent incorrect mark can harm a student record.
+
+## `omr_debug` staged pipeline
+
+The `omr_debug` branch replaces direct photo-coordinate bubble sampling with an explicit diagnostic pipeline:
+
+1. decode/orient and cap image size;
+2. capture-quality measurement (resolution, exposure clipping, blur variance);
+3. adaptive dark-mask connected-component marker detection;
+4. four-marker geometry validation;
+5. projective rectification into a fixed canonical OMR image;
+6. local bubble-versus-paper contrast measurement at known template coordinates;
+7. per-sheet blank-distribution calibration;
+8. conservative marked / blank / ambiguous row classification;
+9. whole-sheet warnings; and
+10. teacher review before persistence.
+
+The branch deliberately keeps the existing four-square paper format. It does not use circle detection, ML, OCR, OpenCV, or coded fiducials.
+
+### Debug handoff
+
+Every readable scan now carries copyable **Scan diagnostics**. A useful bug report from manual testing should include the original image plus the copied report. The report contains:
+
+- pipeline status and typed failure code;
+- source/canonical dimensions;
+- exposure and blur metrics;
+- marker candidate count, selected marker coordinates, geometry score, and registration note;
+- per-stage processing timings;
+- blank baseline, MAD, and calibrated mark threshold; and
+- per-question A/B/C/D scores, decision, confidence, and reason.
+
+This makes the first investigation question "which stage failed?" answerable from the report itself.
+
+## Initial image-generated smoke set
+
+Before printing physical sheets, run the five image-generated manual fixtures supplied in the OMR design conversation through **Choose image**. These are development smoke tests, not release evidence.
+
+| Fixture | Expected condition | Expected marks |
+|---|---|---|
+| 01 clean | sharp, mostly top-down baseline | `1=B 2=D 3=A 4=C 5=B 6=D 7=C 8=A 9=B 10=D` |
+| 02 perspective | mild rotation / perspective | same 10 answers |
+| 03 lighting | uneven soft shadow / brightness gradient | same 10 answers |
+| 04 degraded | mild blur/noise/reduced contrast | same 10 answers, or conservative review rather than a confident wrong read |
+| 05 ambiguity | Q3 deliberately has A+B; Q7 is intentionally faint C | Q3 must require review; Q7 may be C with low confidence or require review; all other rows match the baseline key |
+
+For each run, record: pass/fail, any wrong confident answer, number of rows requiring review, and the copied diagnostics. A confident wrong read is more severe than a rejected/ambiguous row.
+
+These five images are only the Level-A smoke set. Physical A05 photographs remain mandatory before the OMR feature can be described as camera-validated.
+
+## Template-fidelity lesson from the first generated smoke sheet
+
+The first purely image-generated smoke sheet was **not** a valid Bayaz OMR fixture even though it looked visually plausible. Manual testing on 2026-08-26 showed confident fiducial registration (`0.975`) but incorrect/blank row reads. The copied diagnostics and image inspection showed why: the generator moved the bubble grid relative to the four markers. The generated first row was around normalized `y=0.27`, while the shipping ten-question Bayaz template expects Q1 around `y=0.15`; the columns also differed.
+
+This is now treated as a test-fixture failure, not a reason to retune Bayaz to arbitrary OMR layouts. `omr_debug` verifies the expected bubble-outline geometry after rectification and returns `templateMismatch` when four plausible markers surround a non-Bayaz grid. The UI tells the tester to use an answer box from a PDF created by Bayaz and keeps the full diagnostic report available.
+
+For future synthetic/manual fixtures, **the base answer grid must come from the real Bayaz PDF geometry**. Generative image tools may be used for photographic appearance or adversarial variation only if the marker/bubble geometry is preserved. Any generated image that fails the template-fidelity check is not valid grading ground truth.
+
+### Periodic-grid alias protection
+
+The 2026-08-26 manual retest exposed a second template-verification failure mode. A foreign lookalike sheet could align roughly 35/40 expected bubble rings even though its whole grid was shifted, because the repeated row pitch lets one printed row alias onto another expected row. Bubble-outline count alone is therefore not a unique template signature.
+
+The verifier now combines two independent structural checks after rectification:
+
+- the expected bubble-outline grid; and
+- continuity of the four printed answer-box border sides connecting the fiducial centers.
+
+The border is a non-periodic anchor owned by the Bayaz PDF and is absent from the original generated lookalike. Copied diagnostics report both bubble matches and `border` / `minSide` coverage. A scan must satisfy both the grid and border checks before any answer can be graded.
+
+Registration also scales its thin-line erosion with image size so the printed border is removed from fiducial connected components without deleting the much thicker square markers. This matters especially for 15-question sheets, where filled bubbles can otherwise become plausible false marker candidates if the true markers are glued to the long border.
+
+## Exposure-independent template verification
+
+Manual testing on 2026-08-26 exposed a second verifier failure mode. A dim image-generated lookalike still reported `40/40` bubble matches and `border=1.000` even though the visible bubble grid was shifted and the Bayaz answer-box border was absent. The root cause was absolute luminance testing: the verifier treated `(255 - luminance)` as print darkness. On a globally dim photo, ordinary paper could therefore exceed the print threshold everywhere.
+
+Template verification must be **local-contrast based**, just like answer classification. Bubble outlines are now compared with nearby paper outside the bubble, and each answer-box side is compared with an inward paper reference band. This makes uniform exposure changes cancel out instead of becoming false print evidence.
+
+Regression coverage now includes both sides of this failure:
+- a dim foreign/lookalike grid without the Bayaz border must be rejected as `templateMismatch`;
+- a dim but structurally correct Bayaz grid must remain accepted and grade normally.
+
+The production PDF crop was also rechecked after this change and matched all 40 expected bubble outlines plus all four locally contrasted border sides.
+
+## Full-page localisation and bounded search
+
+Manual A05 testing on 2026-08-26 showed that a tightly framed answer box graded correctly while a full-page photograph failed registration with `marker candidates were missing from at least one expected quadrant`. The old registration code partitioned the **entire photograph** into TL/TR/BR/BL quadrants before geometry scoring. That assumption is invalid for the shipping PDF because its answer box is intentionally placed in the upper-right of the page; all four correct fiducials can therefore occupy the same half of a full-page photograph.
+
+Registration now searches for the Bayaz box **anywhere in the image**. It does not brute-force every 4-combination. The search is deliberately bounded:
+
+- retain at most 48 strongest square-like candidates;
+- for each possible top-left marker, keep at most 10 plausible right partners and 10 plausible downward partners;
+- predict the bottom-right location from each right/down pair and keep at most 4 nearby candidates;
+- score only the surviving quadrilaterals;
+- keep at most 8 geometric hypotheses; and
+- run the more expensive rectification/template check on at most 5 hypotheses, using a reduced canonical preview before one full-resolution rectification.
+
+The absolute worst-case geometric evaluation bound is therefore `48 * 10 * 10 * 4 = 19,200` cheap coordinate-only hypotheses, not `n choose 4` over unbounded page clutter. Normal scans are far below this ceiling. The first real failed full-page photo produced 16 raw candidates and only 26 geometric evaluations.
+
+The template is the final judge. A larger/cleaner decoy quadrilateral can outrank the real answer box geometrically, so the pipeline verifies the top bounded hypotheses against the Bayaz bubble grid + answer-box border and selects the first strong structural match rather than blindly trusting geometry rank 1.
+
+A manual regression using the two teacher-supplied A05 photographs confirmed both paths after this change:
+
+- full-page image: 16 candidates, 26 geometric combinations, valid Bayaz template recovered, scan completed;
+- zoomed-in image: 9 candidates, 6 geometric combinations, valid Bayaz template recovered, scan completed.
+
+The full-page scan read the visible marks as `A, B, C, C, B, blank, A, D, A, blank`, matching the supplied photograph. These local manual probes are useful development evidence but do not replace the wider physical release matrix above.

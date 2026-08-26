@@ -12,6 +12,7 @@ class BayazCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(AppSpacing.md),
     this.color,
     this.borderColor,
+    this.elevation = 0,
   });
 
   final Widget child;
@@ -19,23 +20,21 @@ class BayazCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final Color? color;
   final Color? borderColor;
+  final double elevation;
 
   @override
   Widget build(BuildContext context) {
     final content = Padding(padding: padding, child: child);
     return Material(
+      elevation: elevation,
+      shadowColor: Colors.black26,
       color: color ?? AppColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.md),
         side: BorderSide(color: borderColor ?? AppColors.outline),
       ),
       clipBehavior: Clip.antiAlias,
-      child: onTap == null
-          ? content
-          : InkWell(
-              onTap: onTap,
-              child: content,
-            ),
+      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
   }
 }
