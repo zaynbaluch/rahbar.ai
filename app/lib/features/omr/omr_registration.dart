@@ -6,23 +6,38 @@ import 'package:image/image.dart' as img;
 import 'omr_diagnostics.dart';
 import 'omr_template.dart';
 
+class OmrRegistrationHypothesis {
+  const OmrRegistrationHypothesis({
+    required this.fiducials,
+    required this.score,
+  });
+
+  final List<OmrPoint> fiducials;
+  final double score;
+}
+
 class OmrRegistrationResult {
   const OmrRegistrationResult({
     required this.failureCode,
     required this.candidateCount,
-    required this.fiducials,
-    required this.score,
+    required this.retainedCandidateCount,
+    required this.hypotheses,
+    required this.combinationsEvaluated,
     this.note = '',
   });
 
   final OmrFailureCode failureCode;
   final int candidateCount;
-  final List<OmrPoint> fiducials;
-  final double score;
+  final int retainedCandidateCount;
+  final List<OmrRegistrationHypothesis> hypotheses;
+  final int combinationsEvaluated;
   final String note;
 
   bool get success =>
-      failureCode == OmrFailureCode.none && fiducials.length == 4;
+      failureCode == OmrFailureCode.none && hypotheses.isNotEmpty;
+  List<OmrPoint> get fiducials =>
+      hypotheses.isEmpty ? const [] : hypotheses.first.fiducials;
+  double get score => hypotheses.isEmpty ? 0 : hypotheses.first.score;
 }
 
 class _MarkerCandidate {
@@ -45,14 +60,37 @@ class _MarkerCandidate {
   final double score;
 }
 
+class _ScoredHypothesis {
+  const _ScoredHypothesis({required this.fiducials, required this.score});
+
+  final List<OmrPoint> fiducials;
+  final double score;
+}
+
+class _HypothesisSearchResult {
+  const _HypothesisSearchResult({
+    required this.hypotheses,
+    required this.combinationsEvaluated,
+  });
+
+  final List<_ScoredHypothesis> hypotheses;
+  final int combinationsEvaluated;
+}
+
 abstract final class OmrRegistration {
+  static const int maxRetainedCandidates = 48;
+  static const int maxDirectionalPartners = 10;
+  static const int maxBottomRightPartners = 4;
+  static const int maxHypotheses = 8;
+
   static OmrRegistrationResult detect(img.Image gray, OmrLayout layout) {
     if (gray.width < 240 || gray.height < 240) {
       return const OmrRegistrationResult(
         failureCode: OmrFailureCode.imageTooSmall,
         candidateCount: 0,
-        fiducials: [],
-        score: 0,
+        retainedCandidateCount: 0,
+        hypotheses: [],
+        combinationsEvaluated: 0,
         note: 'image dimensions are below the registration minimum',
       );
     }
@@ -72,92 +110,216 @@ abstract final class OmrRegistration {
       return OmrRegistrationResult(
         failureCode: OmrFailureCode.fiducialsNotFound,
         candidateCount: candidates.length,
-        fiducials: const [],
-        score: 0,
+        retainedCandidateCount: candidates.length,
+        hypotheses: const [],
+        combinationsEvaluated: 0,
         note:
             'only ${candidates.length} square-like marker candidates were found',
       );
     }
 
-    final quadrants = List.generate(4, (_) => <_MarkerCandidate>[]);
-    final midX = work.width / 2;
-    final midY = work.height / 2;
-    for (final candidate in candidates) {
-      final left = candidate.center.x < midX;
-      final top = candidate.center.y < midY;
-      final quadrant = top ? (left ? 0 : 1) : (left ? 3 : 2);
-      quadrants[quadrant].add(candidate);
+    final retained = [...candidates]
+      ..sort((a, b) => b.score.compareTo(a.score));
+    if (retained.length > maxRetainedCandidates) {
+      retained.removeRange(maxRetainedCandidates, retained.length);
     }
-    for (final group in quadrants) {
-      group.sort((a, b) => b.score.compareTo(a.score));
-      if (group.length > 8) group.removeRange(8, group.length);
-    }
-    if (quadrants.any((group) => group.isEmpty)) {
+
+    final search = _buildHypotheses(retained, work.width, work.height, layout);
+    if (search.hypotheses.isEmpty) {
       return OmrRegistrationResult(
-        failureCode: OmrFailureCode.fiducialsNotFound,
+        failureCode: OmrFailureCode.invalidFiducialGeometry,
         candidateCount: candidates.length,
-        fiducials: const [],
-        score: 0,
+        retainedCandidateCount: retained.length,
+        hypotheses: const [],
+        combinationsEvaluated: search.combinationsEvaluated,
         note:
-            'marker candidates were missing from at least one expected quadrant',
+            'no plausible Bayaz-sized quadrilateral survived bounded geometry search; retained ${retained.length}/${candidates.length} candidates and evaluated ${search.combinationsEvaluated} combinations',
       );
     }
 
-    List<_MarkerCandidate>? best;
-    var bestScore = 0.0;
-    for (final tl in quadrants[0]) {
-      for (final tr in quadrants[1]) {
-        for (final br in quadrants[2]) {
-          for (final bl in quadrants[3]) {
-            final set = [tl, tr, br, bl];
-            final geometry = _geometryScore(
-              set,
-              work.width,
-              work.height,
-              layout,
+    final inverseScale = 1 / scale;
+    final hypotheses = [
+      for (final hypothesis in search.hypotheses)
+        OmrRegistrationHypothesis(
+          fiducials: [
+            for (final point in hypothesis.fiducials)
+              OmrPoint(point.x * inverseScale, point.y * inverseScale),
+          ],
+          score: hypothesis.score,
+        ),
+    ];
+    return OmrRegistrationResult(
+      failureCode: OmrFailureCode.none,
+      candidateCount: candidates.length,
+      retainedCandidateCount: retained.length,
+      hypotheses: hypotheses,
+      combinationsEvaluated: search.combinationsEvaluated,
+      note:
+          'bounded search retained ${retained.length}/${candidates.length} candidates, evaluated ${search.combinationsEvaluated} combinations, and kept ${hypotheses.length} geometric hypotheses',
+    );
+  }
+
+  static _HypothesisSearchResult _buildHypotheses(
+    List<_MarkerCandidate> candidates,
+    int width,
+    int height,
+    OmrLayout layout,
+  ) {
+    final hypotheses = <_ScoredHypothesis>[];
+    var combinationsEvaluated = 0;
+    final minSpan = math.max(30.0, math.min(width, height) * .055);
+
+    double sizeSimilarity(_MarkerCandidate a, _MarkerCandidate b) {
+      return math.min(a.area, b.area) / math.max(a.area, b.area);
+    }
+
+    for (final tl in candidates) {
+      final rights =
+          candidates.where((candidate) {
+            if (identical(candidate, tl)) return false;
+            final dx = candidate.center.x - tl.center.x;
+            final dy = candidate.center.y - tl.center.y;
+            if (dx < minSpan) return false;
+            if (dy.abs() > dx * .75 + minSpan * .25) return false;
+            return sizeSimilarity(tl, candidate) >= .28;
+          }).toList()..sort((a, b) {
+            final aDx = a.center.x - tl.center.x;
+            final aDy = (a.center.y - tl.center.y).abs();
+            final bDx = b.center.x - tl.center.x;
+            final bDy = (b.center.y - tl.center.y).abs();
+            final aScore =
+                a.score + sizeSimilarity(tl, a) * .35 - aDy / aDx * .25;
+            final bScore =
+                b.score + sizeSimilarity(tl, b) * .35 - bDy / bDx * .25;
+            return bScore.compareTo(aScore);
+          });
+      if (rights.length > maxDirectionalPartners) {
+        rights.removeRange(maxDirectionalPartners, rights.length);
+      }
+
+      final downs =
+          candidates.where((candidate) {
+            if (identical(candidate, tl)) return false;
+            final dx = candidate.center.x - tl.center.x;
+            final dy = candidate.center.y - tl.center.y;
+            if (dy < minSpan) return false;
+            if (dx.abs() > dy * .75 + minSpan * .25) return false;
+            return sizeSimilarity(tl, candidate) >= .28;
+          }).toList()..sort((a, b) {
+            final aDy = a.center.y - tl.center.y;
+            final aDx = (a.center.x - tl.center.x).abs();
+            final bDy = b.center.y - tl.center.y;
+            final bDx = (b.center.x - tl.center.x).abs();
+            final aScore =
+                a.score + sizeSimilarity(tl, a) * .35 - aDx / aDy * .25;
+            final bScore =
+                b.score + sizeSimilarity(tl, b) * .35 - bDx / bDy * .25;
+            return bScore.compareTo(aScore);
+          });
+      if (downs.length > maxDirectionalPartners) {
+        downs.removeRange(maxDirectionalPartners, downs.length);
+      }
+
+      for (final tr in rights) {
+        for (final bl in downs) {
+          if (identical(tr, bl)) continue;
+          if (math.min(sizeSimilarity(tl, tr), sizeSimilarity(tl, bl)) < .28) {
+            continue;
+          }
+          final predictedX = tr.center.x + bl.center.x - tl.center.x;
+          final predictedY = tr.center.y + bl.center.y - tl.center.y;
+          final topSpan = _distance(tl.center, tr.center);
+          final leftSpan = _distance(tl.center, bl.center);
+          final tolerance = math.max(
+            minSpan,
+            math.max(topSpan, leftSpan) * .48,
+          );
+
+          final bottomRights =
+              candidates.where((candidate) {
+                if (identical(candidate, tl) ||
+                    identical(candidate, tr) ||
+                    identical(candidate, bl)) {
+                  return false;
+                }
+                if (candidate.center.x <= bl.center.x - minSpan * .25 ||
+                    candidate.center.y <= tr.center.y - minSpan * .25) {
+                  return false;
+                }
+                if (sizeSimilarity(tl, candidate) < .28) return false;
+                final dx = candidate.center.x - predictedX;
+                final dy = candidate.center.y - predictedY;
+                return math.sqrt(dx * dx + dy * dy) <= tolerance;
+              }).toList()..sort((a, b) {
+                double rank(_MarkerCandidate candidate) {
+                  final dx = candidate.center.x - predictedX;
+                  final dy = candidate.center.y - predictedY;
+                  final normalizedDistance =
+                      math.sqrt(dx * dx + dy * dy) / tolerance;
+                  return candidate.score +
+                      sizeSimilarity(tl, candidate) * .30 -
+                      normalizedDistance * .45;
+                }
+
+                return rank(b).compareTo(rank(a));
+              });
+          if (bottomRights.length > maxBottomRightPartners) {
+            bottomRights.removeRange(
+              maxBottomRightPartners,
+              bottomRights.length,
             );
+          }
+
+          for (final br in bottomRights) {
+            combinationsEvaluated++;
+            final set = [tl, tr, br, bl];
+            final geometry = _geometryScore(set, width, height, layout);
             if (geometry <= 0) continue;
             final candidateScore =
                 set
                     .map((candidate) => candidate.score)
                     .reduce((a, b) => a + b) /
                 4;
-            final score = geometry * .62 + candidateScore * .38;
-            if (score > bestScore) {
-              bestScore = score;
-              best = set;
-            }
+            final score = geometry * .68 + candidateScore * .32;
+            hypotheses.add(
+              _ScoredHypothesis(
+                fiducials: [tl.center, tr.center, br.center, bl.center],
+                score: score.clamp(0, 1).toDouble(),
+              ),
+            );
           }
         }
       }
     }
 
-    if (best == null || bestScore < .48) {
-      return OmrRegistrationResult(
-        failureCode: OmrFailureCode.invalidFiducialGeometry,
-        candidateCount: candidates.length,
-        fiducials: const [],
-        score: bestScore,
-        note:
-            'candidate markers did not form a sufficiently consistent quadrilateral',
+    hypotheses.sort((a, b) => b.score.compareTo(a.score));
+    final unique = <_ScoredHypothesis>[];
+    for (final hypothesis in hypotheses) {
+      final duplicate = unique.any(
+        (existing) => _sameHypothesis(existing.fiducials, hypothesis.fiducials),
       );
+      if (duplicate) continue;
+      unique.add(hypothesis);
+      if (unique.length >= maxHypotheses) break;
     }
-
-    final inverseScale = 1 / scale;
-    return OmrRegistrationResult(
-      failureCode: OmrFailureCode.none,
-      candidateCount: candidates.length,
-      fiducials: best
-          .map(
-            (candidate) => OmrPoint(
-              candidate.center.x * inverseScale,
-              candidate.center.y * inverseScale,
-            ),
-          )
-          .toList(growable: false),
-      score: bestScore.clamp(0, 1).toDouble(),
-      note: 'registered four consistent corner markers',
+    return _HypothesisSearchResult(
+      hypotheses: unique,
+      combinationsEvaluated: combinationsEvaluated,
     );
+  }
+
+  static bool _sameHypothesis(List<OmrPoint> a, List<OmrPoint> b) {
+    if (a.length != 4 || b.length != 4) return false;
+    for (var i = 0; i < 4; i++) {
+      if (_distance(a[i], b[i]) > 6) return false;
+    }
+    return true;
+  }
+
+  static double _distance(OmrPoint a, OmrPoint b) {
+    final dx = a.x - b.x;
+    final dy = a.y - b.y;
+    return math.sqrt(dx * dx + dy * dy);
   }
 
   static List<_MarkerCandidate> _findCandidates(img.Image gray) {
@@ -340,8 +502,9 @@ abstract final class OmrRegistration {
     final right = dist(tr, br);
     final bottom = dist(bl, br);
     final left = dist(tl, bl);
-    if (top < width * .25 || bottom < width * .25) return 0;
-    if (left < height * .25 || right < height * .25) return 0;
+    final minimumEdge = math.max(28.0, math.min(width, height) * .05);
+    if (top < minimumEdge || bottom < minimumEdge) return 0;
+    if (left < minimumEdge || right < minimumEdge) return 0;
     final horizontalConsistency = math.min(top, bottom) / math.max(top, bottom);
     final verticalConsistency = math.min(left, right) / math.max(left, right);
     if (horizontalConsistency < .28 || verticalConsistency < .28) return 0;
@@ -358,13 +521,13 @@ abstract final class OmrRegistration {
             .abs() /
         2;
     final areaFraction = polygonArea / (width * height);
-    if (areaFraction < .10) return 0;
+    if (areaFraction < .012) return 0;
 
     final observedAspect = ((top + bottom) / 2) / ((left + right) / 2);
     final expectedAspect = layout.boxW / layout.boxH;
     final aspectRatio = observedAspect / expectedAspect;
     final aspectScore = math.exp(-.55 * math.log(aspectRatio).abs());
-    final areaScore = (areaFraction / .45).clamp(0.0, 1.0);
+    final areaScore = (areaFraction / .18).clamp(0.0, 1.0);
     return (horizontalConsistency * .22 +
             verticalConsistency * .22 +
             sizeConsistency * .20 +

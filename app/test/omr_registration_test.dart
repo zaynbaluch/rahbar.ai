@@ -138,4 +138,51 @@ void main() {
       expect(result.fiducials[2].y, closeTo(1060, 10));
     },
   );
+
+  test(
+    'registration search stays explicitly bounded under heavy square clutter',
+    () {
+      final image = img.Image(width: 900, height: 1200);
+      img.fill(image, color: img.ColorRgb8(242, 242, 242));
+      final black = img.ColorRgb8(0, 0, 0);
+      for (var row = 0; row < 9; row++) {
+        for (var col = 0; col < 8; col++) {
+          final x = 45 + col * 105;
+          final y = 55 + row * 120;
+          img.fillRect(
+            image,
+            x1: x - 10,
+            y1: y - 10,
+            x2: x + 10,
+            y2: y + 10,
+            color: black,
+          );
+        }
+      }
+
+      final result = OmrRegistration.detect(
+        img.grayscale(image),
+        OmrTemplate.layoutFor(10),
+      );
+
+      expect(result.candidateCount, greaterThan(48));
+      expect(
+        result.retainedCandidateCount,
+        lessThanOrEqualTo(OmrRegistration.maxRetainedCandidates),
+      );
+      expect(
+        result.hypotheses.length,
+        lessThanOrEqualTo(OmrRegistration.maxHypotheses),
+      );
+      expect(
+        result.combinationsEvaluated,
+        lessThanOrEqualTo(
+          OmrRegistration.maxRetainedCandidates *
+              OmrRegistration.maxDirectionalPartners *
+              OmrRegistration.maxDirectionalPartners *
+              OmrRegistration.maxBottomRightPartners,
+        ),
+      );
+    },
+  );
 }

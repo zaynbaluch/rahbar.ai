@@ -192,6 +192,118 @@ img.Image _renderPerspectiveSheet() {
   return image;
 }
 
+img.Image _renderFullPageBayazSheet({int clutterSquares = 24}) {
+  final layout = OmrTemplate.layoutFor(10);
+  final image = img.Image(width: 1500, height: 2000);
+  img.fill(image, color: img.ColorRgb8(238, 238, 238));
+  final black = img.ColorRgb8(12, 12, 12);
+
+  // Deliberately place the complete answer box in the upper-right of the
+  // photograph. All four true fiducials are right of the image midpoint, so a
+  // global-image quadrant assumption cannot find this valid Bayaz sheet.
+  final corners = <(double, double)>[
+    (930, 150),
+    (1390, 185),
+    (1370, 835),
+    (910, 805),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 24,
+      y1: y.round() - 24,
+      x2: x.round() + 24,
+      y2: y.round() + 24,
+      color: black,
+    );
+  }
+  for (var i = 0; i < 4; i++) {
+    final a = corners[i];
+    final b = corners[(i + 1) % 4];
+    img.drawLine(
+      image,
+      x1: a.$1.round(),
+      y1: a.$2.round(),
+      x2: b.$1.round(),
+      y2: b.$2.round(),
+      color: black,
+      thickness: 3,
+    );
+  }
+
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (u, v) = layout.bubbleNorm(q, c);
+      final (x, y) = mapper.map(u, v);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 18,
+        color: black,
+      );
+      if ('ABCD'[c] == 'ABCD'[(q - 1) % 4]) {
+        img.fillCircle(
+          image,
+          x: x.round(),
+          y: y.round(),
+          radius: 16,
+          color: img.ColorRgb8(25, 25, 25),
+        );
+      }
+    }
+  }
+
+  // Full-page question text / UI clutter. Some blocks are intentionally
+  // square-ish and dark so candidate extraction sees many plausible distractors.
+  for (var i = 0; i < clutterSquares; i++) {
+    final x = 45 + (i % 6) * 120;
+    final y = 120 + (i ~/ 6) * 165;
+    final size = 18 + (i % 3) * 4;
+    img.fillRect(
+      image,
+      x1: x,
+      y1: y,
+      x2: x + size,
+      y2: y + size,
+      color: img.ColorRgb8(35, 35, 35),
+    );
+    img.drawLine(
+      image,
+      x1: x + size + 12,
+      y1: y + size ~/ 2,
+      x2: math.min(850, x + size + 190),
+      y2: y + size ~/ 2,
+      color: img.ColorRgb8(70, 70, 70),
+      thickness: 2,
+    );
+  }
+  return image;
+}
+
+img.Image _renderFullPageWithDecoyQuadrilateral() {
+  final image = _renderFullPageBayazSheet(clutterSquares: 8);
+  final black = img.ColorRgb8(0, 0, 0);
+
+  // A larger, cleaner four-square rectangle elsewhere on the page deliberately
+  // outranks the real OMR box on geometry alone. It has no Bayaz border/bubbles,
+  // so template verification must reject it and try another hypothesis.
+  const decoy = <(int, int)>[(90, 1040), (650, 1040), (650, 1830), (90, 1830)];
+  for (final (x, y) in decoy) {
+    img.fillRect(
+      image,
+      x1: x - 28,
+      y1: y - 28,
+      x2: x + 28,
+      y2: y + 28,
+      color: black,
+    );
+  }
+  return image;
+}
+
 img.Image _renderForeignTemplateSheet({int paperLuminance = 246}) {
   final image = img.Image(width: 900, height: 1200);
   img.fill(
@@ -400,6 +512,36 @@ void main() {
       expect(result.diagnostics!.status, OmrScanStatus.rejected);
       expect(result.diagnostics!.failureCode, OmrFailureCode.templateMismatch);
       expect(result.correct, 0);
+    },
+  );
+
+  test(
+    'pipeline locates a valid Bayaz answer box anywhere on a cluttered full page',
+    () {
+      final result = OmrPipeline.scan(
+        _renderFullPageBayazSheet(clutterSquares: 36),
+        _key(),
+      );
+
+      expect(result.diagnostics!.status, OmrScanStatus.complete);
+      expect(result.correct, 10);
+      expect(result.needsReview, 0);
+      expect(result.diagnostics!.markerCandidateCount, greaterThan(4));
+    },
+  );
+
+  test(
+    'pipeline verifies multiple bounded hypotheses when geometry alone picks a decoy',
+    () {
+      final result = OmrPipeline.scan(
+        _renderFullPageWithDecoyQuadrilateral(),
+        _key(),
+      );
+
+      expect(result.diagnostics!.status, OmrScanStatus.complete);
+      expect(result.correct, 10);
+      expect(result.needsReview, 0);
+      expect(result.diagnostics!.registrationNote, contains('hypotheses'));
     },
   );
 

@@ -71,12 +71,114 @@ abstract final class OmrPipeline {
       );
     }
 
+    const maxTemplateHypotheses = 5;
+    const previewCanonicalWidth = 620;
+    OmrRegistrationHypothesis? selectedHypothesis;
+    OmrRegistrationHypothesis? bestRejectedHypothesis;
+    OmrTemplateMatchResult? bestRejectedMatch;
+    img.Image? bestRejectedCanonical;
+    var selectedRank = -1;
+    var attemptedHypotheses = 0;
+    var bestValidScore = -1.0;
+    var bestRejectedScore = -1.0;
+
+    stage
+      ..reset()
+      ..start();
+    final hypotheses = registration.hypotheses
+        .take(maxTemplateHypotheses)
+        .toList(growable: false);
+    for (var index = 0; index < hypotheses.length; index++) {
+      final hypothesis = hypotheses[index];
+      final preview = OmrRectifier.rectify(
+        gray,
+        hypothesis.fiducials,
+        layout,
+        canonicalWidth: previewCanonicalWidth,
+      );
+      final match = OmrTemplateVerifier.verify(preview, layout);
+      attemptedHypotheses++;
+      final combinedScore = match.score * .78 + hypothesis.score * .22;
+      if (match.matches && combinedScore > bestValidScore) {
+        bestValidScore = combinedScore;
+        selectedHypothesis = hypothesis;
+        selectedRank = index;
+        // A near-perfect structural match is sufficient evidence; avoid paying
+        // for more preview warps on budget devices.
+        if (match.score >= .94 &&
+            match.borderCoverage >= .85 &&
+            match.minimumSideBorderCoverage >= .70) {
+          break;
+        }
+      } else if (!match.matches && match.score > bestRejectedScore) {
+        bestRejectedScore = match.score;
+        bestRejectedHypothesis = hypothesis;
+        bestRejectedMatch = match;
+        bestRejectedCanonical = preview;
+      }
+    }
+    timings['hypothesisVerification'] = stage.elapsedMilliseconds;
+
+    final registrationNote = selectedHypothesis == null
+        ? '${registration.note}; template verification rejected $attemptedHypotheses bounded hypotheses'
+        : '${registration.note}; template verification selected hypothesis ${selectedRank + 1} after $attemptedHypotheses attempt(s)';
+
+    if (selectedHypothesis == null) {
+      timings['total'] = totalWatch.elapsedMilliseconds;
+      final rejectedHypothesis =
+          bestRejectedHypothesis ?? registration.hypotheses.first;
+      final rejectedMatch = bestRejectedMatch;
+      final diagnostics = OmrDiagnostics(
+        status: OmrScanStatus.rejected,
+        failureCode: OmrFailureCode.templateMismatch,
+        sourceWidth: gray.width,
+        sourceHeight: gray.height,
+        canonicalWidth: bestRejectedCanonical?.width,
+        canonicalHeight: bestRejectedCanonical?.height,
+        meanLuminance: quality.meanLuminance,
+        darkClipFraction: quality.darkClipFraction,
+        lightClipFraction: quality.lightClipFraction,
+        blurVariance: quality.blurVariance,
+        warnings: quality.warnings,
+        markerCandidateCount: registration.candidateCount,
+        fiducials: rejectedHypothesis.fiducials,
+        registrationScore: rejectedHypothesis.score,
+        registrationNote: registrationNote,
+        stageTimingsMs: timings,
+        templateMatchScore: rejectedMatch?.score ?? 0,
+        templateMatchedBubbles: rejectedMatch?.matchedBubbles ?? 0,
+        templateExpectedBubbles: rejectedMatch?.totalBubbles ?? 0,
+        templateBorderCoverage: rejectedMatch?.borderCoverage ?? 0,
+        templateMinimumSideBorderCoverage:
+            rejectedMatch?.minimumSideBorderCoverage ?? 0,
+        templateNote:
+            rejectedMatch?.note ??
+            'no geometric hypothesis matched the Bayaz template',
+      );
+      return OmrResult(
+        fiducialsFound: true,
+        diagnostics: diagnostics,
+        questions: [
+          for (final question in key.questions)
+            OmrQuestion(
+              number: question.number,
+              marked: null,
+              correct: answers[question.number],
+              fill: 0,
+              confidence: 0,
+              decision: OmrDecisionKind.blank,
+              decisionReason: 'scan rejected: template mismatch',
+            ),
+        ],
+      );
+    }
+
     stage
       ..reset()
       ..start();
     final canonical = OmrRectifier.rectify(
       gray,
-      registration.fiducials,
+      selectedHypothesis.fiducials,
       layout,
     );
     timings['rectification'] = stage.elapsedMilliseconds;
@@ -101,9 +203,9 @@ abstract final class OmrPipeline {
         blurVariance: quality.blurVariance,
         warnings: quality.warnings,
         markerCandidateCount: registration.candidateCount,
-        fiducials: registration.fiducials,
-        registrationScore: registration.score,
-        registrationNote: registration.note,
+        fiducials: selectedHypothesis.fiducials,
+        registrationScore: selectedHypothesis.score,
+        registrationNote: registrationNote,
         stageTimingsMs: timings,
         templateMatchScore: templateMatch.score,
         templateMatchedBubbles: templateMatch.matchedBubbles,
@@ -181,7 +283,7 @@ abstract final class OmrPipeline {
     timings['analysis'] = stage.elapsedMilliseconds;
 
     final warnings = [...quality.warnings];
-    if (registration.score < .60) {
+    if (selectedHypothesis.score < .60) {
       warnings.add('registration confidence is relatively low');
     }
     final uncertain = questions
@@ -209,9 +311,9 @@ abstract final class OmrPipeline {
       blurVariance: quality.blurVariance,
       warnings: warnings,
       markerCandidateCount: registration.candidateCount,
-      fiducials: registration.fiducials,
-      registrationScore: registration.score,
-      registrationNote: registration.note,
+      fiducials: selectedHypothesis.fiducials,
+      registrationScore: selectedHypothesis.score,
+      registrationNote: registrationNote,
       stageTimingsMs: timings,
       templateMatchScore: templateMatch.score,
       templateMatchedBubbles: templateMatch.matchedBubbles,
