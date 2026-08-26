@@ -7,8 +7,10 @@ import 'package:bayaz_ai/features/omr/grade_papers_screen.dart';
 import 'package:bayaz_ai/features/omr/gradebook_store.dart';
 import 'package:bayaz_ai/features/omr/graded_result.dart';
 import 'package:bayaz_ai/features/omr/grading_screen.dart';
+import 'package:bayaz_ai/features/omr/omr_diagnostics.dart';
 import 'package:bayaz_ai/features/omr/omr_grader.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Library extends LibraryStore {
@@ -138,5 +140,112 @@ void main() {
       find.widgetWithText(FilledButton, 'Save result'),
     );
     expect(enabled.onPressed, isNotNull);
+  });
+
+  testWidgets('scan diagnostics are expandable and copyable after a read', (
+    tester,
+  ) async {
+    const diagnostics = OmrDiagnostics(
+      status: OmrScanStatus.complete,
+      failureCode: OmrFailureCode.none,
+      sourceWidth: 1080,
+      sourceHeight: 1440,
+      canonicalWidth: 820,
+      canonicalHeight: 1160,
+      markerCandidateCount: 6,
+      registrationScore: .91,
+      registrationNote: 'registered four consistent corner markers',
+      stageTimingsMs: {
+        'quality': 4,
+        'registration': 16,
+        'rectification': 30,
+        'analysis': 8,
+        'total': 58,
+      },
+      markThreshold: .14,
+    );
+    const result = OmrResult(
+      fiducialsFound: true,
+      diagnostics: diagnostics,
+      questions: [
+        OmrQuestion(
+          number: 1,
+          marked: 'A',
+          correct: 'A',
+          fill: .8,
+          confidence: .9,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GradingScreen(
+          test: paper(),
+          initialResult: result,
+          gradebookStore: _Gradebook(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scan diagnostics'), findsOneWidget);
+    expect(find.textContaining('status=complete'), findsNothing);
+    await tester.tap(find.text('Scan diagnostics'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('status=complete'), findsOneWidget);
+    expect(find.text('Copy diagnostics'), findsOneWidget);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async => null,
+        );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+    final copyButton = find.widgetWithText(OutlinedButton, 'Copy diagnostics');
+    await tester.ensureVisible(copyButton);
+    await tester.pumpAndSettle();
+    await tester.tap(copyButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Scan diagnostics copied'), findsOneWidget);
+  });
+
+  testWidgets('registration failure keeps its diagnostic evidence visible', (
+    tester,
+  ) async {
+    const diagnostics = OmrDiagnostics(
+      status: OmrScanStatus.rejected,
+      failureCode: OmrFailureCode.fiducialsNotFound,
+      sourceWidth: 1080,
+      sourceHeight: 1440,
+      markerCandidateCount: 2,
+      registrationNote: 'only 2 square-like marker candidates were found',
+      stageTimingsMs: {'quality': 4, 'registration': 12, 'total': 16},
+    );
+    const rejected = OmrResult(
+      fiducialsFound: false,
+      diagnostics: diagnostics,
+      questions: [],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GradingScreen(
+          test: paper(),
+          initialResult: rejected,
+          gradebookStore: _Gradebook(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Couldn’t read this answer sheet'), findsOneWidget);
+    expect(find.text('Scan diagnostics'), findsOneWidget);
+    expect(find.textContaining('failure=fiducialsNotFound'), findsOneWidget);
+    expect(
+      find.textContaining('only 2 square-like marker candidates'),
+      findsAtLeastNWidgets(1),
+    );
   });
 }
