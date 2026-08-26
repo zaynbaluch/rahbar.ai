@@ -248,4 +248,55 @@ void main() {
       findsAtLeastNWidgets(1),
     );
   });
+
+  testWidgets(
+    'rejected scan with detected markers stays in the read-error state',
+    (tester) async {
+      final rejected = OmrResult(
+        fiducialsFound: true,
+        diagnostics: const OmrDiagnostics(
+          status: OmrScanStatus.rejected,
+          failureCode: OmrFailureCode.templateMismatch,
+          sourceWidth: 1080,
+          sourceHeight: 1440,
+          canonicalWidth: 820,
+          canonicalHeight: 1160,
+          markerCandidateCount: 14,
+          registrationNote: 'markers found but sheet template did not validate',
+        ),
+        questions: [
+          for (var i = 1; i <= 5; i++)
+            OmrQuestion(
+              number: i,
+              marked: null,
+              correct: 'A',
+              fill: 0,
+              confidence: 0,
+            ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GradingScreen(
+            test: paper(),
+            teachingContext: context,
+            initialResult: rejected,
+            gradebookStore: _Gradebook(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Couldn’t read this answer sheet'), findsOneWidget);
+      expect(
+        find.text(
+          'This image doesn’t match the Bayaz answer grid. Use the answer box from a test PDF created by Bayaz.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('0 / 5'), findsNothing);
+      expect(find.text('Scan diagnostics'), findsOneWidget);
+    },
+  );
 }

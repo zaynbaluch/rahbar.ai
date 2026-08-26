@@ -135,6 +135,55 @@ img.Image _renderPerspectiveSheet() {
   return image;
 }
 
+img.Image _renderForeignTemplateSheet() {
+  final image = img.Image(width: 900, height: 1200);
+  img.fill(image, color: img.ColorRgb8(246, 246, 246));
+  final corners = <(double, double)>[
+    (90, 85),
+    (810, 85),
+    (810, 1115),
+    (90, 1115),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 22,
+      y1: y.round() - 22,
+      x2: x.round() + 22,
+      y2: y.round() + 22,
+      color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+
+  // This deliberately mirrors the first image-generated smoke sheet: valid
+  // square markers, but a bubble grid that is not the Bayaz PDF template.
+  const columns = [.33, .485, .638, .789];
+  const rows = [.271, .339, .408, .474, .541, .607, .673, .736, .800, .864];
+  for (var q = 0; q < 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (x, y) = mapper.map(columns[c], rows[q]);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 20,
+        color: img.ColorRgb8(15, 15, 15),
+      );
+      if ('ABCD'[c] == 'BDACBDCABD'[q]) {
+        img.fillCircle(
+          image,
+          x: x.round(),
+          y: y.round(),
+          radius: 18,
+          color: img.ColorRgb8(20, 20, 20),
+        );
+      }
+    }
+  }
+  return image;
+}
+
 void main() {
   test('pipeline grades a clean sheet and records stage diagnostics', () {
     final result = OmrPipeline.scan(_renderSheet(), _key());
@@ -207,6 +256,19 @@ void main() {
         result.diagnostics!.toReport(),
         contains('failure=fiducialsNotFound'),
       );
+    },
+  );
+
+  test(
+    'pipeline rejects a registered sheet whose bubble grid is not the Bayaz template',
+    () {
+      final result = OmrPipeline.scan(_renderForeignTemplateSheet(), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode.name, 'templateMismatch');
+      expect(result.correct, 0);
+      expect(result.diagnostics!.toReport(), contains('template'));
     },
   );
 }
