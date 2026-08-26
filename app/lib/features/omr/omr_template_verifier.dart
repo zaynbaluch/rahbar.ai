@@ -92,14 +92,25 @@ abstract final class OmrTemplateVerifier {
       for (var i = 0; i < samples; i++) {
         final t = .09 + .82 * i / (samples - 1);
         final x = (t * (canonical.width - 1)).round();
-        var darkest = 0.0;
+        var edgeLuminance = 255.0;
+        var backgroundLuminance = 0.0;
         for (var offset = 0; offset <= band; offset++) {
           final y = top ? offset : canonical.height - 1 - offset;
-          final darkness =
-              (255 - canonical.getPixel(x, y).luminance.toDouble()) / 255.0;
-          if (darkness > darkest) darkest = darkness;
+          edgeLuminance = math.min(
+            edgeLuminance,
+            canonical.getPixel(x, y).luminance.toDouble(),
+          );
         }
-        if (darkest >= .14) covered++;
+        for (var offset = band * 2; offset <= band * 5; offset++) {
+          final y = top ? offset : canonical.height - 1 - offset;
+          if (y < 0 || y >= canonical.height) continue;
+          backgroundLuminance = math.max(
+            backgroundLuminance,
+            canonical.getPixel(x, y).luminance.toDouble(),
+          );
+        }
+        final localContrast = (backgroundLuminance - edgeLuminance) / 255.0;
+        if (localContrast >= .08) covered++;
       }
       return covered / samples;
     }
@@ -109,14 +120,25 @@ abstract final class OmrTemplateVerifier {
       for (var i = 0; i < samples; i++) {
         final t = .09 + .82 * i / (samples - 1);
         final y = (t * (canonical.height - 1)).round();
-        var darkest = 0.0;
+        var edgeLuminance = 255.0;
+        var backgroundLuminance = 0.0;
         for (var offset = 0; offset <= band; offset++) {
           final x = left ? offset : canonical.width - 1 - offset;
-          final darkness =
-              (255 - canonical.getPixel(x, y).luminance.toDouble()) / 255.0;
-          if (darkness > darkest) darkest = darkness;
+          edgeLuminance = math.min(
+            edgeLuminance,
+            canonical.getPixel(x, y).luminance.toDouble(),
+          );
         }
-        if (darkest >= .14) covered++;
+        for (var offset = band * 2; offset <= band * 5; offset++) {
+          final x = left ? offset : canonical.width - 1 - offset;
+          if (x < 0 || x >= canonical.width) continue;
+          backgroundLuminance = math.max(
+            backgroundLuminance,
+            canonical.getPixel(x, y).luminance.toDouble(),
+          );
+        }
+        final localContrast = (backgroundLuminance - edgeLuminance) / 255.0;
+        if (localContrast >= .08) covered++;
       }
       return covered / samples;
     }
@@ -145,7 +167,8 @@ abstract final class OmrTemplateVerifier {
       final angle = 2 * math.pi * angleIndex / _angleSamples;
       final cosAngle = math.cos(angle);
       final sinAngle = math.sin(angle);
-      var darkest = 0.0;
+      var ringLuminance = 255.0;
+      var backgroundLuminance = 0.0;
       for (var radialIndex = 0; radialIndex < _radialSamples; radialIndex++) {
         final t = _radialSamples == 1
             ? 0.0
@@ -156,11 +179,26 @@ abstract final class OmrTemplateVerifier {
         if (x < 0 || y < 0 || x >= canonical.width || y >= canonical.height) {
           continue;
         }
-        final darkness =
-            (255 - canonical.getPixel(x, y).luminance.toDouble()) / 255.0;
-        if (darkness > darkest) darkest = darkness;
+        ringLuminance = math.min(
+          ringLuminance,
+          canonical.getPixel(x, y).luminance.toDouble(),
+        );
       }
-      if (darkest >= .16) covered++;
+      for (var radialIndex = 0; radialIndex < 6; radialIndex++) {
+        final t = radialIndex / 5;
+        final sampleRadius = radius * (1.55 + .50 * t);
+        final x = (cx + cosAngle * sampleRadius).round();
+        final y = (cy + sinAngle * sampleRadius).round();
+        if (x < 0 || y < 0 || x >= canonical.width || y >= canonical.height) {
+          continue;
+        }
+        backgroundLuminance = math.max(
+          backgroundLuminance,
+          canonical.getPixel(x, y).luminance.toDouble(),
+        );
+      }
+      final localContrast = (backgroundLuminance - ringLuminance) / 255.0;
+      if (localContrast >= .10) covered++;
     }
 
     return covered / _angleSamples;

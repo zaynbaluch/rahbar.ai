@@ -28,6 +28,7 @@ img.Image _renderSheet({
   Set<int> blank = const {},
   Map<int, Set<String>> extraMarks = const {},
   Set<int> shadowRows = const {},
+  int paperLuminance = 246,
 }) {
   final layout = OmrTemplate.layoutFor(count);
   const scale = 4.0;
@@ -37,7 +38,10 @@ img.Image _renderSheet({
   final width = ((layout.boxW + 2 * pad) * scale).round();
   final height = ((layout.boxH + 2 * pad) * scale).round();
   final image = img.Image(width: width, height: height);
-  img.fill(image, color: img.ColorRgb8(246, 246, 246));
+  img.fill(
+    image,
+    color: img.ColorRgb8(paperLuminance, paperLuminance, paperLuminance),
+  );
   int sx(double x) => ((x - originX) * scale).round();
   int sy(double y) => ((y - originY) * scale).round();
   final markerHalf = (layout.fidSize * scale / 2).round();
@@ -188,9 +192,12 @@ img.Image _renderPerspectiveSheet() {
   return image;
 }
 
-img.Image _renderForeignTemplateSheet() {
+img.Image _renderForeignTemplateSheet({int paperLuminance = 246}) {
   final image = img.Image(width: 900, height: 1200);
-  img.fill(image, color: img.ColorRgb8(246, 246, 246));
+  img.fill(
+    image,
+    color: img.ColorRgb8(paperLuminance, paperLuminance, paperLuminance),
+  );
   final corners = <(double, double)>[
     (90, 85),
     (810, 85),
@@ -298,6 +305,16 @@ void main() {
     );
   });
 
+  test('pipeline still accepts a dim but structurally correct Bayaz sheet', () {
+    final result = OmrPipeline.scan(_renderSheet(paperLuminance: 170), _key());
+
+    expect(result.diagnostics!.status, OmrScanStatus.complete);
+    expect(result.correct, 10);
+    expect(result.needsReview, 0);
+    expect(result.diagnostics!.templateMatchedBubbles, 40);
+    expect(result.diagnostics!.templateBorderCoverage, greaterThan(.90));
+  });
+
   test(
     'pipeline survives perspective distortion after canonical rectification',
     () {
@@ -368,6 +385,21 @@ void main() {
       );
       expect(result.diagnostics!.status, OmrScanStatus.rejected);
       expect(result.diagnostics!.failureCode, OmrFailureCode.templateMismatch);
+    },
+  );
+
+  test(
+    'template verification rejects a dim foreign sheet instead of treating gray paper as print',
+    () {
+      final result = OmrPipeline.scan(
+        _renderForeignTemplateSheet(paperLuminance: 170),
+        _key(),
+      );
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode, OmrFailureCode.templateMismatch);
+      expect(result.correct, 0);
     },
   );
 
