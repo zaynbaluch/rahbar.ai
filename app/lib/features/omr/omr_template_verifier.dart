@@ -11,6 +11,8 @@ class OmrTemplateMatchResult {
     required this.matchedBubbles,
     required this.totalBubbles,
     required this.meanRingCoverage,
+    required this.borderCoverage,
+    required this.minimumSideBorderCoverage,
     required this.note,
   });
 
@@ -19,6 +21,8 @@ class OmrTemplateMatchResult {
   final int matchedBubbles;
   final int totalBubbles;
   final double meanRingCoverage;
+  final double borderCoverage;
+  final double minimumSideBorderCoverage;
   final String note;
 }
 
@@ -46,12 +50,22 @@ abstract final class OmrTemplateVerifier {
 
     final matchedFraction = total == 0 ? 0.0 : matched / total;
     final meanCoverage = total == 0 ? 0.0 : coverageSum / total;
-    final score = (matchedFraction * .75 + meanCoverage * .25)
-        .clamp(0.0, 1.0)
-        .toDouble();
-    final matches = matchedFraction >= .60 && meanCoverage >= .36;
+    final sideBorders = _borderCoverages(canonical);
+    final borderCoverage =
+        sideBorders.reduce((a, b) => a + b) / sideBorders.length;
+    final minimumSideBorderCoverage = sideBorders.reduce(math.min);
+    final score =
+        (matchedFraction * .55 + meanCoverage * .20 + borderCoverage * .25)
+            .clamp(0.0, 1.0)
+            .toDouble();
+    final bubbleGridMatches = matchedFraction >= .60 && meanCoverage >= .36;
+    final borderMatches =
+        borderCoverage >= .58 && minimumSideBorderCoverage >= .38;
+    final matches = bubbleGridMatches && borderMatches;
     final note = matches
-        ? 'Bayaz bubble grid aligned: $matched/$total outlines matched'
+        ? 'Bayaz template aligned: $matched/$total outlines matched; border ${(borderCoverage * 100).round()}%'
+        : !borderMatches
+        ? 'answer-box border mismatch: average ${(borderCoverage * 100).round()}%, weakest side ${(minimumSideBorderCoverage * 100).round()}%'
         : 'bubble grid mismatch: only $matched/$total expected outlines aligned';
 
     return OmrTemplateMatchResult(
@@ -60,8 +74,59 @@ abstract final class OmrTemplateVerifier {
       matchedBubbles: matched,
       totalBubbles: total,
       meanRingCoverage: meanCoverage,
+      borderCoverage: borderCoverage,
+      minimumSideBorderCoverage: minimumSideBorderCoverage,
       note: note,
     );
+  }
+
+  static List<double> _borderCoverages(img.Image canonical) {
+    const samples = 96;
+    final band = math.max(
+      3,
+      (math.min(canonical.width, canonical.height) * .007).round(),
+    );
+
+    double horizontal(bool top) {
+      var covered = 0;
+      for (var i = 0; i < samples; i++) {
+        final t = .09 + .82 * i / (samples - 1);
+        final x = (t * (canonical.width - 1)).round();
+        var darkest = 0.0;
+        for (var offset = 0; offset <= band; offset++) {
+          final y = top ? offset : canonical.height - 1 - offset;
+          final darkness =
+              (255 - canonical.getPixel(x, y).luminance.toDouble()) / 255.0;
+          if (darkness > darkest) darkest = darkness;
+        }
+        if (darkest >= .14) covered++;
+      }
+      return covered / samples;
+    }
+
+    double vertical(bool left) {
+      var covered = 0;
+      for (var i = 0; i < samples; i++) {
+        final t = .09 + .82 * i / (samples - 1);
+        final y = (t * (canonical.height - 1)).round();
+        var darkest = 0.0;
+        for (var offset = 0; offset <= band; offset++) {
+          final x = left ? offset : canonical.width - 1 - offset;
+          final darkness =
+              (255 - canonical.getPixel(x, y).luminance.toDouble()) / 255.0;
+          if (darkness > darkest) darkest = darkness;
+        }
+        if (darkest >= .14) covered++;
+      }
+      return covered / samples;
+    }
+
+    return [
+      horizontal(true),
+      vertical(false),
+      horizontal(false),
+      vertical(true),
+    ];
   }
 
   static double _ringCoverage(

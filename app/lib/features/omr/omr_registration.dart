@@ -210,7 +210,7 @@ abstract final class OmrRegistration {
     // centers. Remove thin strokes before connected-component extraction so that
     // the border cannot glue all four solid squares into one giant component.
     // Filled squares survive this small erosion; thin print/borders do not.
-    final erosionRadius = (math.min(width, height) ~/ 360).clamp(1, 3);
+    final erosionRadius = (math.min(width, height) * .003).round().clamp(1, 3);
     final componentMask = _erodeMask(mask, width, height, erosionRadius);
 
     final visited = Uint8List(width * height);

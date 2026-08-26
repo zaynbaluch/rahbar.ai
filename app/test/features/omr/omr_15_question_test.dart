@@ -44,6 +44,42 @@ img.Image _sheet() {
       color: black,
     );
   }
+  img.drawLine(
+    image,
+    x1: sx(layout.boxLeft),
+    y1: sy(layout.boxTop),
+    x2: sx(layout.boxRight),
+    y2: sy(layout.boxTop),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxRight),
+    y1: sy(layout.boxTop),
+    x2: sx(layout.boxRight),
+    y2: sy(layout.boxBottom),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxRight),
+    y1: sy(layout.boxBottom),
+    x2: sx(layout.boxLeft),
+    y2: sy(layout.boxBottom),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxLeft),
+    y1: sy(layout.boxBottom),
+    x2: sx(layout.boxLeft),
+    y2: sy(layout.boxTop),
+    color: black,
+    thickness: 3,
+  );
   final r = (layout.bubbleR * scale).round();
   for (var q = 1; q <= 15; q++) {
     for (var c = 0; c < 4; c++) {
