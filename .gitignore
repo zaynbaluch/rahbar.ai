@@ -41,3 +41,6 @@ app/android/app/src/main/jniLibs/
 .DS_Store
 .vscode/
 .claude/
+
+# Local linked worktrees
+.worktrees/
