@@ -83,4 +83,59 @@ void main() {
     expect(result.success, isFalse);
     expect(result.failureCode, OmrFailureCode.imageTooSmall);
   });
+
+  test(
+    'registration isolates fiducials even when the printed box border touches them',
+    () {
+      final image = _markerImage();
+      final black = img.ColorRgb8(0, 0, 0);
+      // Mirror the shipping PDF: the answer-box border runs through each marker center.
+      img.drawLine(
+        image,
+        x1: 110,
+        y1: 130,
+        x2: 785,
+        y2: 155,
+        color: black,
+        thickness: 3,
+      );
+      img.drawLine(
+        image,
+        x1: 785,
+        y1: 155,
+        x2: 760,
+        y2: 1060,
+        color: black,
+        thickness: 3,
+      );
+      img.drawLine(
+        image,
+        x1: 760,
+        y1: 1060,
+        x2: 135,
+        y2: 1035,
+        color: black,
+        thickness: 3,
+      );
+      img.drawLine(
+        image,
+        x1: 135,
+        y1: 1035,
+        x2: 110,
+        y2: 130,
+        color: black,
+        thickness: 3,
+      );
+
+      final result = OmrRegistration.detect(
+        img.grayscale(image),
+        OmrTemplate.layoutFor(10),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.fiducials, hasLength(4));
+      expect(result.fiducials[0].x, closeTo(110, 10));
+      expect(result.fiducials[2].y, closeTo(1060, 10));
+    },
+  );
 }

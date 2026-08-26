@@ -42,3 +42,50 @@ Record per device and condition:
 - crash and memory behaviour.
 
 Release only after the team defines numerical thresholds and signs a test report. Every false acceptance must be treated more seriously than a false rejection because the teacher can retake a rejected image, while a silent incorrect mark can harm a student record.
+
+## `omr_debug` staged pipeline
+
+The `omr_debug` branch replaces direct photo-coordinate bubble sampling with an explicit diagnostic pipeline:
+
+1. decode/orient and cap image size;
+2. capture-quality measurement (resolution, exposure clipping, blur variance);
+3. adaptive dark-mask connected-component marker detection;
+4. four-marker geometry validation;
+5. projective rectification into a fixed canonical OMR image;
+6. local bubble-versus-paper contrast measurement at known template coordinates;
+7. per-sheet blank-distribution calibration;
+8. conservative marked / blank / ambiguous row classification;
+9. whole-sheet warnings; and
+10. teacher review before persistence.
+
+The branch deliberately keeps the existing four-square paper format. It does not use circle detection, ML, OCR, OpenCV, or coded fiducials.
+
+### Debug handoff
+
+Every readable scan now carries copyable **Scan diagnostics**. A useful bug report from manual testing should include the original image plus the copied report. The report contains:
+
+- pipeline status and typed failure code;
+- source/canonical dimensions;
+- exposure and blur metrics;
+- marker candidate count, selected marker coordinates, geometry score, and registration note;
+- per-stage processing timings;
+- blank baseline, MAD, and calibrated mark threshold; and
+- per-question A/B/C/D scores, decision, confidence, and reason.
+
+This makes the first investigation question "which stage failed?" answerable from the report itself.
+
+## Initial image-generated smoke set
+
+Before printing physical sheets, run the five image-generated manual fixtures supplied in the OMR design conversation through **Choose image**. These are development smoke tests, not release evidence.
+
+| Fixture | Expected condition | Expected marks |
+|---|---|---|
+| 01 clean | sharp, mostly top-down baseline | `1=B 2=D 3=A 4=C 5=B 6=D 7=C 8=A 9=B 10=D` |
+| 02 perspective | mild rotation / perspective | same 10 answers |
+| 03 lighting | uneven soft shadow / brightness gradient | same 10 answers |
+| 04 degraded | mild blur/noise/reduced contrast | same 10 answers, or conservative review rather than a confident wrong read |
+| 05 ambiguity | Q3 deliberately has A+B; Q7 is intentionally faint C | Q3 must require review; Q7 may be C with low confidence or require review; all other rows match the baseline key |
+
+For each run, record: pass/fail, any wrong confident answer, number of rows requiring review, and the copied diagnostics. A confident wrong read is more severe than a rejected/ambiguous row.
+
+These five images are only the Level-A smoke set. Physical A05 photographs remain mandatory before the OMR feature can be described as camera-validated.
