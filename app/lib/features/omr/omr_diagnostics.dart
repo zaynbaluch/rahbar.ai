@@ -135,6 +135,8 @@ class OmrDiagnostics {
     this.markerCandidateCount = 0,
     this.fiducials = const [],
     this.registrationScore = 0,
+    this.registrationNote = '',
+    this.stageTimingsMs = const {},
     this.blankBaseline = 0,
     this.blankMad = 0,
     this.markThreshold = 0,
@@ -155,6 +157,8 @@ class OmrDiagnostics {
   final int markerCandidateCount;
   final List<OmrPoint> fiducials;
   final double registrationScore;
+  final String registrationNote;
+  final Map<String, int> stageTimingsMs;
   final double blankBaseline;
   final double blankMad;
   final double markThreshold;
@@ -175,6 +179,8 @@ class OmrDiagnostics {
     'markerCandidateCount': markerCandidateCount,
     'fiducials': fiducials.map((point) => point.toJson()).toList(),
     'registrationScore': registrationScore,
+    'registrationNote': registrationNote,
+    'stageTimingsMs': stageTimingsMs,
     'blankBaseline': blankBaseline,
     'blankMad': blankMad,
     'markThreshold': markThreshold,
@@ -210,6 +216,10 @@ class OmrDiagnostics {
         )
         .toList(growable: false),
     registrationScore: (json['registrationScore'] as num? ?? 0).toDouble(),
+    registrationNote: json['registrationNote'] as String? ?? '',
+    stageTimingsMs: (json['stageTimingsMs'] as Map? ?? const {}).map(
+      (key, value) => MapEntry(key.toString(), (value as num).toInt()),
+    ),
     blankBaseline: (json['blankBaseline'] as num? ?? 0).toDouble(),
     blankMad: (json['blankMad'] as num? ?? 0).toDouble(),
     markThreshold: (json['markThreshold'] as num? ?? 0).toDouble(),
@@ -233,8 +243,13 @@ class OmrDiagnostics {
         'lightClip=${f(lightClipFraction)} blur=${f(blurVariance)}',
       )
       ..writeln(
-        'markers candidates=$markerCandidateCount score=${f(registrationScore)}',
+        'markers candidates=$markerCandidateCount score=${f(registrationScore)} note=${registrationNote.isEmpty ? '-' : registrationNote}',
       );
+    if (stageTimingsMs.isNotEmpty) {
+      buffer.writeln(
+        'timings=${stageTimingsMs.entries.map((entry) => '${entry.key}:${entry.value}ms').join(' ')}',
+      );
+    }
     if (fiducials.isNotEmpty) {
       buffer.writeln(
         'fiducials=${fiducials.map((point) => '(${point.x.toStringAsFixed(1)},${point.y.toStringAsFixed(1)})').join(' ')}',
