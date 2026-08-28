@@ -77,7 +77,7 @@ class ResourceDescriptor {
     }
 
     final bundled = (json['bundled_asset'] as String? ?? '').trim();
-    final sizeBytes = json['size_bytes'] as int? ?? 0;
+    final sizeBytes = (json['size_bytes'] as num?)?.toInt() ?? 0;
     final sha256 = (json['sha256'] as String? ?? '').trim().toLowerCase();
     if (downloadUrl != null) {
       if (sizeBytes <= 0) {
