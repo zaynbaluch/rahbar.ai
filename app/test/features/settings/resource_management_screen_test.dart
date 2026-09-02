@@ -19,6 +19,7 @@ class _StubResourceManager extends ResourceManager {
   final downloads = <String, Completer<File>>{};
   void Function(DownloadProgress progress)? onProgress;
   DownloadCancellationToken? token;
+  bool autoDownloadSuppressed = false;
 
   @override
   Future<void> init() async {}
@@ -47,12 +48,21 @@ class _StubResourceManager extends ResourceManager {
 
   @override
   Future<void> remove(String id) async => installed.remove(id);
+
+  @override
+  Future<bool> isAutoDownloadSuppressed() async => autoDownloadSuppressed;
+
+  @override
+  Future<void> setAutoDownloadSuppressed(bool suppressed) async {
+    autoDownloadSuppressed = suppressed;
+  }
+
   @override
   void dispose() {}
 }
 
 class _ManagerBackedResources extends LocalAiResources {
-  _ManagerBackedResources(this.manager);
+  _ManagerBackedResources(this.manager) : super(manager: manager);
 
   final _StubResourceManager manager;
 
@@ -136,11 +146,12 @@ final _embedding = ResourceDescriptor(
 
 Future<BackgroundAiDownloadController> _pump(
   WidgetTester tester,
-  _StubResourceManager manager,
-) async {
+  _StubResourceManager manager, {
+  bool autoDownloadEnabled = false,
+}) async {
   final controller = BackgroundAiDownloadController(
     resources: _ManagerBackedResources(manager),
-    autoDownloadEnabled: false,
+    autoDownloadEnabled: autoDownloadEnabled,
   );
   tester.view.physicalSize = const Size(600, 1200);
   tester.view.devicePixelRatio = 1;
@@ -206,6 +217,37 @@ void main() {
     expect(find.text('Remove downloads'), findsOneWidget);
     expect(find.textContaining('.gguf'), findsNothing);
   });
+  testWidgets('manual removal suppresses automatic download on next startup', (
+    tester,
+  ) async {
+    final manager = _StubResourceManager(
+      [_language, _embedding],
+      installed: {_language.id, _embedding.id},
+    );
+    await _pump(tester, manager, autoDownloadEnabled: true);
+
+    await tester.tap(find.text('Remove downloads'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(manager.installed, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    final nextResources = _ManagerBackedResources(manager);
+    addTearDown(() => nextResources.setAutoDownloadSuppressed(false));
+    final nextController = BackgroundAiDownloadController(
+      resources: nextResources,
+      autoDownloadEnabled: true,
+    );
+    addTearDown(nextController.dispose);
+    await nextController.startIfNeeded();
+
+    expect(nextController.state.running, isFalse);
+    expect(nextController.state.completed, isFalse);
+    expect(manager.downloads, isEmpty);
+  });
+
   testWidgets('manual download uses the shared controller state', (
     tester,
   ) async {

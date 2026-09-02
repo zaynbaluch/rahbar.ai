@@ -9,9 +9,11 @@ class _FakeResources extends LocalAiResources {
   _FakeResources({
     required this.languageInstalled,
     required this.embeddingInstalled,
+    this.autoDownloadSuppressed = false,
   });
   bool languageInstalled;
   bool embeddingInstalled;
+  bool autoDownloadSuppressed;
   int languageInstalls = 0;
   int embeddingInstalls = 0;
 
@@ -52,6 +54,14 @@ class _FakeResources extends LocalAiResources {
   }
 
   @override
+  Future<bool> isAutoDownloadSuppressed() async => autoDownloadSuppressed;
+
+  @override
+  Future<void> setAutoDownloadSuppressed(bool suppressed) async {
+    autoDownloadSuppressed = suppressed;
+  }
+
+  @override
   void dispose() {}
 }
 
@@ -77,6 +87,21 @@ void main() {
     expect(controller.state.completed, isTrue);
     expect(resources.languageInstalls, 1);
     expect(resources.embeddingInstalls, 0);
+  });
+
+  test('manual removal suppresses automatic setup', () async {
+    final resources = _FakeResources(
+      languageInstalled: false,
+      embeddingInstalled: false,
+      autoDownloadSuppressed: true,
+    );
+    final controller = BackgroundAiDownloadController(resources: resources);
+
+    await controller.startIfNeeded();
+
+    expect(controller.state.running, isFalse);
+    expect(controller.state.completed, isFalse);
+    expect(resources.languageInstalls + resources.embeddingInstalls, 0);
   });
 
   test('developer override suppresses automatic downloads', () async {
@@ -109,6 +134,23 @@ void main() {
     expect(resources.languageInstalls, 1);
     expect(resources.embeddingInstalls, 1);
   });
+
+  test(
+    'successful manual download re-enables future automatic setup',
+    () async {
+      final resources = _FakeResources(
+        languageInstalled: false,
+        embeddingInstalled: false,
+        autoDownloadSuppressed: true,
+      );
+      final controller = BackgroundAiDownloadController(resources: resources);
+
+      await controller.downloadMissing();
+
+      expect(controller.state.completed, isTrue);
+      expect(resources.autoDownloadSuppressed, isFalse);
+    },
+  );
 
   test('refresh reflects resources removed outside the controller', () async {
     final resources = _FakeResources(

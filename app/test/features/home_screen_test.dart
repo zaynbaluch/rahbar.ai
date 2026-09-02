@@ -48,6 +48,12 @@ class _SlowResources extends LocalAiResources {
   }
 
   @override
+  Future<bool> isAutoDownloadSuppressed() async => false;
+
+  @override
+  Future<void> setAutoDownloadSuppressed(bool suppressed) async {}
+
+  @override
   void dispose() {}
 }
 
