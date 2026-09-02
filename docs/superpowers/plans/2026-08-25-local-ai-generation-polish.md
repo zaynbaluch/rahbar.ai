@@ -16,9 +16,8 @@
 - Preserve rotating long-operation messages.
 - Footer copy is `Please keep this screen open.`
 - No new animation artwork or interpolated frames.
-- No OMR changes, MTP implementation, Urdu translation, or report-system changes.
+- No OMR changes, Urdu translation, or report-system changes.
 - MCQ prompt change stays minimal: at most two student-facing/source-scaffolding instructions.
-- Gemma 4 model/runtime work is a separate uncommitted experiment after this plan.
 
 ---
 
@@ -110,11 +109,10 @@
 ### Task 5: Deferred-work note
 
 **Files:**
-- Create: `docs/10-deferred-ai-runtime-and-omr.md`
+- Create: `docs/10-deferred-omr.md`
 
-- [ ] Document Gemma 4 MTP as deferred because the current binding lacks Gemma 4 and the current 0.9 binding removed NextN/MTP due private upstream APIs; future work should be isolated in a runtime fork/experiment.
 - [ ] Document OMR deferred work: real-photo corpus, adaptive/local thresholding/canonicalization first, coded fiducials only if needed.
-- [ ] Commit `docs: track deferred MTP and OMR work`.
+- [ ] Commit `docs: track deferred OMR work`.
 
 ### Task 6: Full committed-track verification
 
@@ -122,14 +120,3 @@
 - [ ] Run `/home/m/fvm/versions/3.44.4/bin/flutter test` from `app`.
 - [ ] Run `/home/m/fvm/versions/3.44.4/bin/flutter build apk --debug --target-platform android-arm64`.
 - [ ] Record APK SHA-256 and verify Git status contains only known pre-existing unrelated untracked files.
-
-### Task 7: Uncommitted Gemma 4 experiment
-
-**Files:** experiment only; do not commit any runtime/model swap.
-
-- [ ] Confirm current pinned llama.cpp cannot load Gemma 4 and record exact pin.
-- [ ] Reject the LiteRT-LM mobile artifact as a drop-in because it requires LiteRT-LM rather than llama.cpp; note Google's 1.1 GB / 0.84 GB figures are runtime memory estimates, not GGUF file size.
-- [ ] Determine whether upgrading to current `llama_cpp_dart` 0.9 can be isolated enough for a temporary Android build; do not implement MTP.
-- [ ] If feasible, build a temporary Gemma-4-compatible Android runtime, provision the existing local Gemma 4 E2B GGUF, and benchmark model load plus a short structured generation on the SM-A055F.
-- [ ] If the runtime migration is not safely bounded, stop and report the blocker rather than modifying committed architecture.
-- [ ] Leave all experiment changes uncommitted and clearly separate from the verified committed track.
