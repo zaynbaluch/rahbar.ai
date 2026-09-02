@@ -24,6 +24,12 @@ void main() {
         OmrPoint(110, 1290),
       ],
       registrationScore: .91,
+      templateMatchScore: .94,
+      templateMatchedBubbles: 39,
+      templateExpectedBubbles: 40,
+      templateBorderCoverage: .92,
+      templateMinimumSideBorderCoverage: .88,
+      templateNote: 'aligned',
       blankBaseline: .03,
       blankMad: .01,
       markThreshold: .14,
@@ -58,12 +64,15 @@ void main() {
 
     final restored = OmrDiagnostics.fromJson(diagnostics.toJson());
     expect(restored.registrationScore, closeTo(.91, 1e-9));
+    expect(restored.templateBorderCoverage, closeTo(.92, 1e-9));
+    expect(restored.templateMinimumSideBorderCoverage, closeTo(.88, 1e-9));
     expect(restored.rows.single.marked, 'B');
     expect(restored.rows.single.bubbles[1].score, closeTo(.71, 1e-9));
 
     final report = restored.toReport();
     expect(report, contains('status=complete'));
     expect(report, contains('markers candidates=7'));
+    expect(report, contains('border=0.920 minSide=0.880'));
     expect(report, contains('Q1 marked=B'));
     expect(report, contains('B=0.710'));
   });

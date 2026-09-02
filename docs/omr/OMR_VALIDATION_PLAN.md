@@ -97,3 +97,16 @@ The first purely image-generated smoke sheet was **not** a valid Bayaz OMR fixtu
 This is now treated as a test-fixture failure, not a reason to retune Bayaz to arbitrary OMR layouts. `omr_debug` verifies the expected bubble-outline geometry after rectification and returns `templateMismatch` when four plausible markers surround a non-Bayaz grid. The UI tells the tester to use an answer box from a PDF created by Bayaz and keeps the full diagnostic report available.
 
 For future synthetic/manual fixtures, **the base answer grid must come from the real Bayaz PDF geometry**. Generative image tools may be used for photographic appearance or adversarial variation only if the marker/bubble geometry is preserved. Any generated image that fails the template-fidelity check is not valid grading ground truth.
+
+### Periodic-grid alias protection
+
+The 2026-08-26 manual retest exposed a second template-verification failure mode. A foreign lookalike sheet could align roughly 35/40 expected bubble rings even though its whole grid was shifted, because the repeated row pitch lets one printed row alias onto another expected row. Bubble-outline count alone is therefore not a unique template signature.
+
+The verifier now combines two independent structural checks after rectification:
+
+- the expected bubble-outline grid; and
+- continuity of the four printed answer-box border sides connecting the fiducial centers.
+
+The border is a non-periodic anchor owned by the Bayaz PDF and is absent from the original generated lookalike. Copied diagnostics report both bubble matches and `border` / `minSide` coverage. A scan must satisfy both the grid and border checks before any answer can be graded.
+
+Registration also scales its thin-line erosion with image size so the printed border is removed from fiducial connected components without deleting the much thicker square markers. This matters especially for 15-question sheets, where filled bubbles can otherwise become plausible false marker candidates if the true markers are glued to the long border.

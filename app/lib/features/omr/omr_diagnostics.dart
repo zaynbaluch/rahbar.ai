@@ -141,6 +141,8 @@ class OmrDiagnostics {
     this.templateMatchScore = 0,
     this.templateMatchedBubbles = 0,
     this.templateExpectedBubbles = 0,
+    this.templateBorderCoverage = 0,
+    this.templateMinimumSideBorderCoverage = 0,
     this.templateNote = '',
     this.blankBaseline = 0,
     this.blankMad = 0,
@@ -167,6 +169,8 @@ class OmrDiagnostics {
   final double templateMatchScore;
   final int templateMatchedBubbles;
   final int templateExpectedBubbles;
+  final double templateBorderCoverage;
+  final double templateMinimumSideBorderCoverage;
   final String templateNote;
   final double blankBaseline;
   final double blankMad;
@@ -193,6 +197,8 @@ class OmrDiagnostics {
     'templateMatchScore': templateMatchScore,
     'templateMatchedBubbles': templateMatchedBubbles,
     'templateExpectedBubbles': templateExpectedBubbles,
+    'templateBorderCoverage': templateBorderCoverage,
+    'templateMinimumSideBorderCoverage': templateMinimumSideBorderCoverage,
     'templateNote': templateNote,
     'blankBaseline': blankBaseline,
     'blankMad': blankMad,
@@ -236,6 +242,10 @@ class OmrDiagnostics {
     templateMatchScore: (json['templateMatchScore'] as num? ?? 0).toDouble(),
     templateMatchedBubbles: json['templateMatchedBubbles'] as int? ?? 0,
     templateExpectedBubbles: json['templateExpectedBubbles'] as int? ?? 0,
+    templateBorderCoverage: (json['templateBorderCoverage'] as num? ?? 0)
+        .toDouble(),
+    templateMinimumSideBorderCoverage:
+        (json['templateMinimumSideBorderCoverage'] as num? ?? 0).toDouble(),
     templateNote: json['templateNote'] as String? ?? '',
     blankBaseline: (json['blankBaseline'] as num? ?? 0).toDouble(),
     blankMad: (json['blankMad'] as num? ?? 0).toDouble(),
@@ -274,7 +284,7 @@ class OmrDiagnostics {
     }
     if (templateExpectedBubbles > 0 || templateNote.isNotEmpty) {
       buffer.writeln(
-        'template score=${f(templateMatchScore)} matched=$templateMatchedBubbles/$templateExpectedBubbles note=${templateNote.isEmpty ? '-' : templateNote}',
+        'template score=${f(templateMatchScore)} matched=$templateMatchedBubbles/$templateExpectedBubbles border=${f(templateBorderCoverage)} minSide=${f(templateMinimumSideBorderCoverage)} note=${templateNote.isEmpty ? '-' : templateNote}',
       );
     }
     buffer.writeln(

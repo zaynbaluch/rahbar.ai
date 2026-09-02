@@ -108,6 +108,9 @@ abstract final class OmrPipeline {
         templateMatchScore: templateMatch.score,
         templateMatchedBubbles: templateMatch.matchedBubbles,
         templateExpectedBubbles: templateMatch.totalBubbles,
+        templateBorderCoverage: templateMatch.borderCoverage,
+        templateMinimumSideBorderCoverage:
+            templateMatch.minimumSideBorderCoverage,
         templateNote: templateMatch.note,
       );
       return OmrResult(
@@ -213,6 +216,9 @@ abstract final class OmrPipeline {
       templateMatchScore: templateMatch.score,
       templateMatchedBubbles: templateMatch.matchedBubbles,
       templateExpectedBubbles: templateMatch.totalBubbles,
+      templateBorderCoverage: templateMatch.borderCoverage,
+      templateMinimumSideBorderCoverage:
+          templateMatch.minimumSideBorderCoverage,
       templateNote: templateMatch.note,
       blankBaseline: calibration.blankBaseline,
       blankMad: calibration.blankMad,

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 import 'package:bayaz_ai/features/omr/omr_diagnostics.dart';
 import 'package:bayaz_ai/features/omr/omr_pipeline.dart';
@@ -49,6 +51,43 @@ img.Image _renderSheet({
       color: img.ColorRgb8(0, 0, 0),
     );
   }
+  final black = img.ColorRgb8(0, 0, 0);
+  img.drawLine(
+    image,
+    x1: sx(layout.boxLeft),
+    y1: sy(layout.boxTop),
+    x2: sx(layout.boxRight),
+    y2: sy(layout.boxTop),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxRight),
+    y1: sy(layout.boxTop),
+    x2: sx(layout.boxRight),
+    y2: sy(layout.boxBottom),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxRight),
+    y1: sy(layout.boxBottom),
+    x2: sx(layout.boxLeft),
+    y2: sy(layout.boxBottom),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxLeft),
+    y1: sy(layout.boxBottom),
+    x2: sx(layout.boxLeft),
+    y2: sy(layout.boxTop),
+    color: black,
+    thickness: 3,
+  );
   final radius = (layout.bubbleR * scale).round();
   for (var q = 1; q <= count; q++) {
     if (shadowRows.contains(q)) {
@@ -108,6 +147,20 @@ img.Image _renderPerspectiveSheet() {
       x2: x.round() + 24,
       y2: y.round() + 24,
       color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+  final black = img.ColorRgb8(0, 0, 0);
+  for (var i = 0; i < 4; i++) {
+    final a = corners[i];
+    final b = corners[(i + 1) % 4];
+    img.drawLine(
+      image,
+      x1: a.$1.round(),
+      y1: a.$2.round(),
+      x2: b.$1.round(),
+      y2: b.$2.round(),
+      color: black,
+      thickness: 3,
     );
   }
   for (var q = 1; q <= 10; q++) {
@@ -179,6 +232,50 @@ img.Image _renderForeignTemplateSheet() {
           color: img.ColorRgb8(20, 20, 20),
         );
       }
+    }
+  }
+  return image;
+}
+
+img.Image _renderAliasedTemplateSheet() {
+  final layout = OmrTemplate.layoutFor(10);
+  final image = img.Image(width: 900, height: 1200);
+  img.fill(image, color: img.ColorRgb8(246, 246, 246));
+  final corners = <(double, double)>[
+    (90, 85),
+    (810, 85),
+    (810, 1115),
+    (90, 1115),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 22,
+      y1: y.round() - 22,
+      x2: x.round() + 22,
+      y2: y.round() + 22,
+      color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+
+  // A deliberately wrong lookalike: it uses Bayaz's column spacing and row
+  // pitch, but the entire bubble grid is shifted down by exactly one row.
+  // A bubble-only verifier can therefore alias Q2..Q10 onto Q1..Q9 and
+  // report ~36/40 matches even though this is not the Bayaz PDF template.
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (u, _) = layout.bubbleNorm(q, c);
+      final (_, shiftedV) = layout.bubbleNorm(math.min(q + 1, 10), c);
+      final v = q == 10 ? shiftedV + layout.rowPitch / layout.boxH : shiftedV;
+      final (x, y) = mapper.map(u, v);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 20,
+        color: img.ColorRgb8(15, 15, 15),
+      );
     }
   }
   return image;
@@ -256,6 +353,21 @@ void main() {
         result.diagnostics!.toReport(),
         contains('failure=fiducialsNotFound'),
       );
+    },
+  );
+
+  test(
+    'template verification rejects a row-shifted alias grid without the Bayaz border',
+    () {
+      final result = OmrPipeline.scan(_renderAliasedTemplateSheet(), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(
+        result.diagnostics!.templateMatchedBubbles,
+        greaterThanOrEqualTo(32),
+      );
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode, OmrFailureCode.templateMismatch);
     },
   );
 
