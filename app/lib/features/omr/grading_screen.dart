@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../design_system/components/frame_animation.dart';
@@ -13,6 +12,7 @@ import '../curriculum/recent_work_store.dart';
 import '../curriculum/teaching_context.dart';
 import '../export/pdf_export.dart';
 import '../generation/mcq_parser.dart';
+import '../settings/settings_screen.dart';
 import 'gradebook_store.dart';
 import 'graded_result.dart';
 import 'image_pick_recovery.dart';
@@ -252,6 +252,15 @@ class _GradingScreenState extends State<GradingScreen> {
     );
   }
 
+  void _reportError() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: RouteSettings(arguments: _diagnostics),
+        builder: (_) => const ReportProblemScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final result = _result;
@@ -296,14 +305,10 @@ class _GradingScreenState extends State<GradingScreen> {
                   ],
                   if (_error != null) ...[
                     _ReadError(
-                      diagnostics: _diagnostics,
                       onRetake: () => _grade(ImageSource.camera),
                       onChoose: () => _grade(ImageSource.gallery),
+                      onReport: _reportError,
                     ),
-                    if (_diagnostics != null) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      _DiagnosticsCard(diagnostics: _diagnostics!),
-                    ],
                   ],
                   if (result != null) ...[
                     const SizedBox(height: AppSpacing.md),
@@ -315,10 +320,6 @@ class _GradingScreenState extends State<GradingScreen> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     _ResultSummary(result: result),
-                    if (_diagnostics != null) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      _DiagnosticsCard(diagnostics: _diagnostics!),
-                    ],
                     if (result.needsReview > 0) ...[
                       const SizedBox(height: AppSpacing.lg),
                       Text(
@@ -438,17 +439,14 @@ class _ReadError extends StatelessWidget {
   const _ReadError({
     required this.onRetake,
     required this.onChoose,
-    this.diagnostics,
+    required this.onReport,
   });
   final VoidCallback onRetake;
   final VoidCallback onChoose;
-  final OmrDiagnostics? diagnostics;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
-    final guidance = diagnostics?.failureCode == OmrFailureCode.templateMismatch
-        ? 'This image doesn’t match the Bayaz answer grid. Use the answer box from a test PDF created by Bayaz.'
-        : 'Make sure all four markers are visible and avoid shadows over the answer box.';
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.lg),
       child: Column(
@@ -460,10 +458,14 @@ class _ReadError extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: AppSpacing.xs),
-          Text(guidance, textAlign: TextAlign.center),
+          const Text(
+            'Please try taking another photo.',
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: AppSpacing.md),
           FilledButton(onPressed: onRetake, child: const Text('Retake')),
           TextButton(onPressed: onChoose, child: const Text('Choose image')),
+          TextButton(onPressed: onReport, child: const Text('Report error')),
         ],
       ),
     );
@@ -568,61 +570,6 @@ class _QuestionResultRow extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             Text('Key: ${question.correct ?? '—'}'),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _DiagnosticsCard extends StatelessWidget {
-  const _DiagnosticsCard({required this.diagnostics});
-
-  final OmrDiagnostics diagnostics;
-
-  @override
-  Widget build(BuildContext context) {
-    final totalMs = diagnostics.stageTimingsMs['total'];
-    final rejectionNote =
-        diagnostics.failureCode == OmrFailureCode.templateMismatch
-        ? diagnostics.templateNote
-        : diagnostics.registrationNote;
-    final subtitle = diagnostics.status == OmrScanStatus.rejected
-        ? '${diagnostics.failureCode.name} · $rejectionNote'
-        : '${diagnostics.markerCandidateCount} marker candidates${totalMs == null ? '' : ' · ${totalMs}ms'}';
-    return BayazCard(
-      child: ExpansionTile(
-        initiallyExpanded: diagnostics.status == OmrScanStatus.rejected,
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
-        title: const Text('Scan diagnostics'),
-        subtitle: Text(subtitle),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelectableText(
-              diagnostics.toReport(),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: diagnostics.toReport()),
-                );
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Scan diagnostics copied')),
-                );
-              },
-              icon: const Icon(Icons.copy_rounded),
-              label: const Text('Copy diagnostics'),
-            ),
-          ),
         ],
       ),
     );

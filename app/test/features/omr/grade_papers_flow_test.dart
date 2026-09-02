@@ -10,7 +10,6 @@ import 'package:bayaz_ai/features/omr/grading_screen.dart';
 import 'package:bayaz_ai/features/omr/omr_diagnostics.dart';
 import 'package:bayaz_ai/features/omr/omr_grader.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Library extends LibraryStore {
@@ -142,7 +141,7 @@ void main() {
     expect(enabled.onPressed, isNotNull);
   });
 
-  testWidgets('scan diagnostics are expandable and copyable after a read', (
+  testWidgets('successful grading keeps diagnostics off the teacher UI', (
     tester,
   ) async {
     const diagnostics = OmrDiagnostics(
@@ -155,28 +154,23 @@ void main() {
       markerCandidateCount: 6,
       registrationScore: .91,
       registrationNote: 'registered four consistent corner markers',
-      stageTimingsMs: {
-        'quality': 4,
-        'registration': 16,
-        'rectification': 30,
-        'analysis': 8,
-        'total': 58,
-      },
       markThreshold: .14,
     );
-    const result = OmrResult(
+    final result = OmrResult(
       fiducialsFound: true,
       diagnostics: diagnostics,
       questions: [
-        OmrQuestion(
-          number: 1,
-          marked: 'A',
-          correct: 'A',
-          fill: .8,
-          confidence: .9,
-        ),
+        for (var i = 1; i <= 5; i++)
+          OmrQuestion(
+            number: i,
+            marked: 'A',
+            correct: 'A',
+            fill: .8,
+            confidence: .9,
+          ),
       ],
     );
+
     await tester.pumpWidget(
       MaterialApp(
         home: GradingScreen(
@@ -188,31 +182,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Scan diagnostics'), findsOneWidget);
+    expect(find.text('5 / 5'), findsOneWidget);
+    expect(find.text('Scan diagnostics'), findsNothing);
+    expect(find.text('Copy diagnostics'), findsNothing);
     expect(find.textContaining('status=complete'), findsNothing);
-    await tester.tap(find.text('Scan diagnostics'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('status=complete'), findsOneWidget);
-    expect(find.text('Copy diagnostics'), findsOneWidget);
-
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          SystemChannels.platform,
-          (call) async => null,
-        );
-    addTearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
-    });
-    final copyButton = find.widgetWithText(OutlinedButton, 'Copy diagnostics');
-    await tester.ensureVisible(copyButton);
-    await tester.pumpAndSettle();
-    await tester.tap(copyButton);
-    await tester.pumpAndSettle();
-    expect(find.text('Scan diagnostics copied'), findsOneWidget);
+    expect(find.textContaining('marker candidates'), findsNothing);
   });
 
-  testWidgets('registration failure keeps its diagnostic evidence visible', (
+  testWidgets('failed scan exposes only generic recovery and report actions', (
     tester,
   ) async {
     const diagnostics = OmrDiagnostics(
@@ -222,13 +199,13 @@ void main() {
       sourceHeight: 1440,
       markerCandidateCount: 2,
       registrationNote: 'only 2 square-like marker candidates were found',
-      stageTimingsMs: {'quality': 4, 'registration': 12, 'total': 16},
     );
     const rejected = OmrResult(
       fiducialsFound: false,
       diagnostics: diagnostics,
       questions: [],
     );
+
     await tester.pumpWidget(
       MaterialApp(
         home: GradingScreen(
@@ -241,12 +218,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Couldn’t read this answer sheet'), findsOneWidget);
-    expect(find.text('Scan diagnostics'), findsOneWidget);
-    expect(find.textContaining('failure=fiducialsNotFound'), findsOneWidget);
-    expect(
-      find.textContaining('only 2 square-like marker candidates'),
-      findsAtLeastNWidgets(1),
-    );
+    expect(find.text('Please try taking another photo.'), findsOneWidget);
+    expect(find.text('Retake'), findsOneWidget);
+    expect(find.text('Choose image'), findsOneWidget);
+    expect(find.text('Report error'), findsOneWidget);
+    expect(find.text('Scan diagnostics'), findsNothing);
+    expect(find.textContaining('fiducialsNotFound'), findsNothing);
+    expect(find.textContaining('square-like marker candidates'), findsNothing);
+
+    await tester.tap(find.text('Report error'));
+    await tester.pumpAndSettle();
+    expect(find.text('Report a problem'), findsOneWidget);
+    expect(find.text('Send report'), findsOneWidget);
   });
 
   testWidgets(
@@ -289,14 +272,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Couldn’t read this answer sheet'), findsOneWidget);
-      expect(
-        find.text(
-          'This image doesn’t match the Bayaz answer grid. Use the answer box from a test PDF created by Bayaz.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Please try taking another photo.'), findsOneWidget);
+      expect(find.text('Report error'), findsOneWidget);
       expect(find.text('0 / 5'), findsNothing);
-      expect(find.text('Scan diagnostics'), findsOneWidget);
+      expect(find.text('Scan diagnostics'), findsNothing);
+      expect(find.textContaining('templateMismatch'), findsNothing);
     },
   );
 }
