@@ -369,7 +369,11 @@ class SavedTestScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (test.kind == 'mcq') {
-      return McqTestScreen(test: test.toMcqTest(), saved: true);
+      return McqTestScreen(
+        test: test.toMcqTest(),
+        saved: true,
+        teachingContext: test.teachingContext,
+      );
     }
     final structured = test.toLessonPlan();
     if (structured != null) {

@@ -61,17 +61,23 @@ void main() {
         ],
       );
 
+      const teachingContext = TeachingContext(
+        className: 'Class 6',
+        subjectName: 'Science',
+      );
       final g = GradedResult.fromGrading(
         testId: 'GS6-41CD',
         testTopic: 'digestion',
         studentName: 'Ayesha',
         result: omr,
+        teachingContext: teachingContext,
       );
       expect(g.correct, 1);
       expect(g.total, 3);
       expect(g.marks, 'A|C|'); // Q3 blank -> empty
       expect(g.correctAnswers, 'A|B|D');
       expect(g.pct, 33);
+      expect(g.teachingContext?.subjectName, 'Science');
 
       final back = GradedResult.fromJson(
         jsonDecode(jsonEncode(g.toJson())) as Map<String, dynamic>,

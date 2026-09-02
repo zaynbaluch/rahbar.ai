@@ -12,6 +12,10 @@ import '../curriculum/teaching_context_selector.dart';
 import '../curriculum/workflow_context_store.dart';
 import '../generation/generation_screen.dart';
 import '../generation/lesson_plan_view.dart';
+import '../generation/mcq_parser.dart';
+import '../generation/mcq_test_view.dart';
+import '../library/library_store.dart';
+import '../library/saved_test.dart';
 import '../onboarding/onboarding_store.dart';
 import '../resources/offline_ai_navigation.dart';
 import 'content_service.dart';
@@ -28,6 +32,7 @@ class TopicPickerScreen extends StatefulWidget {
     this.content,
     this.onboardingStore,
     this.workflowContextStore,
+    this.libraryStore,
   });
 
   final TopicPickerMode mode;
@@ -36,6 +41,7 @@ class TopicPickerScreen extends StatefulWidget {
   final ContentService? content;
   final OnboardingStore? onboardingStore;
   final WorkflowContextStore? workflowContextStore;
+  final LibraryStore? libraryStore;
 
   @override
   State<TopicPickerScreen> createState() => _TopicPickerScreenState();
@@ -46,6 +52,7 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
   late final bool _ownsContent;
   late final OnboardingStore _onboardingStore;
   late final WorkflowContextStore _workflowContexts;
+  late final LibraryStore _library;
   late TeachingContext _context;
   final _search = TextEditingController();
 
@@ -68,6 +75,7 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
     _content = widget.content ?? ContentService();
     _onboardingStore = widget.onboardingStore ?? OnboardingStore();
     _workflowContexts = widget.workflowContextStore ?? WorkflowContextStore();
+    _library = widget.libraryStore ?? LibraryStore();
     _context = widget.teachingContext;
     _load();
   }
@@ -236,7 +244,96 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
       );
       return;
     }
-    // Phase 4 replaces this branch with the count-only test setup.
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _CurriculumTestSetupScreen(
+          topic: topic,
+          teachingContext: _context,
+          onCreate: (count) => _createCurriculumTest(topic, count),
+          onCustom: () => _openCustom(topic.title),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createCurriculumTest(Topic topic, int count) async {
+    final used = await _usedItemIds(topic.id);
+    if (!mounted) return;
+    McqTest test;
+    try {
+      test = _content.sampleTest(topic.id, n: count, exclude: used);
+    } on InsufficientUnusedItemsException catch (shortage) {
+      final reuse = await _confirmReuse(shortage);
+      if (reuse != true || !mounted) return;
+      test = _content.sampleTest(
+        topic.id,
+        n: count,
+        exclude: used,
+        allowReuse: true,
+      );
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => McqTestScreen(
+          test: test,
+          teachingContext: _context,
+          onSave: () => _saveTest(topic, test),
+        ),
+      ),
+    );
+  }
+
+  Future<Set<String>> _usedItemIds(String topicId) async {
+    final saved = await _library.list();
+    final used = <String>{};
+    for (final item in saved) {
+      if (item.kind == 'mcq' &&
+          item.topicId == topicId &&
+          item.contentJson != null) {
+        used.addAll(item.toMcqTest().itemIds);
+      }
+    }
+    return used;
+  }
+
+  Future<bool?> _confirmReuse(InsufficientUnusedItemsException shortage) =>
+      showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Some questions will repeat'),
+          content: Text(
+            'Only ${shortage.availableUnused} unused questions remain. '
+            'This paper needs ${shortage.reuseCount} previously used '
+            'question${shortage.reuseCount == 1 ? '' : 's'}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Create with repeats'),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _saveTest(Topic topic, McqTest test) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _library.save(
+      SavedTest(
+        id: test.id,
+        kind: 'mcq',
+        source: SavedContentSource.curriculumPack,
+        topic: topic.title,
+        topicId: topic.id,
+        createdAtMillis: now,
+        contentJson: test.toJson(),
+        teachingContext: _context,
+      ),
+    );
   }
 
   void _openCustom(String query) {
@@ -293,6 +390,118 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
       ),
     ),
   );
+}
+
+List<int> availableTestCounts(int verifiedCount) => [
+  for (final count in const [5, 10, 15])
+    if (count <= verifiedCount) count,
+];
+
+int? defaultTestCount(int verifiedCount) {
+  final available = availableTestCounts(verifiedCount);
+  if (available.contains(10)) return 10;
+  if (available.contains(5)) return 5;
+  return null;
+}
+
+class _CurriculumTestSetupScreen extends StatefulWidget {
+  const _CurriculumTestSetupScreen({
+    required this.topic,
+    required this.teachingContext,
+    required this.onCreate,
+    required this.onCustom,
+  });
+
+  final Topic topic;
+  final TeachingContext teachingContext;
+  final Future<void> Function(int count) onCreate;
+  final VoidCallback onCustom;
+
+  @override
+  State<_CurriculumTestSetupScreen> createState() =>
+      _CurriculumTestSetupScreenState();
+}
+
+class _CurriculumTestSetupScreenState
+    extends State<_CurriculumTestSetupScreen> {
+  late int? _count = defaultTestCount(widget.topic.nItems);
+  bool _creating = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final teaching = [
+      widget.teachingContext.className,
+      widget.teachingContext.subjectName,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    final available = availableTestCounts(widget.topic.nItems);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create Test')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: [
+            Text(
+              widget.topic.title,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            if (teaching.isNotEmpty) Text(teaching),
+            const SizedBox(height: AppSpacing.xl),
+            if (available.isEmpty)
+              BayazCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'There are not enough ready questions for this topic yet.',
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    FilledButton.tonal(
+                      onPressed: widget.onCustom,
+                      child: const Text('Create a custom test'),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              Text(
+                'Number of questions',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                children: [
+                  for (final count in const [5, 10, 15])
+                    ChoiceChip(
+                      label: Text('$count'),
+                      selected: _count == count,
+                      onSelected: count > widget.topic.nItems || _creating
+                          ? null
+                          : (_) => setState(() => _count = count),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              FilledButton(
+                onPressed: _count == null || _creating
+                    ? null
+                    : () async {
+                        setState(() => _creating = true);
+                        try {
+                          await widget.onCreate(_count!);
+                        } finally {
+                          if (mounted) setState(() => _creating = false);
+                        }
+                      },
+                child: Text(_creating ? 'Creating…' : 'Create test'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ContextRow extends StatelessWidget {

@@ -6,11 +6,7 @@ import 'grading_screen.dart';
 import 'image_pick_recovery.dart';
 
 class ImagePickRecoveryGate extends StatefulWidget {
-  const ImagePickRecoveryGate({
-    super.key,
-    required this.child,
-    this.service,
-  });
+  const ImagePickRecoveryGate({super.key, required this.child, this.service});
 
   final Widget child;
   final ImagePickRecoveryService? service;
@@ -37,13 +33,16 @@ class _ImagePickRecoveryGateState extends State<ImagePickRecoveryGate> {
       _opened = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => GradingScreen(
-            test: recovered.test,
-            initialImagePath: recovered.imagePath,
-            recoveryStore: _service.store,
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => GradingScreen(
+              test: recovered.test,
+              initialImagePath: recovered.imagePath,
+              recoveryStore: _service.store,
+              teachingContext: recovered.teachingContext,
+            ),
           ),
-        ));
+        );
       });
     } catch (_) {
       // Startup remains usable. The pending record is retained for a later retry.

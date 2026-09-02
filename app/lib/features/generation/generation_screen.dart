@@ -41,6 +41,7 @@ class GenerationScreen extends StatefulWidget {
     this.teachingContext,
     this.expectedCount = 10,
     this.generateLessonOverride,
+    this.generateTestOverride,
   });
 
   final String? initialTopic;
@@ -50,6 +51,7 @@ class GenerationScreen extends StatefulWidget {
   final TeachingContext? teachingContext;
   final int expectedCount;
   final Future<LessonPlan> Function(String topic)? generateLessonOverride;
+  final Future<McqTest> Function(String topic, int count)? generateTestOverride;
 
   @override
   State<GenerationScreen> createState() => _GenerationScreenState();
@@ -68,6 +70,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
   late final _topic = TextEditingController(text: widget.initialTopic ?? '');
 
   late String _kind = widget.initialKind == 'lesson' ? 'lesson' : 'mcq';
+  late int _expectedCount = widget.expectedCount;
   _Phase _phase = _Phase.idle;
   List<Chunk> _hits = [];
   String _output = '';
@@ -144,7 +147,27 @@ class _GenerationScreenState extends State<GenerationScreen> {
       } catch (e) {
         if (_canUpdate(token)) {
           setState(() {
-            _error = _friendlyError(e);
+            _error = _displayError(e);
+            _phase = _Phase.idle;
+          });
+        }
+      }
+      return;
+    }
+
+    final testOverride = widget.generateTestOverride;
+    if (_kind == 'mcq' && testOverride != null) {
+      try {
+        final test = await testOverride(topic, _expectedCount);
+        if (!_canUpdate(token)) return;
+        setState(() {
+          _test = test;
+          _phase = _Phase.idle;
+        });
+      } catch (e) {
+        if (_canUpdate(token)) {
+          setState(() {
+            _error = _displayError(e);
             _phase = _Phase.idle;
           });
         }
@@ -162,7 +185,12 @@ class _GenerationScreenState extends State<GenerationScreen> {
         runRetrieval: () async {
           try {
             await _rag.init();
-            return await _rag.assemble(_kind, topic);
+            return await _rag.assemble(
+              _kind,
+              topic,
+              expectedCount: _expectedCount,
+              teachingContext: widget.teachingContext,
+            );
           } on FileSystemException {
             _grounded = false;
             return GroundedPrompt(
@@ -171,9 +199,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
               'alignment. Use simple language, make uncertainty clear, and produce only '
               'the requested format.',
               _kind == 'mcq'
-                  ? 'Create exactly 10 MCQs about "$topic". For each item output: '
-                        'Q<number>. <stem>, then A) through D) on separate lines, then '
-                        'ANSWER: <A|B|C|D>, then DIFFICULTY: <easy|medium|hard>. '
+                  ? 'Create exactly $_expectedCount MCQs about "$topic". For each item output: '
+                        'Q<number> [easy|medium|hard], then the question text, then A) through D) on separate lines, then '
+                        'ANSWER: <A|B|C|D>. '
                         'Do not add any other sections.'
                   : 'Create a practical 50-minute 5E lesson plan about "$topic". '
                         'Use these exact Markdown headers in this order: ### Objectives, '
@@ -200,7 +228,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       }
       await _llama.loadPath(
         availability.languageModel.file!.path,
-        grammar: _kind == 'mcq' ? kMcqGrammar : null,
+        grammar: _kind == 'mcq' ? mcqGrammarForCount(_expectedCount) : null,
       );
       if (!_canUpdate(token)) return;
       setState(() => _phase = _Phase.generating);
@@ -229,7 +257,11 @@ class _GenerationScreenState extends State<GenerationScreen> {
         _output = _clean(_buffer.toString(), finalOutput: true);
         _elapsed = stopwatch.elapsed;
         if (_kind == 'mcq') {
-          _test = McqParser.parse(_output, topic: topic);
+          _test = McqParser.parse(
+            _output,
+            topic: topic,
+            expectedCount: _expectedCount,
+          );
         } else {
           final parsed = LessonPlanParser.parse(_output, topic: topic);
           _lessonPlan = parsed.plan;
@@ -285,6 +317,20 @@ class _GenerationScreenState extends State<GenerationScreen> {
     }
   }
 
+  String _displayError(Object error) {
+    if (widget.dedicated) {
+      if (error is OfflineAiDisabledException) {
+        return 'Bayaz is still preparing offline tools. Try again when setup is ready.';
+      }
+      final text = error.toString();
+      if (text.contains('No such file') || text.contains('not installed')) {
+        return 'Bayaz is still preparing offline tools. Try again when setup is ready.';
+      }
+      return 'Bayaz could not create this right now. Please try again.';
+    }
+    return _friendlyError(error);
+  }
+
   static String _friendlyError(Object error) {
     final text = error.toString();
     if (error is OfflineAiDisabledException) {
@@ -304,7 +350,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
       );
 
   Future<void> _save() async {
-    if (_output.isEmpty || _saved) return;
+    if ((_output.isEmpty && _test == null && _lessonPlan == null) || _saved) {
+      return;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     final test = _test;
     await _library.save(
@@ -349,6 +397,14 @@ class _GenerationScreenState extends State<GenerationScreen> {
   );
 
   Widget _buildEnabled(BuildContext context) {
+    if (widget.dedicated && _test != null) {
+      return McqTestScreen(
+        test: _test!,
+        teachingContext: widget.teachingContext,
+        onSave: _save,
+        saved: _saved,
+      );
+    }
     if (widget.dedicated && _lessonPlan != null) {
       return LessonPlanScreen(
         plan: _lessonPlan!,
@@ -614,6 +670,27 @@ class _GenerationScreenState extends State<GenerationScreen> {
                   hintText: 'Enter the topic',
                 ),
               ),
+              if (!isLesson) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Number of questions',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    for (final count in const [5, 10, 15])
+                      ChoiceChip(
+                        label: Text('$count'),
+                        selected: _expectedCount == count,
+                        onSelected: _busy
+                            ? null
+                            : (_) => setState(() => _expectedCount = count),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               FilledButton(
                 onPressed: _busy ? null : _run,
