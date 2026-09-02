@@ -5,6 +5,7 @@ import 'package:bayaz_ai/features/resources/download_manager.dart';
 import 'package:bayaz_ai/features/resources/resource_manifest.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   test('cancellation token notifies current listeners once', () {
@@ -41,42 +42,47 @@ void main() {
     expect(calls, 0);
   });
 
-  test('cancelling a stalled body aborts and removes the partial file', () async {
-    final directory = await Directory.systemTemp.createTemp('bayaz-download-');
-    addTearDown(() => directory.delete(recursive: true));
-    final body = StreamController<List<int>>();
-    addTearDown(body.close);
-    final request = _FakeRequest(_FakeResponse(body.stream));
-    final manager = _TestDownloadManager(
-      client: _FakeClient(request),
-      directory: directory,
-      idleBodyTimeout: const Duration(minutes: 1),
-    );
-    final token = DownloadCancellationToken();
-    final progress = Completer<void>();
-    final resource = _resource(
-      sizeBytes: 4,
-      sha256Value: sha256.convert(const [1, 2, 3, 4]).toString(),
-    );
+  test(
+    'cancelling a stalled body aborts and removes the partial file',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'bayaz-download-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final body = StreamController<List<int>>();
+      addTearDown(body.close);
+      final request = _FakeRequest(_FakeResponse(body.stream));
+      final manager = _TestDownloadManager(
+        client: _FakeClient(request),
+        directory: directory,
+        idleBodyTimeout: const Duration(minutes: 1),
+      );
+      final token = DownloadCancellationToken();
+      final progress = Completer<void>();
+      final resource = _resource(
+        sizeBytes: 4,
+        sha256Value: sha256.convert(const [1, 2, 3, 4]).toString(),
+      );
 
-    final download = manager.download(
-      resource,
-      cancellationToken: token,
-      onProgress: (_) {
-        if (!progress.isCompleted) progress.complete();
-      },
-    );
-    body.add(const [1, 2]);
-    await progress.future;
-    token.cancel();
+      final download = manager.download(
+        resource,
+        cancellationToken: token,
+        onProgress: (_) {
+          if (!progress.isCompleted) progress.complete();
+        },
+      );
+      body.add(const [1, 2]);
+      await progress.future;
+      token.cancel();
 
-    await expectLater(download, throwsA(isA<DownloadCancelled>()));
-    expect(request.aborted, isTrue);
-    expect(
-      File('${directory.path}/${resource.fileName}.download').existsSync(),
-      isFalse,
-    );
-  });
+      await expectLater(download, throwsA(isA<DownloadCancelled>()));
+      expect(request.aborted, isTrue);
+      expect(
+        File('${directory.path}/${resource.fileName}.download').existsSync(),
+        isFalse,
+      );
+    },
+  );
 
   test('integrity failures remove the partial file', () async {
     final directory = await Directory.systemTemp.createTemp('bayaz-download-');
@@ -99,7 +105,35 @@ void main() {
       File('${directory.path}/${resource.fileName}.download').existsSync(),
       isFalse,
     );
-    expect(File('${directory.path}/${resource.fileName}').existsSync(), isFalse);
+    expect(
+      File('${directory.path}/${resource.fileName}').existsSync(),
+      isFalse,
+    );
+  });
+
+  test('verified resources persist an integrity receipt', () async {
+    final directory = await Directory.systemTemp.createTemp('bayaz-integrity-');
+    addTearDown(() => directory.delete(recursive: true));
+    const bytes = [1, 2, 3];
+    final resource = _resource(
+      sizeBytes: bytes.length,
+      sha256Value: sha256.convert(bytes).toString(),
+    );
+    final manager = _TestDownloadManager(
+      client: _FakeClient(_FakeRequest(_FakeResponse(const Stream.empty()))),
+      directory: directory,
+    );
+    final file = File(p.join(directory.path, resource.fileName));
+    await file.writeAsBytes(bytes, flush: true);
+
+    expect(await manager.verifyIntegrity(resource), isTrue);
+
+    final receipt = File(p.join(directory.path, '.integrity.receipt.json'));
+    expect(receipt.existsSync(), isTrue);
+    expect(await manager.verifyIntegrity(resource), isTrue);
+
+    await file.writeAsBytes([...bytes, 4], flush: true);
+    expect(await manager.verifyIntegrity(resource), isFalse);
   });
 
   test('verified downloads are renamed into place', () async {
