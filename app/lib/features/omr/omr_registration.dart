@@ -12,12 +12,14 @@ class OmrRegistrationResult {
     required this.candidateCount,
     required this.fiducials,
     required this.score,
+    this.note = '',
   });
 
   final OmrFailureCode failureCode;
   final int candidateCount;
   final List<OmrPoint> fiducials;
   final double score;
+  final String note;
 
   bool get success =>
       failureCode == OmrFailureCode.none && fiducials.length == 4;
@@ -51,6 +53,7 @@ abstract final class OmrRegistration {
         candidateCount: 0,
         fiducials: [],
         score: 0,
+        note: 'image dimensions are below the registration minimum',
       );
     }
 
@@ -71,6 +74,8 @@ abstract final class OmrRegistration {
         candidateCount: candidates.length,
         fiducials: const [],
         score: 0,
+        note:
+            'only ${candidates.length} square-like marker candidates were found',
       );
     }
 
@@ -93,6 +98,8 @@ abstract final class OmrRegistration {
         candidateCount: candidates.length,
         fiducials: const [],
         score: 0,
+        note:
+            'marker candidates were missing from at least one expected quadrant',
       );
     }
 
@@ -131,6 +138,8 @@ abstract final class OmrRegistration {
         candidateCount: candidates.length,
         fiducials: const [],
         score: bestScore,
+        note:
+            'candidate markers did not form a sufficiently consistent quadrilateral',
       );
     }
 
@@ -147,6 +156,7 @@ abstract final class OmrRegistration {
           )
           .toList(growable: false),
       score: bestScore.clamp(0, 1).toDouble(),
+      note: 'registered four consistent corner markers',
     );
   }
 
