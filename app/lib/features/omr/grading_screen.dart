@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../design_system/components/frame_animation.dart';
@@ -15,6 +16,7 @@ import '../generation/mcq_parser.dart';
 import 'gradebook_store.dart';
 import 'graded_result.dart';
 import 'image_pick_recovery.dart';
+import 'omr_diagnostics.dart';
 import 'omr_grader.dart';
 import 'omr_image_processor.dart';
 import 'results_screen.dart';
@@ -64,6 +66,7 @@ class _GradingScreenState extends State<GradingScreen> {
   bool _busy = false;
   String? _error;
   OmrResult? _result;
+  OmrDiagnostics? _diagnostics;
   bool _saved = false;
   bool _saving = false;
   int _nextStudentNumber = 1;
@@ -83,8 +86,14 @@ class _GradingScreenState extends State<GradingScreen> {
       if (!mounted) return;
       if (initialResult != null) {
         setState(() {
-          _result = initialResult;
-          _name.text = 'Student $_nextStudentNumber';
+          _diagnostics = initialResult.diagnostics;
+          if (initialResult.fiducialsFound) {
+            _result = initialResult;
+            _name.text = 'Student $_nextStudentNumber';
+          } else {
+            _result = null;
+            _error = 'Couldn’t read this answer sheet';
+          }
         });
       } else if (initialPath != null) {
         await _gradePath(initialPath, clearRecovery: true);
@@ -112,6 +121,7 @@ class _GradingScreenState extends State<GradingScreen> {
       _busy = true;
       _error = null;
       _result = null;
+      _diagnostics = null;
       _saved = false;
     });
     try {
@@ -149,6 +159,7 @@ class _GradingScreenState extends State<GradingScreen> {
         _busy = true;
         _error = null;
         _result = null;
+        _diagnostics = null;
         _saved = false;
       });
     }
@@ -156,10 +167,14 @@ class _GradingScreenState extends State<GradingScreen> {
       await _studentNamesReady;
       final bytes = await File(path).readAsBytes();
       final result = await _imageProcessor.process(bytes, widget.test);
-      if (!result.fiducialsFound) throw const FormatException('markers');
+      if (!result.fiducialsFound) {
+        if (mounted) setState(() => _diagnostics = result.diagnostics);
+        throw const FormatException('markers');
+      }
       if (!mounted) return;
       setState(() {
         _result = result;
+        _diagnostics = result.diagnostics;
         _name.text = 'Student $_nextStudentNumber';
       });
     } catch (_) {
@@ -215,6 +230,7 @@ class _GradingScreenState extends State<GradingScreen> {
       _result = null;
       _saved = false;
       _error = null;
+      _diagnostics = null;
       _name.text = 'Student $_nextStudentNumber';
     });
   }
@@ -276,11 +292,16 @@ class _GradingScreenState extends State<GradingScreen> {
                       label: const Text('Choose image'),
                     ),
                   ],
-                  if (_error != null)
+                  if (_error != null) ...[
                     _ReadError(
                       onRetake: () => _grade(ImageSource.camera),
                       onChoose: () => _grade(ImageSource.gallery),
                     ),
+                    if (_diagnostics != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      _DiagnosticsCard(diagnostics: _diagnostics!),
+                    ],
+                  ],
                   if (result != null) ...[
                     const SizedBox(height: AppSpacing.md),
                     TextField(
@@ -291,6 +312,10 @@ class _GradingScreenState extends State<GradingScreen> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     _ResultSummary(result: result),
+                    if (_diagnostics != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      _DiagnosticsCard(diagnostics: _diagnostics!),
+                    ],
                     if (result.needsReview > 0) ...[
                       const SizedBox(height: AppSpacing.lg),
                       Text(
@@ -532,6 +557,57 @@ class _QuestionResultRow extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             Text('Key: ${question.correct ?? '—'}'),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagnosticsCard extends StatelessWidget {
+  const _DiagnosticsCard({required this.diagnostics});
+
+  final OmrDiagnostics diagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMs = diagnostics.stageTimingsMs['total'];
+    final subtitle = diagnostics.status == OmrScanStatus.rejected
+        ? '${diagnostics.failureCode.name} · ${diagnostics.registrationNote}'
+        : '${diagnostics.markerCandidateCount} marker candidates${totalMs == null ? '' : ' · ${totalMs}ms'}';
+    return BayazCard(
+      child: ExpansionTile(
+        initiallyExpanded: diagnostics.status == OmrScanStatus.rejected,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        title: const Text('Scan diagnostics'),
+        subtitle: Text(subtitle),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelectableText(
+              diagnostics.toReport(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(
+                  ClipboardData(text: diagnostics.toReport()),
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Scan diagnostics copied')),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Copy diagnostics'),
+            ),
+          ),
         ],
       ),
     );
