@@ -110,3 +110,15 @@ The verifier now combines two independent structural checks after rectification:
 The border is a non-periodic anchor owned by the Bayaz PDF and is absent from the original generated lookalike. Copied diagnostics report both bubble matches and `border` / `minSide` coverage. A scan must satisfy both the grid and border checks before any answer can be graded.
 
 Registration also scales its thin-line erosion with image size so the printed border is removed from fiducial connected components without deleting the much thicker square markers. This matters especially for 15-question sheets, where filled bubbles can otherwise become plausible false marker candidates if the true markers are glued to the long border.
+
+## Exposure-independent template verification
+
+Manual testing on 2026-08-26 exposed a second verifier failure mode. A dim image-generated lookalike still reported `40/40` bubble matches and `border=1.000` even though the visible bubble grid was shifted and the Bayaz answer-box border was absent. The root cause was absolute luminance testing: the verifier treated `(255 - luminance)` as print darkness. On a globally dim photo, ordinary paper could therefore exceed the print threshold everywhere.
+
+Template verification must be **local-contrast based**, just like answer classification. Bubble outlines are now compared with nearby paper outside the bubble, and each answer-box side is compared with an inward paper reference band. This makes uniform exposure changes cancel out instead of becoming false print evidence.
+
+Regression coverage now includes both sides of this failure:
+- a dim foreign/lookalike grid without the Bayaz border must be rejected as `templateMismatch`;
+- a dim but structurally correct Bayaz grid must remain accepted and grade normally.
+
+The production PDF crop was also rechecked after this change and matched all 40 expected bubble outlines plus all four locally contrasted border sides.
