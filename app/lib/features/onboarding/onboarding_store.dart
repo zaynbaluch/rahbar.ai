@@ -77,7 +77,9 @@ class OnboardingState {
                 .map((item) => item.toString())
                 .toList(growable: false),
         selectedSubjectsByClass: _subjectsByClassFromJson(json),
-        offlineAiEnabled: json['offline_ai_enabled'] as bool? ?? false,
+        offlineAiEnabled: (json['completed'] as bool?) == true
+            ? true
+            : (json['offline_ai_enabled'] as bool? ?? false),
       );
 }
 
