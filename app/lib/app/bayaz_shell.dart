@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../features/curriculum/curriculum_home_screen.dart';
+import '../features/content/topic_picker_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/omr/results_overview_screen.dart';
 import '../features/omr/grade_papers_screen.dart';
@@ -62,7 +63,13 @@ class _BayazShellState extends State<BayazShell> {
         ).push(MaterialPageRoute(builder: (_) => const GradePapersScreen())),
         onContinueRecent: () => _selectTab(1),
       ),
-      LibraryScreen(key: ValueKey(_libraryRevision)),
+      LibraryScreen(
+        key: ValueKey(_libraryRevision),
+        onPrepareLesson: () =>
+            launchTeacherWorkflow(context, TopicPickerMode.lesson),
+        onCreateTest: () =>
+            launchTeacherWorkflow(context, TopicPickerMode.test),
+      ),
       ResultsOverviewScreen(key: ValueKey(_resultsRevision)),
     ];
 

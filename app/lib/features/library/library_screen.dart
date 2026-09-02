@@ -1,40 +1,42 @@
 import 'package:flutter/material.dart';
 
-import '../../design_system/components/brand_app_bar.dart';
-import '../../design_system/components/empty_state.dart';
+import '../../core/storage/local_store_load.dart';
 import '../../design_system/components/bayaz_card.dart';
-import '../../design_system/components/status_chip.dart';
+import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/recovered_data_notice.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
-import '../../core/storage/local_store_load.dart';
 import '../generation/lesson_plan_view.dart';
 import '../generation/mcq_test_view.dart';
+import '../omr/gradebook_store.dart';
 import 'library_store.dart';
 import 'saved_test.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, this.store});
+  const LibraryScreen({
+    super.key,
+    this.store,
+    this.gradebookStore,
+    this.onPrepareLesson,
+    this.onCreateTest,
+  });
 
-  /// Overridden by tests, which cannot let real file reads settle.
   final LibraryStore? store;
+  final GradebookStore? gradebookStore;
+  final VoidCallback? onPrepareLesson;
+  final VoidCallback? onCreateTest;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  late final LibraryStore _store;
+  late final LibraryStore _store = widget.store ?? LibraryStore();
+  late final GradebookStore _gradebook =
+      widget.gradebookStore ?? GradebookStore();
   final _search = TextEditingController();
-  late Future<LocalStoreLoad<SavedTest>> _future;
+  late Future<LocalStoreLoad<SavedTest>> _future = _store.load();
   String _filter = 'all';
-
-  @override
-  void initState() {
-    super.initState();
-    _store = widget.store ?? LibraryStore();
-    _future = _store.load();
-  }
 
   @override
   void dispose() {
@@ -42,63 +44,50 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.dispose();
   }
 
-  void _reload() {
-    setState(() {
-      _future = _store.load();
-    });
-  }
+  void _reload() => setState(() => _future = _store.load());
 
   Future<void> _refresh() async {
     final next = _store.load();
-    setState(() {
-      _future = next;
-    });
+    setState(() => _future = next);
     await next;
   }
 
-  Future<void> _delete(SavedTest test) async {
-    await _store.delete(test.id);
+  Future<void> _delete(SavedTest item) async {
+    await _store.delete(item.id);
     _reload();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 72,
-        title: const BrandAppBarTitle(subtitle: 'Saved teaching materials'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh My Work',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: FutureBuilder<LocalStoreLoad<SavedTest>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return _LibraryError(
-                error: '${snapshot.error}',
-                onRetry: _reload,
-              );
-            }
-            final load =
-                snapshot.data ?? const LocalStoreLoad<SavedTest>(items: []);
-            final all = load.items;
-            final query = _search.text.trim().toLowerCase();
-            final visible = all.where((item) {
-              final matchesKind = _filter == 'all' || item.kind == _filter;
-              final matchesQuery =
-                  query.isEmpty || item.topic.toLowerCase().contains(query);
-              return matchesKind && matchesQuery;
-            }).toList();
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('My Work')),
+    body: SafeArea(
+      child: FutureBuilder<LocalStoreLoad<SavedTest>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return _LibraryError(onRetry: _reload);
+          }
+          final load =
+              snapshot.data ?? const LocalStoreLoad<SavedTest>(items: []);
+          final all = load.items;
+          final query = _search.text.trim().toLowerCase();
+          final visible = all
+              .where((item) {
+                final matchesKind = _filter == 'all' || item.kind == _filter;
+                final ctx = item.teachingContext;
+                final matchesQuery =
+                    query.isEmpty ||
+                    item.topic.toLowerCase().contains(query) ||
+                    (ctx?.className ?? '').toLowerCase().contains(query) ||
+                    (ctx?.subjectName ?? '').toLowerCase().contains(query);
+                return matchesKind && matchesQuery;
+              })
+              .toList(growable: false);
 
+          if (all.isEmpty) {
             return Column(
               children: [
                 if (load.recoveredCorruptData)
@@ -106,158 +95,165 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     count: load.recoveredFiles,
                     itemLabel: 'saved item',
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                  ),
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _search,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          hintText: 'Search saved topics',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _search.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Clear search',
-                                  onPressed: () {
-                                    _search.clear();
-                                    setState(() {});
-                                  },
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      SizedBox(
-                        width: double.infinity,
-                        child: SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(value: 'all', label: Text('All')),
-                            ButtonSegment(
-                              value: 'lesson',
-                              label: Text('Lessons'),
-                              icon: Icon(Icons.menu_book_outlined),
-                            ),
-                            ButtonSegment(
-                              value: 'mcq',
-                              label: Text('Tests'),
-                              icon: Icon(Icons.fact_check_outlined),
-                            ),
-                          ],
-                          selected: {_filter},
-                          onSelectionChanged: (value) =>
-                              setState(() => _filter = value.first),
-                          showSelectedIcon: false,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 Expanded(
-                  child: visible.isEmpty
-                      ? _emptyState(all.isEmpty)
-                      : RefreshIndicator(
-                          onRefresh: _refresh,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.md,
-                              AppSpacing.xs,
-                              AppSpacing.md,
-                              AppSpacing.xl,
-                            ),
-                            itemCount: visible.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: AppSpacing.sm),
-                            itemBuilder: (context, index) {
-                              final item = visible[index];
-                              return Dismissible(
-                                key: ValueKey(item.id),
-                                direction: DismissDirection.endToStart,
-                                confirmDismiss: (_) => _confirmDelete(item),
-                                onDismissed: (_) => _delete(item),
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(
-                                    right: AppSpacing.lg,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.errorContainer,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Icon(
-                                    Icons.delete_outline,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onErrorContainer,
-                                  ),
-                                ),
-                                child: _LibraryCard(item: item),
-                              );
-                            },
-                          ),
+                  child: BayazEmptyState(
+                    asset: 'assets/ui/illustrations/empty_library.webp',
+                    title: 'Nothing saved yet',
+                    message:
+                        'Lessons and tests you save or share will appear here.',
+                    action: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton(
+                          onPressed: widget.onPrepareLesson,
+                          child: const Text('Prepare lesson'),
                         ),
+                        TextButton(
+                          onPressed: widget.onCreateTest,
+                          child: const Text('Create test'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             );
-          },
-        ),
-      ),
-    );
-  }
+          }
 
-  Widget _emptyState(bool libraryEmpty) {
-    if (libraryEmpty) {
-      return const BayazEmptyState(
-        asset: 'assets/ui/illustrations/empty_library.webp',
-        title: 'Your My Work is empty',
-        message:
-            'Save a lesson plan or MCQ paper and it will remain available here for reopening and printing.',
-      );
-    }
-    final asset = _filter == 'lesson'
-        ? 'assets/ui/illustrations/no_saved_lessons.webp'
-        : _filter == 'mcq'
-        ? 'assets/ui/illustrations/no_saved_tests.webp'
-        : 'assets/ui/illustrations/no_search_results.webp';
-    return BayazEmptyState(
-      asset: asset,
-      title: 'Nothing matches this view',
-      message:
-          'Change the filter or clear the search to see other saved items.',
-      action: TextButton.icon(
-        onPressed: () {
-          _search.clear();
-          setState(() => _filter = 'all');
+          return Column(
+            children: [
+              if (load.recoveredCorruptData)
+                RecoveredDataNotice(
+                  count: load.recoveredFiles,
+                  itemLabel: 'saved item',
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _search,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search your work',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                onPressed: () {
+                                  _search.clear();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'all', label: Text('All')),
+                          ButtonSegment(
+                            value: 'lesson',
+                            label: Text('Lessons'),
+                          ),
+                          ButtonSegment(value: 'mcq', label: Text('Tests')),
+                        ],
+                        selected: {_filter},
+                        onSelectionChanged: (value) =>
+                            setState(() => _filter = value.first),
+                        showSelectedIcon: false,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: visible.isEmpty
+                    ? _NoMatches(
+                        onClear: () {
+                          _search.clear();
+                          setState(() => _filter = 'all');
+                        },
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _refresh,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.md,
+                            AppSpacing.xs,
+                            AppSpacing.md,
+                            AppSpacing.xl,
+                          ),
+                          itemCount: visible.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: AppSpacing.sm),
+                          itemBuilder: (context, index) {
+                            final item = visible[index];
+                            return Dismissible(
+                              key: ValueKey(item.id),
+                              direction: DismissDirection.endToStart,
+                              confirmDismiss: (_) => _confirmDelete(item),
+                              onDismissed: (_) => _delete(item),
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(
+                                  right: AppSpacing.lg,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.errorContainer,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Icon(
+                                  Icons.delete_outline,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onErrorContainer,
+                                ),
+                              ),
+                              child: _WorkCard(item: item),
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ],
+          );
         },
-        icon: const Icon(Icons.filter_alt_off_outlined),
-        label: const Text('Clear filters'),
       ),
-    );
-  }
+    ),
+  );
 
   Future<bool> _confirmDelete(SavedTest item) async {
+    final hasResults =
+        item.kind == 'mcq' &&
+        (await _gradebook.listForTest(item.id)).isNotEmpty;
+    if (!mounted) return false;
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Delete saved item?'),
+            title: const Text('Delete this item?'),
             content: Text(
-              '“${item.topic}” will be removed from this device. This cannot be undone.',
+              hasResults
+                  ? '“${item.topic}” will be removed from My Work. Existing class results will remain, but you will no longer be able to grade more papers from this test.'
+                  : '“${item.topic}” will be removed from My Work. This cannot be undone.',
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
+                onPressed: () => Navigator.pop(context, true),
                 child: const Text('Delete'),
               ),
             ],
@@ -267,14 +263,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 }
 
-class _LibraryCard extends StatelessWidget {
-  const _LibraryCard({required this.item});
+class _WorkCard extends StatelessWidget {
+  const _WorkCard({required this.item});
   final SavedTest item;
 
   @override
   Widget build(BuildContext context) {
-    final date = item.createdAt;
     final isTest = item.kind == 'mcq';
+    final ctx = item.teachingContext;
+    final contextLabel = [
+      ctx?.className,
+      ctx?.subjectName,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    final type = isTest
+        ? 'Test · ${item.toMcqTest().count} questions'
+        : 'Lesson Plan';
+    final date = item.createdAt;
     return BayazCard(
       onTap: () => Navigator.of(
         context,
@@ -283,15 +287,15 @@ class _LibraryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               color: isTest ? AppColors.softGold : AppColors.softBlue,
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
               isTest ? Icons.fact_check_outlined : Icons.menu_book_outlined,
-              color: isTest ? AppColors.warningText : AppColors.primary,
+              color: AppColors.primary,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -301,60 +305,23 @@ class _LibraryCard extends StatelessWidget {
               children: [
                 Text(
                   item.topic,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Wrap(
-                  spacing: AppSpacing.xs,
-                  runSpacing: AppSpacing.xs,
-                  children: [
-                    StatusChip(
-                      label: isTest ? 'MCQ test' : 'Lesson plan',
-                      icon: isTest
-                          ? Icons.checklist_rounded
-                          : Icons.menu_book_rounded,
-                      backgroundColor: isTest
-                          ? AppColors.softGold
-                          : AppColors.softBlue,
-                      foregroundColor: isTest
-                          ? AppColors.warningText
-                          : AppColors.navy,
-                    ),
-                    if (item.fromPack)
-                      const StatusChip(
-                        label: 'Curriculum pack',
-                        icon: Icons.verified_outlined,
-                      )
-                    else if (item.fromCustomAi)
-                      const StatusChip(
-                        label: 'Custom AI · Review',
-                        icon: Icons.rate_review_outlined,
-                        backgroundColor: AppColors.softGold,
-                        foregroundColor: AppColors.warningText,
-                      )
-                    else
-                      const StatusChip(
-                        label: 'Source not verified',
-                        icon: Icons.info_outline,
-                        backgroundColor: AppColors.softGold,
-                        foregroundColor: AppColors.warningText,
-                      ),
-                  ],
-                ),
+                Text(type),
+                if (contextLabel.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(contextLabel),
+                ],
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}',
+                  '${date.day}/${date.month}/${date.year}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: AppColors.textSecondary,
-          ),
+          const Icon(Icons.chevron_right_rounded),
         ],
       ),
     );
@@ -363,7 +330,6 @@ class _LibraryCard extends StatelessWidget {
 
 class SavedTestScreen extends StatelessWidget {
   const SavedTestScreen({super.key, required this.test});
-
   final SavedTest test;
 
   @override
@@ -389,66 +355,54 @@ class SavedTestScreen extends StatelessWidget {
 class _LegacyLessonScreen extends StatelessWidget {
   const _LegacyLessonScreen({required this.test});
   final SavedTest test;
-
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(test.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: BayazCard(
-            child: SelectableText(
-              test.rawOutput,
-              style: const TextStyle(height: 1.5),
-            ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(test.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+    body: SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: BayazCard(
+          child: SelectableText(
+            test.rawOutput,
+            style: const TextStyle(height: 1.5),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+class _NoMatches extends StatelessWidget {
+  const _NoMatches({required this.onClear});
+  final VoidCallback onClear;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Nothing matches', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: AppSpacing.xs),
+        const Text('Try another search or change the filter.'),
+        TextButton(onPressed: onClear, child: const Text('Clear filters')),
+      ],
+    ),
+  );
 }
 
 class _LibraryError extends StatelessWidget {
-  const _LibraryError({required this.error, required this.onRetry});
-  final String error;
+  const _LibraryError({required this.onRetry});
   final VoidCallback onRetry;
-
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 44,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Could not open My Work',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Could not open My Work'),
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
+      ],
+    ),
+  );
 }

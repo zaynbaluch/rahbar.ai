@@ -13,6 +13,64 @@ import '../resources/background_ai_download_controller.dart';
 import '../settings/settings_screen.dart';
 import 'curriculum_catalog.dart';
 
+Future<void> launchTeacherWorkflow(
+  BuildContext context,
+  TopicPickerMode mode, {
+  OnboardingStore? onboardingStore,
+  WorkflowContextStore? workflowContextStore,
+}) async {
+  final onboarding = onboardingStore ?? OnboardingStore();
+  final workflowContexts = workflowContextStore ?? WorkflowContextStore();
+  final state = await onboarding.read();
+  final workflowKey = mode == TopicPickerMode.lesson ? 'lesson' : 'test';
+  final last = await workflowContexts.lastFor(workflowKey);
+  final resolution = WorkflowContextResolver.resolve(
+    state: state,
+    classes: CurriculumCatalog.classes,
+    last: last,
+  );
+  if (!context.mounted) return;
+
+  TeachingContext? selected = resolution.context;
+  if (resolution.needsSelector) {
+    final selectedClasses = CurriculumCatalog.classes
+        .where((item) => state.selectedClasses.contains(item.code))
+        .toList(growable: false);
+    selected = await showTeachingContextSelector(
+      context,
+      classes: selectedClasses,
+      selectedSubjectsByClass: state.selectedSubjectsByClass,
+      initial: last,
+    );
+    if (selected == null || !context.mounted) return;
+    await workflowContexts.save(workflowKey, selected);
+  }
+  if (!context.mounted) return;
+  if (selected == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Choose a class and subject in Settings first.'),
+      ),
+    );
+    return;
+  }
+  if (resolution.context != null) {
+    await workflowContexts.save(workflowKey, selected);
+    if (!context.mounted) return;
+  }
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => TopicPickerScreen(
+        mode: mode,
+        teachingContext: selected!,
+        showContextChange: resolution.showContextChange,
+        onboardingStore: onboarding,
+        workflowContextStore: workflowContexts,
+      ),
+    ),
+  );
+}
+
 class CurriculumHomeScreen extends StatefulWidget {
   const CurriculumHomeScreen({
     super.key,
@@ -256,56 +314,12 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     setState(() => _teacher = _onboardingStore.read());
   }
 
-  Future<void> _openWorkflow(TopicPickerMode mode) async {
-    final state = await _onboardingStore.read();
-    final workflowKey = mode == TopicPickerMode.lesson ? 'lesson' : 'test';
-    final last = await _workflowContexts.lastFor(workflowKey);
-    final resolution = WorkflowContextResolver.resolve(
-      state: state,
-      classes: CurriculumCatalog.classes,
-      last: last,
-    );
-    if (!mounted) return;
-
-    TeachingContext? selected = resolution.context;
-    if (resolution.needsSelector) {
-      final selectedClasses = CurriculumCatalog.classes
-          .where((item) => state.selectedClasses.contains(item.code))
-          .toList(growable: false);
-      selected = await showTeachingContextSelector(
-        context,
-        classes: selectedClasses,
-        selectedSubjectsByClass: state.selectedSubjectsByClass,
-        initial: last,
-      );
-      if (selected == null || !mounted) return;
-      await _workflowContexts.save(workflowKey, selected);
-    }
-    if (!mounted) return;
-    if (selected == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Choose a class and subject in Settings first.'),
-        ),
-      );
-      return;
-    }
-    if (resolution.context != null) {
-      await _workflowContexts.save(workflowKey, selected);
-      if (!mounted) return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TopicPickerScreen(
-          mode: mode,
-          teachingContext: selected!,
-          showContextChange: resolution.showContextChange,
-          onboardingStore: _onboardingStore,
-          workflowContextStore: _workflowContexts,
-        ),
-      ),
-    );
-  }
+  Future<void> _openWorkflow(TopicPickerMode mode) => launchTeacherWorkflow(
+    context,
+    mode,
+    onboardingStore: _onboardingStore,
+    workflowContextStore: _workflowContexts,
+  );
 }
 
 class _ActionTile extends StatelessWidget {
