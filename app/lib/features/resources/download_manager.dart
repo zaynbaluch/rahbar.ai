@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -59,9 +60,8 @@ class DownloadProgress {
   final int receivedBytes;
   final int totalBytes;
 
-  double? get fraction => totalBytes <= 0
-      ? null
-      : (receivedBytes / totalBytes).clamp(0.0, 1.0);
+  double? get fraction =>
+      totalBytes <= 0 ? null : (receivedBytes / totalBytes).clamp(0.0, 1.0);
 }
 
 class ResourceDownloadManager {
@@ -79,12 +79,9 @@ class ResourceDownloadManager {
 
   Future<Directory> resourceDirectory(ResourceDescriptor resource) async {
     final support = await getApplicationSupportDirectory();
-    return Directory(p.join(
-      support.path,
-      'resources',
-      resource.id,
-      resource.version,
-    ));
+    return Directory(
+      p.join(support.path, 'resources', resource.id, resource.version),
+    );
   }
 
   Future<File> installedFile(ResourceDescriptor resource) async {
@@ -92,14 +89,100 @@ class ResourceDownloadManager {
     return File(p.join(directory.path, resource.fileName));
   }
 
+  Future<File> _autoDownloadSuppressionFile() async {
+    final support = await getApplicationSupportDirectory();
+    return File(
+      p.join(
+        support.path,
+        'preferences',
+        'offline_ai_auto_download_suppressed.v1',
+      ),
+    );
+  }
+
+  Future<bool> isAutoDownloadSuppressed() async =>
+      (await _autoDownloadSuppressionFile()).exists();
+
+  Future<void> setAutoDownloadSuppressed(bool suppressed) async {
+    final file = await _autoDownloadSuppressionFile();
+    if (suppressed) {
+      await file.parent.create(recursive: true);
+      if (!await file.exists()) await file.writeAsString('1', flush: true);
+      return;
+    }
+    if (await file.exists()) await file.delete();
+  }
+
   Future<bool> verifyIntegrity(ResourceDescriptor resource) async {
     if (resource.isBundled) return true;
     final file = await installedFile(resource);
-    if (!await file.exists()) return false;
-    if (resource.sizeBytes > 0 && await file.length() != resource.sizeBytes) {
+    if (!await file.exists()) {
+      await _removeIntegrityReceipt(resource);
       return false;
     }
-    return _matchesHash(file, resource.sha256);
+    final size = await file.length();
+    if (resource.sizeBytes > 0 && size != resource.sizeBytes) {
+      await _removeIntegrityReceipt(resource);
+      return false;
+    }
+    if (await _hasMatchingIntegrityReceipt(resource, size)) return true;
+
+    final matches = await _matchesHash(file, resource.sha256);
+    if (matches) {
+      await _writeIntegrityReceipt(resource, size);
+    } else {
+      await _removeIntegrityReceipt(resource);
+    }
+    return matches;
+  }
+
+  Future<File> _integrityReceipt(ResourceDescriptor resource) async {
+    final directory = await resourceDirectory(resource);
+    return File(p.join(directory.path, '.integrity.receipt.json'));
+  }
+
+  Future<bool> _hasMatchingIntegrityReceipt(
+    ResourceDescriptor resource,
+    int size,
+  ) async {
+    final receipt = await _integrityReceipt(resource);
+    if (!await receipt.exists()) return false;
+    try {
+      final json = jsonDecode(await receipt.readAsString()) as Map;
+      return json['file_name'] == resource.fileName &&
+          json['size_bytes'] == size &&
+          (json['sha256'] as String?)?.toLowerCase() ==
+              resource.sha256.toLowerCase();
+    } catch (_) {
+      await _removeIntegrityReceipt(resource);
+      return false;
+    }
+  }
+
+  Future<void> _writeIntegrityReceipt(
+    ResourceDescriptor resource,
+    int size,
+  ) async {
+    final receipt = await _integrityReceipt(resource);
+    await receipt.parent.create(recursive: true);
+    final temp = File('${receipt.path}.tmp');
+    await temp.writeAsString(
+      jsonEncode({
+        'file_name': resource.fileName,
+        'size_bytes': size,
+        'sha256': resource.sha256.toLowerCase(),
+      }),
+      flush: true,
+    );
+    if (await receipt.exists()) await receipt.delete();
+    await temp.rename(receipt.path);
+  }
+
+  Future<void> _removeIntegrityReceipt(ResourceDescriptor resource) async {
+    final receipt = await _integrityReceipt(resource);
+    if (await receipt.exists()) await receipt.delete();
+    final temp = File('${receipt.path}.tmp');
+    if (await temp.exists()) await temp.delete();
   }
 
   Future<File> download(
@@ -176,6 +259,7 @@ class ResourceDownloadManager {
         }
         if (await destination.exists()) await destination.delete();
         final result = await partial.rename(destination.path);
+        await _writeIntegrityReceipt(resource, received);
         installed = true;
         return result;
       } finally {
@@ -257,10 +341,12 @@ class ResourceDownloadManager {
             return;
           }
           sink.add(chunk);
-          onProgress?.call(DownloadProgress(
-            receivedBytes: received,
-            totalBytes: resource.sizeBytes,
-          ));
+          onProgress?.call(
+            DownloadProgress(
+              receivedBytes: received,
+              totalBytes: resource.sizeBytes,
+            ),
+          );
         },
         onError: (Object error, StackTrace stackTrace) {
           completeError(error, stackTrace);

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../curriculum/teaching_context.dart';
 import '../resources/resource_manager.dart';
 import 'embedding_request.dart';
 import '../resources/resource_manifest.dart';
@@ -46,9 +47,8 @@ class GroundedPrompt {
 /// (cosine 0.9999998 query parity) so on-device results match the validated pipeline.
 /// See docs/decisions/ADR-004.
 class RagService {
-  RagService({
-    Duration embeddingTimeout = const Duration(seconds: 30),
-  }) : _embeddingRequests = EmbeddingRequestRunner(timeout: embeddingTimeout);
+  RagService({Duration embeddingTimeout = const Duration(seconds: 30)})
+    : _embeddingRequests = EmbeddingRequestRunner(timeout: embeddingTimeout);
 
   static const int dim = 384;
 
@@ -83,13 +83,16 @@ class RagService {
       final support = await getApplicationSupportDirectory();
       final dbPath = p.join(support.path, 'curriculum.db');
       final dbBytes = await rootBundle.load('assets/rag/curriculum.db');
-      await File(dbPath).writeAsBytes(dbBytes.buffer.asUint8List(), flush: true);
+      await File(
+        dbPath,
+      ).writeAsBytes(dbBytes.buffer.asUint8List(), flush: true);
       _db = sqlite3.open(dbPath, mode: OpenMode.readOnly);
 
       // --- prompt templates (bundled copies of prompts/*.md). ---
       _templates['mcq'] = await rootBundle.loadString('assets/prompts/mcq.md');
-      _templates['lesson'] =
-          await rootBundle.loadString('assets/prompts/lesson_plan.md');
+      _templates['lesson'] = await rootBundle.loadString(
+        'assets/prompts/lesson_plan.md',
+      );
 
       // --- bge embedder: GGUF in an embeddings-only context, CLS pooling. ---
       Llama.libraryPath = 'libmtmd.so';
@@ -103,8 +106,10 @@ class RagService {
           ..nBatch = 512
           ..nThreads = 4
           ..nThreadsBatch = 4
-          ..embeddings = true // embeddings-only context
-          ..poolingType = LlamaPoolingType.cls, // bge-small-en-v1.5 uses CLS pooling
+          ..embeddings =
+              true // embeddings-only context
+          ..poolingType =
+              LlamaPoolingType.cls, // bge-small-en-v1.5 uses CLS pooling
         samplingParams: SamplerParams(),
         verbose: false,
       );
@@ -155,28 +160,42 @@ class RagService {
       for (var i = 0; i < dim; i++) {
         sim += q[i] * vec[i]; // both L2-normalized → dot == cosine
       }
-      scored.add(Chunk(
-        id: r['id'] as String,
-        chapter: (r['chapter'] as int?) ?? 0,
-        title: title,
-        text: (r['text'] as String?) ?? '',
-        pageStart: (r['page_start'] as int?) ?? 0,
-        pageEnd: (r['page_end'] as int?) ?? 0,
-        score: sim,
-      ));
+      scored.add(
+        Chunk(
+          id: r['id'] as String,
+          chapter: (r['chapter'] as int?) ?? 0,
+          title: title,
+          text: (r['text'] as String?) ?? '',
+          pageStart: (r['page_start'] as int?) ?? 0,
+          pageEnd: (r['page_end'] as int?) ?? 0,
+          score: sim,
+        ),
+      );
     }
     scored.sort((a, b) => b.score.compareTo(a.score));
     return scored.take(k).toList();
   }
 
   /// Build the grounded (system, user) prompt for [kind] ('mcq' | 'lesson').
-  Future<GroundedPrompt> assemble(String kind, String topic, {int k = 6}) async {
+  Future<GroundedPrompt> assemble(
+    String kind,
+    String topic, {
+    int k = 6,
+    int expectedCount = 10,
+    TeachingContext? teachingContext,
+  }) async {
     final template = _templates[kind];
     if (template == null) throw ArgumentError('Unknown prompt kind: $kind');
     final hits = await retrieve(topic, k: k);
 
     final filled = template
         .replaceAll('{{topic}}', topic)
+        .replaceAll('{{count}}', '$expectedCount')
+        .replaceAll('{{class}}', teachingContext?.className ?? 'Class 6')
+        .replaceAll(
+          '{{subject}}',
+          teachingContext?.subjectName ?? 'General Science',
+        )
         .replaceAll('{{slos}}', _deriveSlos(hits))
         .replaceAll('{{context}}', _buildContext(hits));
 
@@ -204,8 +223,9 @@ class RagService {
     for (var i = 0; i < hits.length; i++) {
       if (used >= _contextCharBudget) break;
       final h = hits[i];
-      final pages =
-          h.pageStart == h.pageEnd ? 'p${h.pageStart}' : 'p${h.pageStart}-${h.pageEnd}';
+      final pages = h.pageStart == h.pageEnd
+          ? 'p${h.pageStart}'
+          : 'p${h.pageStart}-${h.pageEnd}';
       final cap = _perExcerptCharCap < _contextCharBudget - used
           ? _perExcerptCharCap
           : _contextCharBudget - used;

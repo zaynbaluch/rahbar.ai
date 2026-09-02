@@ -2,63 +2,89 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../design_system/components/brand_app_bar.dart';
-import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/bayaz_card.dart';
-import '../../design_system/components/section_header.dart';
-import '../../design_system/components/status_chip.dart';
 import '../../design_system/theme/app_colors.dart';
-import '../../design_system/theme/app_radii.dart';
 import '../../design_system/theme/app_spacing.dart';
-import '../generation/generation_screen.dart';
-import '../resources/offline_ai_navigation.dart';
+import '../curriculum/curriculum_catalog.dart';
 import '../curriculum/recent_access_store.dart';
-import '../library/library_screen.dart';
+import '../curriculum/recent_work_store.dart';
+import '../curriculum/teaching_context.dart';
+import '../curriculum/teaching_context_selector.dart';
+import '../curriculum/workflow_context_store.dart';
+import '../generation/generation_screen.dart';
+import '../generation/lesson_plan_view.dart';
+import '../generation/mcq_parser.dart';
+import '../generation/mcq_test_view.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
+import '../onboarding/onboarding_store.dart';
+import '../resources/offline_ai_navigation.dart';
 import 'content_service.dart';
-import 'topic_screen.dart';
 
-/// Teacher home and curriculum browser. Every number and action on this screen
-/// comes from the shipped content pack or the local library.
+/// The two intent-specific topic-picking flows exposed from Home.
+enum TopicPickerMode { lesson, test }
+
 class TopicPickerScreen extends StatefulWidget {
   const TopicPickerScreen({
     super.key,
-    this.classCode = '6',
-    this.subjectCode = 'general_science',
-    this.className = 'Class 6',
-    this.subjectName = 'General Science',
+    required this.mode,
+    required this.teachingContext,
+    this.showContextChange = false,
+    this.content,
+    this.onboardingStore,
+    this.workflowContextStore,
+    this.libraryStore,
   });
 
-  final String classCode;
-  final String subjectCode;
-  final String className;
-  final String subjectName;
+  final TopicPickerMode mode;
+  final TeachingContext teachingContext;
+  final bool showContextChange;
+  final ContentService? content;
+  final OnboardingStore? onboardingStore;
+  final WorkflowContextStore? workflowContextStore;
+  final LibraryStore? libraryStore;
 
   @override
   State<TopicPickerScreen> createState() => _TopicPickerScreenState();
 }
 
 class _TopicPickerScreenState extends State<TopicPickerScreen> {
-  final _content = ContentService();
-  final _library = LibraryStore();
+  late final ContentService _content;
+  late final bool _ownsContent;
+  late final OnboardingStore _onboardingStore;
+  late final WorkflowContextStore _workflowContexts;
+  late final LibraryStore _library;
+  late TeachingContext _context;
   final _search = TextEditingController();
 
-  List<Topic> _all = [];
-  Future<List<SavedTest>>? _recentFuture;
+  List<Topic> _all = const [];
   String? _error;
   bool _loading = true;
+
+  String get _workflowKey =>
+      widget.mode == TopicPickerMode.lesson ? 'lesson' : 'test';
+  String get _title =>
+      widget.mode == TopicPickerMode.lesson ? 'Prepare Lesson' : 'Create Test';
+  String get _customLabel => widget.mode == TopicPickerMode.lesson
+      ? 'Create a custom lesson'
+      : 'Create a custom test';
 
   @override
   void initState() {
     super.initState();
+    _ownsContent = widget.content == null;
+    _content = widget.content ?? ContentService();
+    _onboardingStore = widget.onboardingStore ?? OnboardingStore();
+    _workflowContexts = widget.workflowContextStore ?? WorkflowContextStore();
+    _library = widget.libraryStore ?? LibraryStore();
+    _context = widget.teachingContext;
     _load();
   }
 
   @override
   void dispose() {
     _search.dispose();
-    _content.dispose();
+    if (_ownsContent) _content.dispose();
     super.dispose();
   }
 
@@ -68,63 +94,66 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
       if (!mounted) return;
       setState(() {
         _all = _content.listTopics();
-        _recentFuture = _library.list();
         _loading = false;
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = '$error';
         _loading = false;
       });
     }
   }
 
   List<Topic> get _visible {
-    final q = _search.text.trim().toLowerCase();
-    if (q.isEmpty) return _all;
+    final query = _search.text.trim().toLowerCase();
+    if (query.isEmpty) return _all;
     return _all
-        .where(
-          (t) =>
-              t.title.toLowerCase().contains(q) ||
-              t.summary.toLowerCase().contains(q) ||
-              t.sectionNo.toLowerCase().startsWith(q),
-        )
-        .toList();
+        .where((topic) {
+          return topic.title.toLowerCase().contains(query) ||
+              topic.summary.toLowerCase().contains(query) ||
+              topic.sectionNo.toLowerCase().startsWith(query);
+        })
+        .toList(growable: false);
   }
 
   Map<int, List<Topic>> _groupByChapter(List<Topic> topics) {
     final grouped = <int, List<Topic>>{};
     for (final topic in topics) {
-      grouped.putIfAbsent(topic.chapter, () => []).add(topic);
+      grouped.putIfAbsent(topic.chapter, () => <Topic>[]).add(topic);
     }
     return grouped;
+  }
+
+  String _chapterLabel(int chapter, List<Topic> topics) {
+    Topic lead = topics.first;
+    for (final topic in topics) {
+      if (topic.sectionNo.split('.').length == 2) {
+        lead = topic;
+        break;
+      }
+    }
+    return 'Chapter $chapter · ${lead.title}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 72,
-        title: BrandAppBarTitle(subtitle: 'Offline teacher toolkit'),
-      ),
+      appBar: AppBar(title: Text(_title)),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
             ? _errorView()
-            : _buildHome(),
+            : _contentView(),
       ),
     );
   }
 
-  Widget _buildHome() {
-    final topics = _visible;
+  Widget _contentView() {
     final query = _search.text.trim();
+    final topics = _visible;
     final grouped = _groupByChapter(topics);
-    final chapterCount = _all.map((t) => t.chapter).toSet().length;
-    final itemCount = _all.fold<int>(0, (sum, t) => sum + t.nItems);
-
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(
@@ -134,132 +163,222 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
         AppSpacing.xl,
       ),
       children: [
-        _HeroPanel(
-          topicCount: _all.length,
-          chapterCount: chapterCount,
-          itemCount: itemCount,
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        FutureBuilder<List<SavedTest>>(
-          future: _recentFuture,
-          builder: (context, snapshot) {
-            final items = snapshot.data ?? const [];
-            if (items.isEmpty) return const SizedBox.shrink();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SectionHeader(
-                  title: 'Continue your work',
-                  subtitle: 'Recently saved on this device',
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                SizedBox(
-                  height: 112,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: items.take(4).length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(width: AppSpacing.sm),
-                    itemBuilder: (context, index) =>
-                        _RecentCard(test: items[index]),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-              ],
-            );
-          },
-        ),
-        SectionHeader(
-          title: 'Choose a curriculum topic',
-          subtitle:
-              '${widget.className} ${widget.subjectName} · verified offline content',
-        ),
-        const SizedBox(height: AppSpacing.sm),
+        if (widget.showContextChange) ...[
+          _ContextRow(context: _context, onChange: _changeContext),
+          const SizedBox(height: AppSpacing.md),
+        ],
         TextField(
           controller: _search,
           onChanged: (_) => setState(() {}),
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: 'Search cells, mixtures, digestion…',
+            hintText: 'Search topics',
             prefixIcon: const Icon(Icons.search_rounded),
             suffixIcon: query.isEmpty
                 ? null
                 : IconButton(
                     tooltip: 'Clear search',
-                    icon: const Icon(Icons.close_rounded),
                     onPressed: () {
                       _search.clear();
                       setState(() {});
                     },
+                    icon: const Icon(Icons.close_rounded),
                   ),
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.lg),
         if (topics.isEmpty)
-          _noMatch(query)
+          _CustomTopicPrompt(
+            label: _customLabel,
+            query: query,
+            onTap: () => _openCustom(query),
+          )
         else if (query.isNotEmpty)
           for (final topic in topics) ...[
-            _TopicCard(topic: topic, onTap: () => _openTopic(topic)),
+            _TopicTile(topic: topic, onTap: () => _openTopic(topic)),
             const SizedBox(height: AppSpacing.sm),
           ]
         else
           for (final entry in grouped.entries) ...[
-            _ChapterCard(
-              chapter: entry.key,
+            _ChapterSection(
+              label: _chapterLabel(entry.key, entry.value),
               topics: entry.value,
-              onTopic: _openTopic,
+              initiallyExpanded: entry.key == grouped.keys.first,
+              onTopicTap: _openTopic,
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
-        if (query.isEmpty) ...[
+        if (topics.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.sm),
-          _CustomTopicCard(onTap: () => _openCustomTopic('')),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  "Can't find the topic?",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                TextButton(
+                  onPressed: () => _openCustom(query),
+                  child: Text(_customLabel),
+                ),
+              ],
+            ),
+          ),
         ],
       ],
     );
   }
 
-  void _openTopic(Topic topic) {
+  Future<void> _openTopic(Topic topic) async {
     unawaited(
       RecentAccessStore().record(
-        classCode: widget.classCode,
-        subjectCode: widget.subjectCode,
+        classCode: _context.classCode ?? '',
+        subjectCode: _context.subjectCode ?? '',
         topicId: topic.id,
         topicTitle: topic.title,
       ),
     );
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => TopicScreen(content: _content, topic: topic),
+    if (widget.mode == TopicPickerMode.lesson) {
+      final plan = _content.assemblePlan(topic.id);
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LessonPlanScreen(
+            content: _content,
+            topic: topic,
+            plan: plan,
+            teachingContext: _context,
           ),
-        )
-        .then((_) {
-          if (!mounted) return;
-          setState(() {
-            _recentFuture = _library.list();
-          });
-        });
-  }
-
-  void _openCustomTopic(String topic) {
-    openOfflineAiScreen(
-      context,
-      (_) => GenerationScreen(initialTopic: topic),
+        ),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _CurriculumTestSetupScreen(
+          topic: topic,
+          teachingContext: _context,
+          onCreate: (count) => _createCurriculumTest(topic, count),
+          onCustom: () => _openCustom(topic.title),
+        ),
+      ),
     );
   }
 
-  Widget _noMatch(String query) => BayazEmptyState(
-    asset: 'assets/ui/illustrations/no_search_results.webp',
-    title: 'No curriculum topic found',
-    message:
-        '“$query” is not in the shipped Class 6 content pack. The existing offline AI fallback can still attempt it, but it takes longer and should be reviewed.',
-    action: OutlinedButton.icon(
-      icon: const Icon(Icons.auto_awesome_outlined),
-      label: const Text('Use custom generation'),
-      onPressed: () => _openCustomTopic(query),
-    ),
-  );
+  Future<void> _createCurriculumTest(Topic topic, int count) async {
+    final used = await _usedItemIds(topic.id);
+    if (!mounted) return;
+    McqTest test;
+    try {
+      test = _content.sampleTest(topic.id, n: count, exclude: used);
+    } on InsufficientUnusedItemsException catch (shortage) {
+      final reuse = await _confirmReuse(shortage);
+      if (reuse != true || !mounted) return;
+      test = _content.sampleTest(
+        topic.id,
+        n: count,
+        exclude: used,
+        allowReuse: true,
+      );
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => McqTestScreen(
+          test: test,
+          teachingContext: _context,
+          onSave: () => _saveTest(topic, test),
+        ),
+      ),
+    );
+  }
+
+  Future<Set<String>> _usedItemIds(String topicId) async {
+    final saved = await _library.list();
+    final used = <String>{};
+    for (final item in saved) {
+      if (item.kind == 'mcq' &&
+          item.topicId == topicId &&
+          item.contentJson != null) {
+        used.addAll(item.toMcqTest().itemIds);
+      }
+    }
+    return used;
+  }
+
+  Future<bool?> _confirmReuse(InsufficientUnusedItemsException shortage) =>
+      showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Some questions will repeat'),
+          content: Text(
+            'Only ${shortage.availableUnused} unused questions remain. '
+            'This paper needs ${shortage.reuseCount} previously used '
+            'question${shortage.reuseCount == 1 ? '' : 's'}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Create with repeats'),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _saveTest(Topic topic, McqTest test) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _library.save(
+      SavedTest(
+        id: test.id,
+        kind: 'mcq',
+        source: SavedContentSource.curriculumPack,
+        topic: topic.title,
+        topicId: topic.id,
+        createdAtMillis: now,
+        contentJson: test.toJson(),
+        teachingContext: _context,
+      ),
+    );
+    unawaited(
+      RecentWorkStore()
+          .update(RecentWorkReference(type: 'test', id: test.id))
+          .catchError((_) {}),
+    );
+  }
+
+  void _openCustom(String query) {
+    openOfflineAiScreen(
+      context,
+      (_) => GenerationScreen(
+        initialTopic: query,
+        initialKind: widget.mode == TopicPickerMode.lesson ? 'lesson' : 'mcq',
+        dedicated: true,
+        teachingContext: _context,
+      ),
+    );
+  }
+
+  Future<void> _changeContext() async {
+    final state = await _onboardingStore.read();
+    if (!mounted) return;
+    final selectedClasses = CurriculumCatalog.classes
+        .where((item) => state.selectedClasses.contains(item.code))
+        .toList(growable: false);
+    final next = await showTeachingContextSelector(
+      context,
+      classes: selectedClasses,
+      selectedSubjectsByClass: state.selectedSubjectsByClass,
+      initial: _context,
+    );
+    if (next == null || !mounted) return;
+    await _workflowContexts.save(_workflowKey, next);
+    if (!mounted) return;
+    setState(() => _context = next);
+  }
 
   Widget _errorView() => Center(
     child: Padding(
@@ -267,24 +386,11 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 44,
-            color: Theme.of(context).colorScheme.error,
-          ),
+          const Icon(Icons.error_outline, size: 44),
           const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Could not open the content pack',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            _error ?? '',
-            style: Theme.of(context).textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
+          const Text('Could not open topics'),
           const SizedBox(height: AppSpacing.md),
-          OutlinedButton.icon(
+          OutlinedButton(
             onPressed: () {
               setState(() {
                 _loading = true;
@@ -292,8 +398,7 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
               });
               _load();
             },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+            child: const Text('Retry'),
           ),
         ],
       ),
@@ -301,225 +406,219 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
   );
 }
 
-class _HeroPanel extends StatelessWidget {
-  const _HeroPanel({
-    required this.topicCount,
-    required this.chapterCount,
-    required this.itemCount,
+List<int> availableTestCounts(int verifiedCount) => [
+  for (final count in const [5, 10, 15])
+    if (count <= verifiedCount) count,
+];
+
+int? defaultTestCount(int verifiedCount) {
+  final available = availableTestCounts(verifiedCount);
+  if (available.contains(10)) return 10;
+  if (available.contains(5)) return 5;
+  return null;
+}
+
+class _CurriculumTestSetupScreen extends StatefulWidget {
+  const _CurriculumTestSetupScreen({
+    required this.topic,
+    required this.teachingContext,
+    required this.onCreate,
+    required this.onCustom,
   });
 
-  final int topicCount;
-  final int chapterCount;
-  final int itemCount;
+  final Topic topic;
+  final TeachingContext teachingContext;
+  final Future<void> Function(int count) onCreate;
+  final VoidCallback onCustom;
+
+  @override
+  State<_CurriculumTestSetupScreen> createState() =>
+      _CurriculumTestSetupScreenState();
+}
+
+class _CurriculumTestSetupScreenState
+    extends State<_CurriculumTestSetupScreen> {
+  late int? _count = defaultTestCount(widget.topic.nItems);
+  bool _creating = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -18,
-            top: -20,
-            child: Opacity(
-              opacity: 0.16,
-              child: Image.asset(
-                'assets/ui/branding/bayaz_logo.png',
-                width: 132,
-                height: 132,
-              ),
+    final teaching = [
+      widget.teachingContext.className,
+      widget.teachingContext.subjectName,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    final available = availableTestCounts(widget.topic.nItems);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create Test')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: [
+            Text(
+              widget.topic.title,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Prepare your next class',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
+            const SizedBox(height: AppSpacing.xs),
+            if (teaching.isNotEmpty) Text(teaching),
+            const SizedBox(height: AppSpacing.xl),
+            if (available.isEmpty)
+              BayazCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'There are not enough ready questions for this topic yet.',
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    FilledButton.tonal(
+                      onPressed: widget.onCustom,
+                      child: const Text('Create a custom test'),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
+              )
+            else ...[
               Text(
-                'Create a lesson plan or verified MCQ paper directly from the curriculum pack.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.88),
-                ),
+                'Number of questions',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
               Wrap(
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.xs,
+                spacing: AppSpacing.sm,
                 children: [
-                  _HeroStat(label: '$chapterCount chapters'),
-                  _HeroStat(label: '$topicCount topics'),
-                  _HeroStat(label: '$itemCount verified MCQs'),
+                  for (final count in const [5, 10, 15])
+                    ChoiceChip(
+                      label: Text('$count'),
+                      selected: _count == count,
+                      onSelected: count > widget.topic.nItems || _creating
+                          ? null
+                          : (_) => setState(() => _count = count),
+                    ),
                 ],
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadii.pill),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _RecentCard extends StatelessWidget {
-  const _RecentCard({required this.test});
-  final SavedTest test;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 245,
-      child: BayazCard(
-        onTap: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => SavedTestScreen(test: test))),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: test.kind == 'mcq'
-                    ? AppColors.softGold
-                    : AppColors.softBlue,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                test.kind == 'mcq'
-                    ? Icons.fact_check_outlined
-                    : Icons.menu_book_outlined,
-                color: test.kind == 'mcq'
-                    ? AppColors.warningText
-                    : AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    test.topic,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    test.kind == 'mcq' ? 'MCQ test' : 'Lesson plan',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textSecondary,
-            ),
           ],
         ),
       ),
+      bottomNavigationBar: available.isEmpty
+          ? null
+          : SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                ),
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border(top: BorderSide(color: AppColors.outline)),
+                ),
+                child: FilledButton(
+                  onPressed: _count == null || _creating ? null : _create,
+                  child: Text(_creating ? 'Creating…' : 'Create test'),
+                ),
+              ),
+            ),
     );
+  }
+
+  Future<void> _create() async {
+    final count = _count;
+    if (count == null || _creating) return;
+    setState(() => _creating = true);
+    try {
+      await widget.onCreate(count);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
   }
 }
 
-class _ChapterCard extends StatelessWidget {
-  const _ChapterCard({
-    required this.chapter,
-    required this.topics,
-    required this.onTopic,
-  });
-
-  final int chapter;
-  final List<Topic> topics;
-  final ValueChanged<Topic> onTopic;
+class _ContextRow extends StatelessWidget {
+  const _ContextRow({required this.context, required this.onChange});
+  final TeachingContext context;
+  final VoidCallback onChange;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        side: const BorderSide(color: AppColors.outline),
-        borderRadius: BorderRadius.circular(AppRadii.md),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        initiallyExpanded: chapter == 1,
-        tilePadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.xs,
+    final label = [
+      this.context.className,
+      this.context.subjectName,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.titleSmall),
         ),
-        childrenPadding: const EdgeInsets.fromLTRB(
-          AppSpacing.sm,
-          0,
-          AppSpacing.sm,
-          AppSpacing.sm,
-        ),
-        leading: Container(
-          width: 44,
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.softBlue,
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: Text(
-            '$chapter',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: AppColors.primary),
-          ),
-        ),
-        title: Text('Chapter $chapter'),
-        subtitle: Text('${topics.length} curriculum topics'),
-        children: [
-          for (final topic in topics)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: _TopicCard(topic: topic, onTap: () => onTopic(topic)),
-            ),
-        ],
-      ),
+        TextButton(onPressed: onChange, child: const Text('Change')),
+      ],
     );
   }
 }
 
-class _TopicCard extends StatelessWidget {
-  const _TopicCard({required this.topic, required this.onTap});
+class _ChapterSection extends StatelessWidget {
+  const _ChapterSection({
+    required this.label,
+    required this.topics,
+    required this.initiallyExpanded,
+    required this.onTopicTap,
+  });
 
+  final String label;
+  final List<Topic> topics;
+  final bool initiallyExpanded;
+  final ValueChanged<Topic> onTopicTap;
+
+  @override
+  Widget build(BuildContext context) => BayazCard(
+    padding: EdgeInsets.zero,
+    child: ExpansionTile(
+      initiallyExpanded: initiallyExpanded,
+      tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      childrenPadding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      children: [
+        for (final topic in topics)
+          _ChapterTopicRow(topic: topic, onTap: () => onTopicTap(topic)),
+      ],
+    ),
+  );
+}
+
+class _ChapterTopicRow extends StatelessWidget {
+  const _ChapterTopicRow({required this.topic, required this.onTap});
+  final Topic topic;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+    leading: SizedBox(
+      width: 44,
+      child: Text(
+        topic.sectionNo,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+    title: Text(topic.title),
+    trailing: const Icon(Icons.chevron_right_rounded),
+    onTap: onTap,
+  );
+}
+
+class _TopicTile extends StatelessWidget {
+  const _TopicTile({required this.topic, required this.onTap});
   final Topic topic;
   final VoidCallback onTap;
 
@@ -527,111 +626,63 @@ class _TopicCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return BayazCard(
       onTap: onTap,
-      color: const Color(0xFFFBFCFF),
-      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            constraints: const BoxConstraints(minWidth: 46),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-            decoration: BoxDecoration(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
               color: AppColors.softBlue,
-              borderRadius: BorderRadius.circular(12),
+              shape: BoxShape.circle,
             ),
             child: Text(
               topic.sectionNo,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: AppColors.primary,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  topic.title,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                if (topic.summary.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    topic.summary,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.xs),
-                StatusChip(
-                  label: topic.hasTest
-                      ? '${topic.nItems} verified questions'
-                      : '${topic.nItems} questions available',
-                  icon: topic.hasTest
-                      ? Icons.verified_outlined
-                      : Icons.info_outline,
-                  backgroundColor: topic.hasTest
-                      ? AppColors.softBlue
-                      : AppColors.softGold,
-                  foregroundColor: topic.hasTest
-                      ? AppColors.navy
-                      : AppColors.warningText,
-                ),
-              ],
+            child: Text(
+              topic.title,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.only(top: 10),
-            child: Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textSecondary,
-            ),
-          ),
+          const Icon(Icons.chevron_right_rounded),
         ],
       ),
     );
   }
 }
 
-class _CustomTopicCard extends StatelessWidget {
-  const _CustomTopicCard({required this.onTap});
+class _CustomTopicPrompt extends StatelessWidget {
+  const _CustomTopicPrompt({
+    required this.label,
+    required this.query,
+    required this.onTap,
+  });
+  final String label;
+  final String query;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return BayazCard(
-      onTap: onTap,
-      color: AppColors.softBlue,
-      borderColor: const Color(0xFFC9D6FF),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.auto_awesome_outlined,
-            color: AppColors.primary,
-            size: 28,
+          Text(
+            query.isEmpty
+                ? 'Choose another topic'
+                : 'No topic found for "$query"',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Topic outside the curriculum pack?',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Use the existing offline AI fallback. It is slower and its output should be reviewed.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
+          const SizedBox(height: AppSpacing.sm),
+          FilledButton.tonal(onPressed: onTap, child: Text(label)),
         ],
       ),
     );

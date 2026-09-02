@@ -8,7 +8,6 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../curriculum/curriculum_catalog.dart';
 import '../resources/local_ai_resources.dart';
-import '../settings/resource_management_screen.dart';
 import 'onboarding_store.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -18,35 +17,46 @@ class OnboardingScreen extends StatefulWidget {
     this.reconfigure = false,
     this.store,
     this.inspectAi,
+    this.classes = CurriculumCatalog.classes,
   });
 
   final VoidCallback? onCompleted;
   final bool reconfigure;
   final OnboardingStore? store;
-
-  /// Overrides the on-device model probe. Tests inject this because the real
-  /// probe reaches platform channels that never answer under widget tests.
   final Future<LocalAiAvailability?> Function()? inspectAi;
+  final List<CurriculumClass> classes;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _stepCount = 3;
+enum _SetupPageKind {
+  profile,
+  classes,
+  relationship,
+  sharedSubjects,
+  classSubjects,
+}
 
+class _SetupPage {
+  const _SetupPage(this.kind, {this.classCode});
+  final _SetupPageKind kind;
+  final String? classCode;
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
   late final OnboardingStore _store;
   final _teacherController = TextEditingController();
   final _schoolController = TextEditingController();
   late final DebouncedWriter<OnboardingState> _drafts;
 
   OnboardingState _state = const OnboardingState();
-  LocalAiAvailability? _aiAvailability;
   bool _loading = true;
   bool _saving = false;
   String? _loadError;
   String? _saveError;
   bool _allowPop = false;
+  bool? _sameSubjects;
 
   @override
   void initState() {
@@ -64,6 +74,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
+  List<_SetupPage> get _pages {
+    final selected = _selectedClasses;
+    final pages = <_SetupPage>[
+      const _SetupPage(_SetupPageKind.profile),
+      const _SetupPage(_SetupPageKind.classes),
+    ];
+    if (selected.length <= 1) {
+      if (selected.isNotEmpty) {
+        pages.add(
+          _SetupPage(
+            _SetupPageKind.classSubjects,
+            classCode: selected.first.code,
+          ),
+        );
+      }
+      return pages;
+    }
+    pages.add(const _SetupPage(_SetupPageKind.relationship));
+    if (_sameSubjects == true) {
+      pages.add(const _SetupPage(_SetupPageKind.sharedSubjects));
+    } else if (_sameSubjects == false) {
+      pages.addAll(
+        selected.map(
+          (c) => _SetupPage(_SetupPageKind.classSubjects, classCode: c.code),
+        ),
+      );
+    }
+    return pages;
+  }
+
+  List<CurriculumClass> get _selectedClasses => widget.classes
+      .where((item) => _state.selectedClasses.contains(item.code))
+      .toList(growable: false);
+
+  int get _pageIndex => _state.currentStep.clamp(0, _pages.length - 1).toInt();
+  _SetupPage get _page => _pages[_pageIndex];
+
   Future<void> _load() async {
     if (mounted) {
       setState(() {
@@ -73,17 +120,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     try {
       final stored = await _store.read();
-      final step = widget.reconfigure
-          ? 0
-          : stored.currentStep.clamp(0, _stepCount - 1).toInt();
-      final state = stored.copyWith(currentStep: step);
-      _teacherController.text = state.teacherName;
-      _schoolController.text = state.schoolName;
-      final availability = await _inspectAi();
+      _teacherController.text = stored.teacherName;
+      _schoolController.text = stored.schoolName;
+      final selected = stored.selectedClasses
+          .where((code) => widget.classes.any((c) => c.code == code))
+          .toList();
+      final fallbackClass = widget.classes.isEmpty
+          ? <String>[]
+          : <String>[widget.classes.first.code];
+      final normalizedClasses = selected.isEmpty ? fallbackClass : selected;
+      final mapping = <String, List<String>>{};
+      for (final code in normalizedClasses) {
+        final c = widget.classes.where((item) => item.code == code).firstOrNull;
+        if (c == null) continue;
+        final configured =
+            stored.selectedSubjectsByClass[code] ?? stored.selectedSubjects;
+        final valid = configured
+            .where((subject) => c.subjects.any((s) => s.code == subject))
+            .toList();
+        mapping[code] = valid.isEmpty && c.subjects.isNotEmpty
+            ? [c.subjects.first.code]
+            : valid;
+      }
+      final values = mapping.values.map((v) => v.join('|')).toSet();
+      _sameSubjects = normalizedClasses.length > 1 && values.length == 1
+          ? true
+          : null;
+      final normalized = stored.copyWith(
+        currentStep: widget.reconfigure ? 0 : stored.currentStep,
+        selectedClasses: normalizedClasses,
+        selectedSubjectsByClass: mapping,
+      );
       if (!mounted) return;
       setState(() {
-        _state = state;
-        _aiAvailability = availability;
+        _state = normalized;
         _loading = false;
       });
     } catch (_) {
@@ -92,29 +162,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _loading = false;
         _loadError = 'Setup data could not be read.';
       });
-    }
-  }
-
-  Future<void> _resetAndLoad() async {
-    try {
-      await _store.reset();
-    } catch (_) {
-      if (mounted) setState(() => _loadError = 'Setup data could not be reset.');
-      return;
-    }
-    await _load();
-  }
-
-  Future<LocalAiAvailability?> _inspectAi() async {
-    final override = widget.inspectAi;
-    if (override != null) return override();
-    final resources = LocalAiResources();
-    try {
-      return await resources.inspect();
-    } catch (_) {
-      return null;
-    } finally {
-      resources.dispose();
     }
   }
 
@@ -135,16 +182,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: AppSpacing.sm),
                 Text(_loadError!, textAlign: TextAlign.center),
                 const SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  children: [
-                    OutlinedButton(onPressed: _load, child: const Text('Retry')),
-                    FilledButton(
-                      onPressed: _resetAndLoad,
-                      child: const Text('Reset setup'),
-                    ),
-                  ],
-                ),
+                OutlinedButton(onPressed: _load, child: const Text('Retry')),
               ],
             ),
           ),
@@ -154,36 +192,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return PopScope<void>(
       canPop: widget.reconfigure && _allowPop,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && widget.reconfigure) {
-          unawaited(_saveAndLeave());
-        }
+        if (!didPop && widget.reconfigure) unawaited(_saveAndLeave());
       },
       child: Scaffold(
         appBar: widget.reconfigure
-            ? AppBar(title: const Text('Review setup'))
+            ? AppBar(title: const Text('Teaching setup'))
             : null,
         body: SafeArea(
           child: Column(
             children: [
               LinearProgressIndicator(
-                value: (_state.currentStep + 1) / _stepCount,
+                value: (_pageIndex + 1) / _pages.length,
                 minHeight: 5,
               ),
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
                   child: KeyedSubtree(
-                    key: ValueKey(_state.currentStep),
-                    child: _step(),
+                    key: ValueKey('${_page.kind}-${_page.classCode}'),
+                    child: _buildPage(),
                   ),
                 ),
               ),
               if (_saveError != null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                  ),
                   child: Text(
                     _saveError!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
               _navigation(),
@@ -194,17 +234,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _step() => switch (_state.currentStep) {
-        0 => _profileStep(),
-        1 => _courseworkStep(),
-        _ => _offlineAiStep(),
-      };
+  Widget _buildPage() => switch (_page.kind) {
+    _SetupPageKind.profile => _profilePage(),
+    _SetupPageKind.classes => _classesPage(),
+    _SetupPageKind.relationship => _relationshipPage(),
+    _SetupPageKind.sharedSubjects => _sharedSubjectsPage(),
+    _SetupPageKind.classSubjects => _classSubjectsPage(_page.classCode!),
+  };
 
-  Widget _page({
-    required String title,
-    required String subtitle,
-    required List<Widget> children,
-  }) =>
+  Widget _pageLayout(String title, List<Widget> children, {String? subtitle}) =>
       ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
@@ -214,27 +252,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         children: [
           Text(title, style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: AppSpacing.sm),
-          Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
+          if (subtitle != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
+          ],
           const SizedBox(height: AppSpacing.xl),
           ...children,
         ],
       );
 
-  Widget _profileStep() => _page(
-        title: widget.reconfigure ? 'Teacher profile' : 'Welcome to Bayaz AI',
-        subtitle:
-            'Set up the teacher app in three short steps. Profile details stay on this device.',
-        children: [
+  Widget _profilePage() =>
+      _pageLayout(widget.reconfigure ? 'Teacher profile' : 'Welcome to Bayaz', [
+        if (!widget.reconfigure) ...[
           Center(
-            child: Container(
-              width: 132,
-              height: 132,
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
+            child: SizedBox(
+              width: 112,
+              height: 112,
               child: Image.asset(
                 'assets/ui/branding/bayaz_logo.png',
                 fit: BoxFit.contain,
@@ -242,142 +275,227 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.xl),
-          TextField(
-            controller: _teacherController,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Teacher name',
-              prefixIcon: Icon(Icons.person_outline_rounded),
-            ),
-            onChanged: (_) => _scheduleDraftSave(),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _schoolController,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'School name (optional)',
-              prefixIcon: Icon(Icons.school_outlined),
-            ),
-            onChanged: (_) => _scheduleDraftSave(),
-          ),
         ],
-      );
-
-  Widget _courseworkStep() => _page(
-        title: 'Installed coursework',
-        subtitle:
-            'The current MVP includes Class 6 General Science. More modules can be added later without making this setup longer.',
-        children: [
-          for (final curriculumClass in CurriculumCatalog.classes)
-            BayazCard(
-              borderColor: AppColors.primary,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(
-                      backgroundColor: AppColors.softBlue,
-                      child: Icon(Icons.school_outlined, color: AppColors.primary),
-                    ),
-                    title: Text(curriculumClass.name),
-                    trailing: const Chip(label: Text('Installed')),
-                  ),
-                  for (final subject in curriculumClass.subjects)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.science_outlined,
-                        color: AppColors.primary,
-                      ),
-                      title: Text(subject.name),
-                      subtitle: Text(subject.description),
-                    ),
-                ],
-              ),
-            ),
-          const SizedBox(height: AppSpacing.md),
-          const Text(
-            'Only working modules are shown. There are no placeholder classes or subjects in the app.',
+        TextField(
+          controller: _teacherController,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Teacher name',
+            prefixIcon: Icon(Icons.person_outline_rounded),
           ),
-        ],
-      );
-
-  Widget _offlineAiStep() {
-    final availability = _aiAvailability;
-    final languageInstalled = availability?.languageModel.installed ?? false;
-    final embeddingInstalled = availability?.embeddingModel.installed ?? false;
-    final ready = languageInstalled && embeddingInstalled;
-    return _page(
-      title: 'Optional offline AI',
-      subtitle:
-          'Offline AI enables custom generation and clarification chat. It is not required for verified coursework.',
-      children: [
-        BayazCard(
-          borderColor: _state.offlineAiEnabled ? AppColors.primary : null,
-          child: SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            value: _state.offlineAiEnabled,
-            onChanged: (value) {
-              setState(() => _state = _state.copyWith(offlineAiEnabled: value));
-              _scheduleDraftSave();
-            },
-            title: const Text('Enable offline AI features'),
-            subtitle: const Text(
-              'Model files can be large and generation may take several minutes on budget phones.',
-            ),
-          ),
+          onChanged: (_) => _scheduleDraftSave(),
         ),
-        if (_state.offlineAiEnabled) ...[
-          const SizedBox(height: AppSpacing.md),
-          BayazCard(
-            color: ready ? const Color(0xFFE7F6EC) : AppColors.softGold,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  ready ? 'Offline AI is ready' : 'Model setup is incomplete',
+        const SizedBox(height: AppSpacing.md),
+        TextField(
+          controller: _schoolController,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'School name (optional)',
+            prefixIcon: Icon(Icons.school_outlined),
+          ),
+          onChanged: (_) => _scheduleDraftSave(),
+        ),
+      ]);
+
+  Widget _classesPage() => _pageLayout('Which classes do you teach?', [
+    for (final item in widget.classes)
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: BayazCard(
+          onTap: () => _toggleClass(item.code),
+          borderColor: _state.selectedClasses.contains(item.code)
+              ? AppColors.primary
+              : null,
+          child: Row(
+            children: [
+              Checkbox(
+                value: _state.selectedClasses.contains(item.code),
+                onChanged: (_) => _toggleClass(item.code),
+              ),
+              Expanded(
+                child: Text(
+                  item.name,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Language model: ${languageInstalled ? 'installed' : 'not installed'}',
-                ),
-                Text(
-                  'Curriculum search model: ${embeddingInstalled ? 'installed' : 'not installed'}',
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  !languageInstalled
-                      ? 'Custom generation and chat remain unavailable until a language model is installed.'
-                      : !embeddingInstalled
-                          ? 'Generation can run, but it will be marked ungrounded.'
-                          : 'Custom generation can use installed curriculum context.',
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _manageModels,
-                    icon: const Icon(Icons.download_rounded),
-                    label: const Text('Manage models'),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-        const SizedBox(height: AppSpacing.md),
-        const Text(
-          'You can skip this step and enable offline AI later from Settings.',
         ),
-      ],
-    );
+      ),
+  ]);
+
+  Widget _relationshipPage() =>
+      _pageLayout('Do you teach the same subjects in these classes?', [
+        _choiceCard(
+          'Yes, same subjects',
+          _sameSubjects == true,
+          () => setState(() => _sameSubjects = true),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _choiceCard(
+          'No, they are different',
+          _sameSubjects == false,
+          () => setState(() => _sameSubjects = false),
+        ),
+      ]);
+
+  Widget _choiceCard(String label, bool selected, VoidCallback onTap) =>
+      BayazCard(
+        onTap: onTap,
+        borderColor: selected ? AppColors.primary : null,
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+              color: selected ? AppColors.primary : null,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  List<CurriculumSubject> get _sharedAvailableSubjects {
+    final selected = _selectedClasses;
+    if (selected.isEmpty) return const [];
+    return selected.first.subjects
+        .where(
+          (subject) => selected.every(
+            (c) => c.subjects.any((s) => s.code == subject.code),
+          ),
+        )
+        .toList(growable: false);
   }
 
+  Widget _sharedSubjectsPage() {
+    final subjects = _sharedAvailableSubjects;
+    final applied = _selectedClasses.map((c) => c.name).join(' · ');
+    final selected =
+        _state.selectedSubjectsByClass[_selectedClasses.first.code] ??
+        const <String>[];
+    return _pageLayout('What subjects do you teach?', [
+      Text('Applies to: $applied'),
+      const SizedBox(height: AppSpacing.md),
+      ...subjects.map(
+        (s) => CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: selected.contains(s.code),
+          title: Text(s.name),
+          onChanged: (_) => _toggleSharedSubject(s.code),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _classSubjectsPage(String classCode) {
+    final c = widget.classes.firstWhere((item) => item.code == classCode);
+    final selected =
+        _state.selectedSubjectsByClass[classCode] ?? const <String>[];
+    return _pageLayout('Subjects for ${c.name}', [
+      for (final subject in c.subjects)
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: selected.contains(subject.code),
+          title: Text(subject.name),
+          onChanged: (_) => _toggleSubject(classCode, subject.code),
+        ),
+    ]);
+  }
+
+  void _toggleClass(String code) {
+    final next = List<String>.of(_state.selectedClasses);
+    if (next.contains(code)) {
+      if (next.length == 1) return;
+      next.remove(code);
+    } else {
+      next.add(code);
+    }
+    final mapping = Map<String, List<String>>.fromEntries(
+      _state.selectedSubjectsByClass.entries.map(
+        (e) => MapEntry(e.key, List<String>.of(e.value)),
+      ),
+    );
+    for (final classCode in next) {
+      if (mapping[classCode]?.isNotEmpty == true) continue;
+      final c = widget.classes.firstWhere((item) => item.code == classCode);
+      if (c.subjects.isNotEmpty) mapping[classCode] = [c.subjects.first.code];
+    }
+    mapping.removeWhere((key, _) => !next.contains(key));
+    setState(() {
+      _sameSubjects = next.length > 1 ? null : _sameSubjects;
+      _state = _state.copyWith(
+        selectedClasses: next,
+        selectedSubjectsByClass: mapping,
+      );
+    });
+    _scheduleDraftSave();
+  }
+
+  void _toggleSubject(String classCode, String subjectCode) {
+    final mapping = _copyMapping();
+    final selected = mapping[classCode] ?? <String>[];
+    if (selected.contains(subjectCode)) {
+      if (selected.length == 1) return;
+      selected.remove(subjectCode);
+    } else {
+      selected.add(subjectCode);
+    }
+    mapping[classCode] = selected;
+    setState(() => _state = _state.copyWith(selectedSubjectsByClass: mapping));
+    _scheduleDraftSave();
+  }
+
+  void _toggleSharedSubject(String subjectCode) {
+    final mapping = _copyMapping();
+    final firstCode = _selectedClasses.first.code;
+    final current = List<String>.of(mapping[firstCode] ?? const []);
+    if (current.contains(subjectCode)) {
+      if (current.length == 1) return;
+      current.remove(subjectCode);
+    } else {
+      current.add(subjectCode);
+    }
+    for (final c in _selectedClasses) {
+      mapping[c.code] = List<String>.of(current);
+    }
+    setState(() => _state = _state.copyWith(selectedSubjectsByClass: mapping));
+    _scheduleDraftSave();
+  }
+
+  Map<String, List<String>> _copyMapping() =>
+      Map<String, List<String>>.fromEntries(
+        _state.selectedSubjectsByClass.entries.map(
+          (e) => MapEntry(e.key, List<String>.of(e.value)),
+        ),
+      );
+
+  bool get _pageValid => switch (_page.kind) {
+    _SetupPageKind.profile => true,
+    _SetupPageKind.classes => _selectedClasses.isNotEmpty,
+    _SetupPageKind.relationship => _sameSubjects != null,
+    _SetupPageKind.sharedSubjects =>
+      _selectedClasses.isNotEmpty &&
+          (_state
+                  .selectedSubjectsByClass[_selectedClasses.first.code]
+                  ?.isNotEmpty ??
+              false),
+    _SetupPageKind.classSubjects =>
+      _state.selectedSubjectsByClass[_page.classCode]?.isNotEmpty ?? false,
+  };
+
   Widget _navigation() {
-    final last = _state.currentStep == _stepCount - 1;
+    final last = _pageIndex == _pages.length - 1;
+    final nextClass = !last && _page.kind == _SetupPageKind.classSubjects
+        ? widget.classes
+              .where((c) => c.code == _pages[_pageIndex + 1].classCode)
+              .firstOrNull
+              ?.name
+        : null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
@@ -387,7 +505,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       child: Row(
         children: [
-          if (_state.currentStep > 0)
+          if (_pageIndex > 0)
             TextButton.icon(
               onPressed: _saving ? null : _back,
               icon: const Icon(Icons.arrow_back_rounded),
@@ -395,43 +513,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             )
           else
             const Spacer(),
-          if (_state.currentStep > 0) const Spacer(),
-          if (last && _state.offlineAiEnabled)
-            TextButton(
-              onPressed: _saving ? null : _skipOfflineAi,
-              child: const Text('Skip for now'),
-            ),
-          const SizedBox(width: AppSpacing.sm),
+          if (_pageIndex > 0) const Spacer(),
           FilledButton.icon(
-            onPressed: _saving ? null : (last ? _finish : _next),
-            icon: Icon(last ? Icons.check_rounded : Icons.arrow_forward_rounded),
-            label: Text(_saving ? 'Saving...' : last ? 'Finish' : 'Continue'),
+            onPressed: _saving || !_pageValid ? null : (last ? _finish : _next),
+            icon: Icon(
+              last ? Icons.check_rounded : Icons.arrow_forward_rounded,
+            ),
+            label: Text(
+              _saving
+                  ? 'Saving...'
+                  : last
+                  ? 'Finish'
+                  : nextClass == null
+                  ? 'Continue'
+                  : 'Next: $nextClass',
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _next() async {
-    final next = (_state.currentStep + 1).clamp(0, _stepCount - 1).toInt();
-    await _saveAndShow(_snapshot(currentStep: next));
-  }
-
-  Future<void> _back() async {
-    final previous = (_state.currentStep - 1).clamp(0, _stepCount - 1).toInt();
-    await _saveAndShow(_snapshot(currentStep: previous));
-  }
-
-  Future<void> _skipOfflineAi() async {
-    setState(() => _state = _state.copyWith(offlineAiEnabled: false));
-    await _finish();
-  }
+  Future<void> _next() async =>
+      _saveAndShow(_snapshot(currentStep: _pageIndex + 1));
+  Future<void> _back() async =>
+      _saveAndShow(_snapshot(currentStep: _pageIndex - 1));
 
   Future<void> _finish() async {
     final completed = _snapshot(
-      currentStep: _stepCount - 1,
+      currentStep: _pageIndex,
       completed: true,
-    );
+    ).copyWith(offlineAiEnabled: true);
     setState(() {
       _saving = true;
       _saveError = null;
@@ -444,16 +556,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (widget.reconfigure) _allowPop = true;
       });
       if (widget.reconfigure) {
-        // `pop` does not consult `canPop`, so this path was not stuck the way
-        // `_saveAndLeave` was. Waiting for the frame that publishes the new pop
-        // state still beats an arbitrary zero delay, and keeps both exits alike.
         await WidgetsBinding.instance.endOfFrame;
         if (mounted) Navigator.of(context).pop();
       } else {
         widget.onCompleted?.call();
       }
     } catch (_) {
-      if (mounted) setState(() => _saveError = 'Setup changes could not be saved.');
+      if (mounted) {
+        setState(() => _saveError = 'Setup changes could not be saved.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -474,8 +585,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _saving = false;
         _allowPop = true;
       });
-      // The pop must wait for the frame that republishes `canPop: true`,
-      // otherwise `PopScope` intercepts it again and the route never closes.
       await WidgetsBinding.instance.endOfFrame;
       if (mounted) Navigator.of(context).maybePop();
     } catch (_) {
@@ -488,13 +597,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  OnboardingState _snapshot({int? currentStep, bool? completed}) =>
-      _state.copyWith(
-        currentStep: currentStep,
-        completed: completed,
-        teacherName: _teacherController.text.trim(),
-        schoolName: _schoolController.text.trim(),
-      );
+  OnboardingState _snapshot({int? currentStep, bool? completed}) {
+    final union = <String>{
+      for (final values in _state.selectedSubjectsByClass.values) ...values,
+    }.toList(growable: false);
+    return _state.copyWith(
+      currentStep: currentStep,
+      completed: completed,
+      teacherName: _teacherController.text.trim(),
+      schoolName: _schoolController.text.trim(),
+      selectedSubjects: union,
+    );
+  }
 
   void _scheduleDraftSave() {
     final updated = _snapshot();
@@ -512,18 +626,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _drafts.flush(updated);
       if (mounted) setState(() => _state = updated);
     } catch (_) {
-      if (mounted) setState(() => _saveError = 'Setup changes could not be saved.');
+      if (mounted) {
+        setState(() => _saveError = 'Setup changes could not be saved.');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  Future<void> _manageModels() async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => const ResourceManagementScreen(setupMode: true),
-    ));
-    final availability = await _inspectAi();
-    if (!mounted) return;
-    setState(() => _aiAvailability = availability);
   }
 }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../curriculum/teaching_context.dart';
 import '../generation/lesson_plan.dart';
 import '../generation/mcq_parser.dart';
 import '../omr/omr_template.dart';
@@ -29,7 +30,10 @@ class PdfExport {
   /// Persistent paper ID printed on the sheet and reused by the gradebook.
   static String testId(McqTest test) => test.id;
 
-  static Future<Uint8List> build(McqTest test) async {
+  static Future<Uint8List> build(
+    McqTest test, {
+    TeachingContext? teachingContext,
+  }) async {
     final validation = test.validation;
     if (!validation.isReady) {
       throw InvalidMcqPaperException(validation.issues);
@@ -37,101 +41,134 @@ class PdfExport {
     final doc = pw.Document();
     final id = testId(test);
     final qs = test.questions;
-    doc.addPage(_paperPage(test, id, qs));
+    doc.addPage(_paperPage(test, id, qs, teachingContext));
     return doc.save();
   }
 
   /// The teacher's 5E lesson plan (ADR-006). Plain A4, no OMR layer — this sheet is for
   /// the teacher's hand, not the camera, so none of the [OmrTemplate] geometry applies.
-  static Future<Uint8List> buildLessonPlan(LessonPlan plan) async {
+  static Future<Uint8List> buildLessonPlan(
+    LessonPlan plan, {
+    TeachingContext? teachingContext,
+  }) async {
     final doc = pw.Document();
     final materials = plan.materials;
 
-    doc.addPage(pw.MultiPage(
-      pageTheme: const pw.PageTheme(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.all(36),
-      ),
-      build: (context) => [
-        pw.Text(plan.topic,
-            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          'Grade 6 · General Science · one ${plan.totalMinutes}-minute period · '
-          'Single National Curriculum',
-          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+    doc.addPage(
+      pw.MultiPage(
+        pageTheme: const pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(36),
         ),
-        pw.Divider(height: 16),
-        if (plan.slos.isNotEmpty) ...[
-          pw.Text('Learning outcomes',
-              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          for (final s in plan.slos)
-            pw.Bullet(text: s, style: const pw.TextStyle(fontSize: 10)),
-          pw.SizedBox(height: 8),
-        ],
-        if (materials.isNotEmpty) ...[
-          pw.Container(
-            width: double.infinity,
-            padding: const pw.EdgeInsets.all(8),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.grey200,
-              borderRadius: pw.BorderRadius.circular(4),
+        build: (context) => [
+          pw.Text(
+            plan.topic,
+            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 2),
+          pw.Text(
+            '${teachingLabel(teachingContext)}${teachingContext == null ? '' : ' · '}'
+            'one ${plan.totalMinutes}-minute period',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+          ),
+          pw.Divider(height: 16),
+          if (plan.slos.isNotEmpty) ...[
+            pw.Text(
+              'Learning outcomes',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
             ),
-            child: pw.RichText(
-              text: pw.TextSpan(
-                children: [
-                  pw.TextSpan(
-                    text: 'What to bring:  ',
-                    style: pw.TextStyle(
-                        fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.TextSpan(
-                    text: materials.join(' · '),
-                    style: const pw.TextStyle(fontSize: 10),
-                  ),
-                ],
+            pw.SizedBox(height: 4),
+            for (final s in plan.slos)
+              pw.Bullet(text: s, style: const pw.TextStyle(fontSize: 10)),
+            pw.SizedBox(height: 8),
+          ],
+          if (materials.isNotEmpty) ...[
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey200,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.RichText(
+                text: pw.TextSpan(
+                  children: [
+                    pw.TextSpan(
+                      text: 'What to bring:  ',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.TextSpan(
+                      text: materials.join(' · '),
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          pw.SizedBox(height: 10),
+            pw.SizedBox(height: 10),
+          ],
+          for (final s in plan.sections) _planSection(s),
         ],
-        for (final s in plan.sections) _planSection(s),
-      ],
-    ));
+      ),
+    );
     return doc.save();
   }
 
+  static String teachingLabel(TeachingContext? context) {
+    if (context == null) return '';
+    return [
+      context.className,
+      context.subjectName,
+    ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' · ');
+  }
+
   static pw.Widget _planSection(PlanSection s) => pw.Container(
-        margin: const pw.EdgeInsets.only(bottom: 10),
-        child: pw.Column(
+    margin: const pw.EdgeInsets.only(bottom: 10),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Expanded(
-                  child: pw.Text(
-                    LessonPlan.sectionTitles[s.section] ?? s.section,
-                    style: pw.TextStyle(
-                        fontSize: 12, fontWeight: pw.FontWeight.bold),
-                  ),
+            pw.Expanded(
+              child: pw.Text(
+                LessonPlan.sectionTitles[s.section] ?? s.section,
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
                 ),
-                if (s.minutes > 0)
-                  pw.Text('${s.minutes} min',
-                      style: const pw.TextStyle(
-                          fontSize: 9, color: PdfColors.grey700)),
-              ],
+              ),
             ),
-            pw.SizedBox(height: 3),
-            pw.Text(s.body,
-                style: const pw.TextStyle(fontSize: 10, lineSpacing: 1.6)),
+            if (s.minutes > 0)
+              pw.Text(
+                '${s.minutes} min',
+                style: const pw.TextStyle(
+                  fontSize: 9,
+                  color: PdfColors.grey700,
+                ),
+              ),
           ],
         ),
-      );
+        pw.SizedBox(height: 3),
+        pw.Text(
+          s.body,
+          style: const pw.TextStyle(fontSize: 10, lineSpacing: 1.6),
+        ),
+      ],
+    ),
+  );
 
-  static pw.Page _paperPage(McqTest test, String id, List<McqQuestion> qs) {
+  static pw.Page _paperPage(
+    McqTest test,
+    String id,
+    List<McqQuestion> qs,
+    TeachingContext? teachingContext,
+  ) {
     final n = qs.length;
+    final layout = OmrTemplate.layoutFor(n);
     return pw.MultiPage(
       // The OMR layer (fiducials + bubbles) is drawn in the page foreground at
       // absolute OmrTemplate coordinates, only on page 1 (the graded page).
@@ -139,7 +176,7 @@ class PdfExport {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(30),
         buildForeground: (context) =>
-            context.pageNumber == 1 ? _omrLayer(n) : pw.SizedBox(),
+            context.pageNumber == 1 ? _omrLayer(n, layout) : pw.SizedBox(),
       ),
       build: (context) => [
         // Reserve the top-right block where the OMR grid is drawn on top.
@@ -150,19 +187,22 @@ class PdfExport {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _header(test.topic, id),
+                  _header(test.topic, id, teachingContext),
                   pw.SizedBox(height: 10),
                   _studentFields(),
                   pw.SizedBox(height: 10),
                   pw.Text(
                     'Choose the ONE best answer and fill the matching bubble in the '
                     'answer grid. Time: 50 minutes.',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    style: const pw.TextStyle(
+                      fontSize: 9,
+                      color: PdfColors.grey700,
+                    ),
                   ),
                 ],
               ),
             ),
-            pw.SizedBox(width: OmrTemplate.boxW + 12, height: OmrTemplate.boxH + 8),
+            pw.SizedBox(width: layout.boxW + 12, height: layout.boxH + 8),
           ],
         ),
         pw.Divider(height: 18),
@@ -172,85 +212,109 @@ class PdfExport {
   }
 
   // ---- OMR foreground: fiducials + boxed bubble grid at absolute coords ----
-  static pw.Widget _omrLayer(int n) {
+  static pw.Widget _omrLayer(int n, OmrLayout layout) {
     final children = <pw.Widget>[];
 
     // Corner fiducial markers.
-    for (final (fx, fy) in OmrTemplate.fiducials) {
-      children.add(pw.Positioned(
-        left: fx - OmrTemplate.fidSize / 2,
-        top: fy - OmrTemplate.fidSize / 2,
-        child: pw.Container(
-            width: OmrTemplate.fidSize,
-            height: OmrTemplate.fidSize,
-            color: PdfColors.black),
-      ));
+    for (final (fx, fy) in layout.fiducials) {
+      children.add(
+        pw.Positioned(
+          left: fx - layout.fidSize / 2,
+          top: fy - layout.fidSize / 2,
+          child: pw.Container(
+            width: layout.fidSize,
+            height: layout.fidSize,
+            color: PdfColors.black,
+          ),
+        ),
+      );
     }
 
     // Answer box.
-    children.add(pw.Positioned(
-      left: OmrTemplate.boxLeft,
-      top: OmrTemplate.boxTop,
-      child: pw.Container(
-        width: OmrTemplate.boxW,
-        height: OmrTemplate.boxH,
-        decoration: pw.BoxDecoration(
-          border: pw.Border.all(width: 0.8, color: PdfColors.grey600),
-          borderRadius: pw.BorderRadius.circular(4),
+    children.add(
+      pw.Positioned(
+        left: layout.boxLeft,
+        top: layout.boxTop,
+        child: pw.Container(
+          width: layout.boxW,
+          height: layout.boxH,
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(width: 0.8, color: PdfColors.grey600),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
         ),
       ),
-    ));
+    );
     // Title above the box and a hint below it — outside the fiducial rectangle so
     // they never interfere with corner detection (and don't matter if the teacher
     // photographs just the box).
-    children.add(pw.Positioned(
-      left: OmrTemplate.boxLeft,
-      top: OmrTemplate.boxTop - 13,
-      child: pw.Text('ANSWERS  (photograph this box to grade)',
-          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-    ));
-    children.add(pw.Positioned(
-      left: OmrTemplate.boxLeft,
-      top: OmrTemplate.boxBottom + 3,
-      child: pw.Text('Fill one bubble per row with a dark pen.',
-          style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700)),
-    ));
+    children.add(
+      pw.Positioned(
+        left: layout.boxLeft,
+        top: layout.boxTop - 13,
+        child: pw.Text(
+          'ANSWERS  (photograph this box to grade)',
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        ),
+      ),
+    );
+    children.add(
+      pw.Positioned(
+        left: layout.boxLeft,
+        top: layout.boxBottom + 3,
+        child: pw.Text(
+          'Fill one bubble per row with a dark pen.',
+          style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700),
+        ),
+      ),
+    );
 
     // Column labels A B C D.
-    for (var c = 0; c < OmrTemplate.options; c++) {
-      children.add(pw.Positioned(
-        left: OmrTemplate.colX(c) - 2.5,
-        top: OmrTemplate.colLabelY - 5,
-        child: pw.Text(_letters[c], style: const pw.TextStyle(fontSize: 7)),
-      ));
+    for (var c = 0; c < layout.options; c++) {
+      children.add(
+        pw.Positioned(
+          left: layout.colX(c) - 2.5,
+          top: layout.colLabelY - 5,
+          child: pw.Text(_letters[c], style: const pw.TextStyle(fontSize: 7)),
+        ),
+      );
     }
 
     // Q labels + bubbles.
     for (var q = 1; q <= n; q++) {
-      children.add(pw.Positioned(
-        left: OmrTemplate.qLabelX,
-        top: OmrTemplate.rowY(q) - 4,
-        child: pw.Text('Q$q',
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-      ));
-      for (var c = 0; c < OmrTemplate.options; c++) {
-        final (cx, cy) = OmrTemplate.bubbleCenter(q, c);
-        children.add(pw.Positioned(
-          left: cx - OmrTemplate.bubbleR,
-          top: cy - OmrTemplate.bubbleR,
-          child: pw.Container(
-            width: OmrTemplate.bubbleR * 2,
-            height: OmrTemplate.bubbleR * 2,
-            decoration: pw.BoxDecoration(
-              shape: pw.BoxShape.circle,
-              border: pw.Border.all(width: 0.9, color: PdfColors.black),
+      children.add(
+        pw.Positioned(
+          left: layout.qLabelX,
+          top: layout.rowY(q) - 4,
+          child: pw.Text(
+            'Q$q',
+            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
+      );
+      for (var c = 0; c < layout.options; c++) {
+        final (cx, cy) = layout.bubbleCenter(q, c);
+        children.add(
+          pw.Positioned(
+            left: cx - layout.bubbleR,
+            top: cy - layout.bubbleR,
+            child: pw.Container(
+              width: layout.bubbleR * 2,
+              height: layout.bubbleR * 2,
+              decoration: pw.BoxDecoration(
+                shape: pw.BoxShape.circle,
+                border: pw.Border.all(width: 0.9, color: PdfColors.black),
+              ),
             ),
           ),
-        ));
+        );
       }
     }
 
-    return pw.FullPage(ignoreMargins: true, child: pw.Stack(children: children));
+    return pw.FullPage(
+      ignoreMargins: true,
+      child: pw.Stack(children: children),
+    );
   }
 
   // ---- Questions (left, flow down the page) ----
@@ -260,48 +324,64 @@ class PdfExport {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('$n. ${q.text}',
-              style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            '$n. ${q.text}',
+            style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+          ),
           pw.SizedBox(height: 3),
           for (final l in _letters)
             if (q.options.containsKey(l))
               pw.Padding(
                 padding: const pw.EdgeInsets.only(left: 14, bottom: 1),
-                child: pw.Text('($l)  ${q.options[l]}',
-                    style: const pw.TextStyle(fontSize: 9.5)),
+                child: pw.Text(
+                  '($l)  ${q.options[l]}',
+                  style: const pw.TextStyle(fontSize: 9.5),
+                ),
               ),
         ],
       ),
     );
   }
 
-  static pw.Widget _header(String topic, String id) {
+  static pw.Widget _header(
+    String topic,
+    String id,
+    TeachingContext? teachingContext,
+  ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text('Bayaz AI - General Science, Grade 6',
-            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-        pw.Text('Topic: $topic',
-            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
-        pw.Text('Test ID: $id',
-            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+        pw.Text(
+          teachingLabel(teachingContext).isEmpty
+              ? 'Bayaz AI'
+              : 'Bayaz AI - ${teachingLabel(teachingContext)}',
+          style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.Text(
+          'Topic: $topic',
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800),
+        ),
+        pw.Text(
+          'Test ID: $id',
+          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+        ),
       ],
     );
   }
 
   static pw.Widget _studentFields() {
     pw.Widget field(String label, double w) => pw.Row(
-          children: [
-            pw.Text('$label: ', style: const pw.TextStyle(fontSize: 10)),
-            pw.Container(
-              width: w,
-              decoration: const pw.BoxDecoration(
-                border: pw.Border(bottom: pw.BorderSide(width: 0.8)),
-              ),
-              child: pw.SizedBox(height: 14),
-            ),
-          ],
-        );
+      children: [
+        pw.Text('$label: ', style: const pw.TextStyle(fontSize: 10)),
+        pw.Container(
+          width: w,
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(bottom: pw.BorderSide(width: 0.8)),
+          ),
+          child: pw.SizedBox(height: 14),
+        ),
+      ],
+    );
     return pw.Row(
       children: [
         field('Name', 150),

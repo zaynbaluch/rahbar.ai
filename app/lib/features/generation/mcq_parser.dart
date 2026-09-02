@@ -40,27 +40,27 @@ class McqQuestion {
   }
 
   Map<String, dynamic> toJson() => {
-        'number': number,
-        'difficulty': difficulty,
-        'text': text,
-        'options': options,
-        'answer': answer,
-        if (itemId != null) 'itemId': itemId,
-      };
+    'number': number,
+    'difficulty': difficulty,
+    'text': text,
+    'options': options,
+    'answer': answer,
+    if (itemId != null) 'itemId': itemId,
+  };
 
   factory McqQuestion.fromJson(Map<String, dynamic> j) => McqQuestion(
-        number: j['number'] as int,
-        difficulty: j['difficulty'] as String? ?? '',
-        text: j['text'] as String? ?? '',
-        options: (j['options'] as Map).map((k, v) => MapEntry('$k', '$v')),
-        answer: j['answer'] as String?,
-        itemId: j['itemId'] as String?,
-      );
+    number: j['number'] as int,
+    difficulty: j['difficulty'] as String? ?? '',
+    text: j['text'] as String? ?? '',
+    options: (j['options'] as Map).map((k, v) => MapEntry('$k', '$v')),
+    answer: j['answer'] as String?,
+    itemId: j['itemId'] as String?,
+  );
 }
 
 /// A parsed test with a persistent paper ID.
 class McqTest {
-  static const int maxSupportedQuestions = 10;
+  static const int maxSupportedQuestions = 15;
 
   McqTest({
     String? id,
@@ -68,8 +68,8 @@ class McqTest {
     required this.questions,
     int? expectedCount,
     this.reusedItemIds = const {},
-  })  : expectedCount = expectedCount ?? questions.length,
-        id = id ?? createId();
+  }) : expectedCount = expectedCount ?? questions.length,
+       id = id ?? createId();
 
   final String id;
   final String topic;
@@ -83,9 +83,8 @@ class McqTest {
   bool get isReady => validation.isReady;
 
   /// Answer key as "1=A 2=C …" (the OMR-gradable representation).
-  String get keyLine => questions
-      .map((q) => '${q.number}=${q.answer ?? '?'}')
-      .join(' ');
+  String get keyLine =>
+      questions.map((q) => '${q.number}=${q.answer ?? '?'}').join(' ');
 
   /// The bank items used, so a re-draw on the same topic can avoid repeating them.
   Set<String> get itemIds =>
@@ -98,24 +97,24 @@ class McqTest {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'topic': topic,
-        'questions': questions.map((q) => q.toJson()).toList(),
-        'expectedCount': expectedCount,
-        if (reusedItemIds.isNotEmpty) 'reusedItemIds': reusedItemIds.toList(),
-      };
+    'id': id,
+    'topic': topic,
+    'questions': questions.map((q) => q.toJson()).toList(),
+    'expectedCount': expectedCount,
+    if (reusedItemIds.isNotEmpty) 'reusedItemIds': reusedItemIds.toList(),
+  };
 
   factory McqTest.fromJson(Map<String, dynamic> j) => McqTest(
-        id: j['id'] as String?,
-        topic: j['topic'] as String? ?? '',
-        questions: (j['questions'] as List? ?? [])
-            .map((e) => McqQuestion.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        expectedCount: j['expectedCount'] as int?,
-        reusedItemIds: (j['reusedItemIds'] as List? ?? const [])
-            .map((item) => item.toString())
-            .toSet(),
-      );
+    id: j['id'] as String?,
+    topic: j['topic'] as String? ?? '',
+    questions: (j['questions'] as List? ?? [])
+        .map((e) => McqQuestion.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    expectedCount: j['expectedCount'] as int?,
+    reusedItemIds: (j['reusedItemIds'] as List? ?? const [])
+        .map((item) => item.toString())
+        .toSet(),
+  );
 }
 
 class McqPaperValidation {
@@ -143,7 +142,9 @@ class McqPaperValidation {
     final expectedNumbers = <int>[
       for (var number = 1; number <= test.expectedCount; number++) number,
     ];
-    final actualNumbers = test.questions.map((question) => question.number).toList();
+    final actualNumbers = test.questions
+        .map((question) => question.number)
+        .toList();
     if (!_sameNumbers(actualNumbers, expectedNumbers)) {
       issues.add('Question numbers must run from 1 to ${test.expectedCount}.');
     }
@@ -152,7 +153,9 @@ class McqPaperValidation {
         .map((question) => question.number)
         .toList(growable: false);
     if (incomplete.isNotEmpty) {
-      issues.add('Complete every question and answer before printing or grading.');
+      issues.add(
+        'Complete every question and answer before printing or grading.',
+      );
     }
     return McqPaperValidation(List.unmodifiable(issues));
   }
@@ -187,7 +190,10 @@ class McqParser {
     caseSensitive: false,
     multiLine: true,
   );
-  static final RegExp _keyPair = RegExp(r'(\d+)\s*[=:]\s*([A-D])', caseSensitive: false);
+  static final RegExp _keyPair = RegExp(
+    r'(\d+)\s*[=:]\s*([A-D])',
+    caseSensitive: false,
+  );
 
   /// Parse [raw] model output into a structured [McqTest].
   static McqTest parse(
@@ -216,7 +222,9 @@ class McqParser {
       final number = int.parse(h.group(1)!);
       final difficulty = (h.group(2) ?? '').toLowerCase();
       final bodyStart = h.end;
-      final bodyEnd = i + 1 < headers.length ? headers[i + 1].start : text.length;
+      final bodyEnd = i + 1 < headers.length
+          ? headers[i + 1].start
+          : text.length;
       final body = text.substring(bodyStart, bodyEnd);
 
       final q = _parseBody(number, difficulty, body, keyMap[number]);
@@ -231,7 +239,11 @@ class McqParser {
   }
 
   static McqQuestion? _parseBody(
-      int number, String difficulty, String body, String? keyAnswer) {
+    int number,
+    String difficulty,
+    String body,
+    String? keyAnswer,
+  ) {
     final options = <String, String>{};
     final questionLines = <String>[];
     String? answer;
@@ -241,7 +253,9 @@ class McqParser {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
       // Stop this question at the KEY line if it landed inside the last block.
-      if (RegExp(r'^\s*KEY\s*[:=]', caseSensitive: false).hasMatch(trimmed)) break;
+      if (RegExp(r'^\s*KEY\s*[:=]', caseSensitive: false).hasMatch(trimmed)) {
+        break;
+      }
 
       final a = _answer.firstMatch(trimmed);
       if (a != null) {

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
@@ -9,37 +12,54 @@ import '../../design_system/theme/app_radii.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../chat/clarification_context.dart';
 import '../chat/clarification_screen.dart';
-import '../resources/offline_ai_navigation.dart';
 import '../content/content_service.dart';
+import '../curriculum/teaching_context.dart';
+import '../curriculum/recent_work_store.dart';
 import '../export/pdf_export.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
+import '../resources/offline_ai_navigation.dart';
 import 'lesson_plan.dart';
+
+typedef SharePdfCallback =
+    Future<bool> Function({required Uint8List bytes, required String filename});
 
 class LessonPlanScreen extends StatefulWidget {
   const LessonPlanScreen({
     super.key,
-    required this.content,
-    required this.topic,
     required this.plan,
+    this.content,
+    this.topic,
+    this.teachingContext,
+    this.initiallySaved = false,
+    this.libraryStore,
+    this.onSave,
+    this.sharePdf,
   });
 
-  final ContentService content;
-  final Topic topic;
+  final ContentService? content;
+  final Topic? topic;
   final LessonPlan plan;
+  final TeachingContext? teachingContext;
+  final bool initiallySaved;
+  final LibraryStore? libraryStore;
+  final Future<void> Function()? onSave;
+  final SharePdfCallback? sharePdf;
 
   @override
   State<LessonPlanScreen> createState() => _LessonPlanScreenState();
 }
 
 class _LessonPlanScreenState extends State<LessonPlanScreen> {
-  final _library = LibraryStore();
+  late final LibraryStore _library = widget.libraryStore ?? LibraryStore();
   late LessonPlan _plan = widget.plan;
-  late final Map<String, List<PlanSection>> _variants = widget.content
-      .variantsFor(widget.topic.id);
-  bool _saved = false;
+  late final Map<String, List<PlanSection>> _variants =
+      widget.content != null && widget.topic != null
+      ? widget.content!.variantsFor(widget.topic!.id)
+      : const {};
+  late bool _saved = widget.initiallySaved;
   bool _saving = false;
-  bool _printing = false;
+  bool _sharing = false;
 
   void _cycle(String section) {
     final options = _variants[section];
@@ -61,43 +81,76 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
     });
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool showMessage = true}) async {
     if (_saving || _saved) return;
     setState(() => _saving = true);
     try {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      await _library.save(
-        SavedTest(
-          id: now.toString(),
-          kind: 'lesson',
-          source: SavedContentSource.curriculumPack,
-          topic: _plan.topic,
-          topicId: _plan.topicId,
-          createdAtMillis: now,
-          contentJson: _plan.toJson(),
-        ),
-      );
-      if (mounted) {
-        setState(() => _saved = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lesson plan saved to Library')),
+      final override = widget.onSave;
+      if (override != null) {
+        await override();
+      } else {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final id = now.toString();
+        await _library.save(
+          SavedTest(
+            id: id,
+            kind: 'lesson',
+            source: widget.content == null
+                ? SavedContentSource.customAi
+                : SavedContentSource.curriculumPack,
+            topic: _plan.topic,
+            topicId: widget.topic?.id ?? _plan.topicId,
+            createdAtMillis: now,
+            contentJson: _plan.toJson(),
+            teachingContext: widget.teachingContext,
+          ),
         );
+        unawaited(
+          RecentWorkStore()
+              .update(RecentWorkReference(type: 'lesson', id: id))
+              .catchError((_) {}),
+        );
+      }
+      if (!mounted) return;
+      setState(() => _saved = true);
+      if (showMessage) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Saved in Bayaz')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _print() async {
-    if (_printing) return;
-    setState(() => _printing = true);
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    final neededSave = !_saved;
     try {
-      await Printing.layoutPdf(
-        onLayout: (_) => PdfExport.buildLessonPlan(_plan),
-        name: 'Bayaz-${_plan.topic}-lesson-plan',
+      if (neededSave) await _save(showMessage: false);
+      final bytes = await PdfExport.buildLessonPlan(
+        _plan,
+        teachingContext: widget.teachingContext,
       );
+      final filename = 'Bayaz-${_plan.topic}-lesson-plan.pdf';
+      final share =
+          widget.sharePdf ??
+          ({required Uint8List bytes, required String filename}) =>
+              Printing.sharePdf(bytes: bytes, filename: filename);
+      final shared = await share(bytes: bytes, filename: filename);
+      if (!mounted) return;
+      if (shared && neededSave) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✓ Saved in Bayaz & shared')),
+        );
+      } else if (!shared && neededSave) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('✓ Saved in Bayaz')));
+      }
     } finally {
-      if (mounted) setState(() => _printing = false);
+      if (mounted) setState(() => _sharing = false);
     }
   }
 
@@ -108,7 +161,7 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
         title: Text(_plan.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: 'Ask about this lesson',
+            tooltip: 'Ask Bayaz',
             onPressed: () => openOfflineAiScreen(
               context,
               (_) => ClarificationScreen(
@@ -123,46 +176,34 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
         bottom: false,
         child: LessonPlanDocument(
           plan: _plan,
+          teachingContext: widget.teachingContext,
           variants: _variants,
-          onCycle: _cycle,
+          onCycle: _variants.isEmpty ? null : _cycle,
         ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            AppSpacing.sm,
-          ),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: const BoxDecoration(
             color: AppColors.surface,
             border: Border(top: BorderSide(color: AppColors.outline)),
           ),
-          child: Row(
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _printing ? null : _print,
-                  icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: Text(_printing ? 'Preparing…' : 'Print / PDF'),
-                ),
+              OutlinedButton.icon(
+                onPressed: _sharing ? null : _share,
+                icon: const Icon(Icons.ios_share_rounded),
+                label: Text(_sharing ? 'Sharing…' : 'Share'),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _saved || _saving ? null : _save,
-                  icon: Icon(
-                    _saved
-                        ? Icons.bookmark_added_rounded
-                        : Icons.bookmark_add_outlined,
-                  ),
-                  label: Text(
-                    _saved ? 'Saved' : (_saving ? 'Saving…' : 'Save plan'),
-                  ),
+              if (!_saved)
+                FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: Text(_saving ? 'Saving…' : 'Save in Bayaz'),
                 ),
-              ),
             ],
           ),
         ),
@@ -172,41 +213,21 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
 }
 
 class LessonPlanReadOnlyScreen extends StatelessWidget {
-  const LessonPlanReadOnlyScreen({super.key, required this.plan});
+  const LessonPlanReadOnlyScreen({
+    super.key,
+    required this.plan,
+    this.teachingContext,
+  });
 
   final LessonPlan plan;
-
-  Future<void> _print() => Printing.layoutPdf(
-    onLayout: (_) => PdfExport.buildLessonPlan(plan),
-    name: 'Bayaz-${plan.topic}-lesson-plan',
-  );
+  final TeachingContext? teachingContext;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(plan.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(
-            tooltip: 'Ask about this lesson',
-            onPressed: () => openOfflineAiScreen(
-              context,
-              (_) => ClarificationScreen(
-                contextMaterial: ClarificationContext.lesson(plan),
-              ),
-            ),
-            icon: const Icon(Icons.forum_outlined),
-          ),
-          IconButton(
-            tooltip: 'Print or export PDF',
-            onPressed: _print,
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-          ),
-        ],
-      ),
-      body: SafeArea(child: LessonPlanDocument(plan: plan)),
-    );
-  }
+  Widget build(BuildContext context) => LessonPlanScreen(
+    plan: plan,
+    teachingContext: teachingContext,
+    initiallySaved: true,
+  );
 }
 
 class LessonPlanDocument extends StatelessWidget {
@@ -215,11 +236,13 @@ class LessonPlanDocument extends StatelessWidget {
     required this.plan,
     this.variants = const {},
     this.onCycle,
+    this.teachingContext,
   });
 
   final LessonPlan plan;
   final Map<String, List<PlanSection>> variants;
   final ValueChanged<String>? onCycle;
+  final TeachingContext? teachingContext;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +255,7 @@ class LessonPlanDocument extends StatelessWidget {
         AppSpacing.xl,
       ),
       children: [
-        _PlanHeader(plan: plan),
+        _PlanHeader(plan: plan, teachingContext: teachingContext),
         const SizedBox(height: AppSpacing.md),
         if (plan.slos.isNotEmpty) ...[
           _OutcomeCard(slos: plan.slos),
@@ -259,60 +282,37 @@ class LessonPlanDocument extends StatelessWidget {
 }
 
 class _PlanHeader extends StatelessWidget {
-  const _PlanHeader({required this.plan});
+  const _PlanHeader({required this.plan, this.teachingContext});
   final LessonPlan plan;
+  final TeachingContext? teachingContext;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final teaching = [
+      teachingContext?.className,
+      teachingContext?.subjectName,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    return BayazCard(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '50-minute lesson plan',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineSmall?.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Grade 6 · General Science · structured around the 5E sequence',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.88),
-                      ),
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (teaching.isNotEmpty)
+                  Text(
+                    teaching,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                if (teaching.isNotEmpty) const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${plan.totalMinutes} minutes total',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Image.asset(
-                'assets/ui/illustrations/create_lesson_plan.webp',
-                width: 104,
-                height: 104,
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          // Below the illustration rather than beside it: the column next to a
-          // 104px image is too narrow for this label on a phone, and a chip
-          // lays its label out on a single unbounded line.
-          StatusChip(
-            label: '${plan.totalMinutes} minutes total',
-            icon: Icons.schedule_outlined,
-            backgroundColor: Colors.white.withValues(alpha: 0.14),
-            foregroundColor: Colors.white,
-          ),
+          const Icon(Icons.schedule_outlined, color: AppColors.primary),
         ],
       ),
     );
@@ -374,17 +374,20 @@ class _MaterialsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(
                 Icons.inventory_2_outlined,
                 color: AppColors.warningText,
               ),
               const SizedBox(width: AppSpacing.xs),
-              Text(
-                'What to bring',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: AppColors.warningText),
+              Expanded(
+                child: Text(
+                  'What to bring',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppColors.warningText,
+                  ),
+                ),
               ),
             ],
           ),
@@ -443,29 +446,32 @@ class _SectionCard extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        LessonPlan.sectionTitles[section.section] ??
-                            section.section,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (canSwap && section.variantLabel.isNotEmpty)
-                        Text(
-                          section.variantLabel,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
+                  child: Text(
+                    LessonPlan.sectionTitles[section.section] ??
+                        section.section,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                if (section.minutes > 0)
-                  StatusChip(
-                    label: '${section.minutes} min',
-                    icon: Icons.schedule_outlined,
-                  ),
               ],
             ),
+            if (section.minutes > 0 ||
+                (canSwap && section.variantLabel.isNotEmpty))
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    if (canSwap && section.variantLabel.isNotEmpty)
+                      Text(section.variantLabel),
+                    if (section.minutes > 0)
+                      StatusChip(
+                        label: '${section.minutes} min',
+                        icon: Icons.schedule_outlined,
+                      ),
+                  ],
+                ),
+              ),
             const SizedBox(height: AppSpacing.sm),
             Text(section.body),
             // A material can be a full sentence, so each one is a wrapping row
