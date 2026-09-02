@@ -4,7 +4,16 @@ import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../content/topic_picker_screen.dart';
+import '../library/library_screen.dart';
+import '../library/library_store.dart';
+import '../library/saved_test.dart';
+import '../omr/grade_papers_screen.dart';
+import '../omr/gradebook_store.dart';
+import '../omr/graded_result.dart';
+import '../omr/grading_screen.dart';
+import '../omr/results_screen.dart';
 import 'teaching_context.dart';
+import 'recent_work_store.dart';
 import 'teaching_context_selector.dart';
 import 'workflow_context_resolver.dart';
 import 'workflow_context_store.dart';
@@ -18,9 +27,12 @@ Future<void> launchTeacherWorkflow(
   TopicPickerMode mode, {
   OnboardingStore? onboardingStore,
   WorkflowContextStore? workflowContextStore,
+  RecentWorkStore? recentWorkStore,
 }) async {
   final onboarding = onboardingStore ?? OnboardingStore();
   final workflowContexts = workflowContextStore ?? WorkflowContextStore();
+  final recentWork = recentWorkStore ?? RecentWorkStore();
+  await recentWork.clearActiveGrading();
   final state = await onboarding.read();
   final workflowKey = mode == TopicPickerMode.lesson ? 'lesson' : 'test';
   final last = await workflowContexts.lastFor(workflowKey);
@@ -81,6 +93,10 @@ class CurriculumHomeScreen extends StatefulWidget {
     this.onGradePapers,
     this.onContinueRecent,
     this.openSettings,
+    this.recentWorkStore,
+    this.libraryStore,
+    this.gradebookStore,
+    this.onOpenMyWork,
   });
 
   final BackgroundAiDownloadController? backgroundAiController;
@@ -90,6 +106,10 @@ class CurriculumHomeScreen extends StatefulWidget {
   final VoidCallback? onGradePapers;
   final VoidCallback? onContinueRecent;
   final Future<void> Function(BuildContext context)? openSettings;
+  final RecentWorkStore? recentWorkStore;
+  final LibraryStore? libraryStore;
+  final GradebookStore? gradebookStore;
+  final VoidCallback? onOpenMyWork;
 
   @override
   State<CurriculumHomeScreen> createState() => _CurriculumHomeScreenState();
@@ -99,6 +119,10 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
   late final OnboardingStore _onboardingStore;
   late Future<OnboardingState> _teacher;
   late final WorkflowContextStore _workflowContexts;
+  late final RecentWorkStore _recentWork;
+  late final LibraryStore _library;
+  late final GradebookStore _gradebook;
+  late Future<_ContinueRecentTarget> _recentTarget;
   bool _downloadCardDismissed = false;
 
   @override
@@ -106,7 +130,11 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     super.initState();
     _onboardingStore = widget.onboardingStore ?? OnboardingStore();
     _workflowContexts = WorkflowContextStore();
+    _recentWork = widget.recentWorkStore ?? RecentWorkStore();
+    _library = widget.libraryStore ?? LibraryStore();
+    _gradebook = widget.gradebookStore ?? GradebookStore();
     _teacher = _onboardingStore.read();
+    _recentTarget = _loadRecentTarget();
   }
 
   @override
@@ -195,12 +223,21 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
                     _ActionTile(
                       icon: Icons.camera_alt_outlined,
                       label: 'Grade Papers',
-                      onTap: widget.onGradePapers ?? () {},
+                      onTap: widget.onGradePapers ?? _openGradePapers,
                     ),
-                    _ActionTile(
-                      icon: Icons.refresh_rounded,
-                      label: 'Continue Recent',
-                      onTap: widget.onContinueRecent ?? () {},
+                    FutureBuilder<_ContinueRecentTarget>(
+                      future: _recentTarget,
+                      builder: (context, snapshot) {
+                        final target =
+                            snapshot.data ??
+                            const _ContinueRecentTarget.fallback();
+                        return _ActionTile(
+                          icon: Icons.refresh_rounded,
+                          label: target.actionLabel,
+                          subtitle: target.subtitle,
+                          onTap: () => _continueRecent(target),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -314,12 +351,161 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     setState(() => _teacher = _onboardingStore.read());
   }
 
-  Future<void> _openWorkflow(TopicPickerMode mode) => launchTeacherWorkflow(
-    context,
-    mode,
-    onboardingStore: _onboardingStore,
-    workflowContextStore: _workflowContexts,
-  );
+  Future<void> _openWorkflow(TopicPickerMode mode) async {
+    await launchTeacherWorkflow(
+      context,
+      mode,
+      onboardingStore: _onboardingStore,
+      workflowContextStore: _workflowContexts,
+      recentWorkStore: _recentWork,
+    );
+    if (mounted) _refreshRecent();
+  }
+
+  void _refreshRecent() {
+    setState(() => _recentTarget = _loadRecentTarget());
+  }
+
+  Future<_ContinueRecentTarget> _loadRecentTarget() async {
+    final saved = (await _library.load()).items;
+    final activeId = await _recentWork.activeGradingTestId();
+    if (activeId != null) {
+      SavedTest? item;
+      for (final candidate in saved) {
+        if (candidate.kind == 'mcq' && candidate.id == activeId) {
+          item = candidate;
+          break;
+        }
+      }
+      if (item != null) {
+        final papers = await _gradebook.listForTest(activeId);
+        return _ContinueRecentTarget.grading(item, papers.length);
+      }
+      await _recentWork.clearActiveGrading();
+    }
+
+    final recent = await _recentWork.current();
+    if (recent == null) return const _ContinueRecentTarget.fallback();
+    if (recent.type == 'lesson' || recent.type == 'test') {
+      SavedTest? item;
+      for (final candidate in saved) {
+        if (candidate.id == recent.id) {
+          item = candidate;
+          break;
+        }
+      }
+      if (item == null) {
+        await _recentWork.clearRecent();
+        return const _ContinueRecentTarget.fallback();
+      }
+      return _ContinueRecentTarget.work(item);
+    }
+    if (recent.type == 'results') {
+      final results = await _gradebook.listForTest(recent.id);
+      if (results.isEmpty) {
+        await _recentWork.clearRecent();
+        return const _ContinueRecentTarget.fallback();
+      }
+      return _ContinueRecentTarget.results(results.first);
+    }
+    await _recentWork.clearRecent();
+    return const _ContinueRecentTarget.fallback();
+  }
+
+  Future<void> _openGradePapers() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const GradePapersScreen()));
+    if (mounted) _refreshRecent();
+  }
+
+  Future<void> _continueRecent(_ContinueRecentTarget target) async {
+    if (target.type == 'grading' && target.saved != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => GradingScreen(
+            test: target.saved!.toMcqTest(),
+            teachingContext: target.saved!.teachingContext,
+            recentWorkStore: _recentWork,
+          ),
+        ),
+      );
+    } else if ((target.type == 'lesson' || target.type == 'test') &&
+        target.saved != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SavedTestScreen(test: target.saved!)),
+      );
+    } else if (target.type == 'results' && target.result != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ResultsScreen(
+            testId: target.result!.testId,
+            topic: target.result!.testTopic,
+            recentWorkStore: _recentWork,
+          ),
+        ),
+      );
+    } else {
+      final open = widget.onOpenMyWork ?? widget.onContinueRecent;
+      if (open != null) {
+        open();
+      } else {
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const LibraryScreen()));
+      }
+    }
+    if (mounted) _refreshRecent();
+  }
+}
+
+class _ContinueRecentTarget {
+  const _ContinueRecentTarget._({
+    required this.type,
+    required this.actionLabel,
+    required this.subtitle,
+    this.saved,
+    this.result,
+  });
+
+  const _ContinueRecentTarget.fallback()
+    : this._(
+        type: 'fallback',
+        actionLabel: 'Continue Recent',
+        subtitle: 'Open My Work',
+      );
+
+  factory _ContinueRecentTarget.grading(SavedTest saved, int papers) =>
+      _ContinueRecentTarget._(
+        type: 'grading',
+        actionLabel: 'Continue grading',
+        subtitle: '${saved.topic} · $papers papers graded',
+        saved: saved,
+      );
+
+  factory _ContinueRecentTarget.work(SavedTest saved) =>
+      _ContinueRecentTarget._(
+        type: saved.kind == 'lesson' ? 'lesson' : 'test',
+        actionLabel: saved.kind == 'lesson'
+            ? 'Continue lesson'
+            : 'Continue test',
+        subtitle: saved.topic,
+        saved: saved,
+      );
+
+  factory _ContinueRecentTarget.results(GradedResult result) =>
+      _ContinueRecentTarget._(
+        type: 'results',
+        actionLabel: 'Continue results',
+        subtitle: result.testTopic,
+        result: result,
+      );
+
+  final String type;
+  final String actionLabel;
+  final String subtitle;
+  final SavedTest? saved;
+  final GradedResult? result;
 }
 
 class _ActionTile extends StatelessWidget {
@@ -327,9 +513,11 @@ class _ActionTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.subtitle,
   });
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
 
   @override
@@ -344,8 +532,20 @@ class _ActionTile extends StatelessWidget {
           Text(
             label,
             textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          if (subtitle != null && subtitle!.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              subtitle!,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );

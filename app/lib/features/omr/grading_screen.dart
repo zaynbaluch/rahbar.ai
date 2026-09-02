@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../../design_system/components/frame_animation.dart';
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../curriculum/recent_work_store.dart';
 import '../curriculum/teaching_context.dart';
 import '../export/pdf_export.dart';
 import '../generation/mcq_parser.dart';
@@ -29,6 +31,7 @@ class GradingScreen extends StatefulWidget {
     this.gradebookStore,
     this.teachingContext,
     this.initialResult,
+    this.recentWorkStore,
   });
 
   final McqTest test;
@@ -39,6 +42,7 @@ class GradingScreen extends StatefulWidget {
   final GradebookStore? gradebookStore;
   final TeachingContext? teachingContext;
   final OmrResult? initialResult;
+  final RecentWorkStore? recentWorkStore;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
@@ -52,6 +56,8 @@ class _GradingScreenState extends State<GradingScreen> {
       widget.imageProcessor ?? OmrImageProcessor();
   late final GradebookStore _gradebook =
       widget.gradebookStore ?? GradebookStore();
+  late final RecentWorkStore _recentWork =
+      widget.recentWorkStore ?? RecentWorkStore();
   late final Future<void> _studentNamesReady;
   final Set<String> _studentNames = {};
   final _name = TextEditingController();
@@ -68,6 +74,7 @@ class _GradingScreenState extends State<GradingScreen> {
   void initState() {
     super.initState();
     _studentNamesReady = _loadExistingStudentNames();
+    unawaited(_recentWork.setActiveGrading(_testId).catchError((_) {}));
     final initialPath = widget.initialImagePath;
     final initialResult = widget.initialResult;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -187,6 +194,11 @@ class _GradingScreenState extends State<GradingScreen> {
           teachingContext: widget.teachingContext,
         ),
       );
+      try {
+        await _recentWork.setActiveGrading(_testId);
+      } catch (_) {
+        // The result itself is already safely persisted.
+      }
       if (!mounted) return;
       setState(() {
         _saved = true;
@@ -207,11 +219,20 @@ class _GradingScreenState extends State<GradingScreen> {
     });
   }
 
-  void _openResults() => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => ResultsScreen(testId: _testId, topic: widget.test.topic),
-    ),
-  );
+  Future<void> _openResults() async {
+    await _recentWork.clearActiveGrading();
+    await _recentWork.update(RecentWorkReference(type: 'results', id: _testId));
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ResultsScreen(
+          testId: _testId,
+          topic: widget.test.topic,
+          recentWorkStore: _recentWork,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

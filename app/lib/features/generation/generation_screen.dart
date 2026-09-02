@@ -11,6 +11,7 @@ import '../../design_system/theme/app_spacing.dart';
 import '../chat/clarification_context.dart';
 import '../chat/clarification_screen.dart';
 import '../curriculum/teaching_context.dart';
+import '../curriculum/recent_work_store.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../rag/rag_service.dart';
@@ -355,9 +356,10 @@ class _GenerationScreenState extends State<GenerationScreen> {
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     final test = _test;
+    final savedId = test?.id ?? now.toString();
     await _library.save(
       SavedTest(
-        id: test?.id ?? now.toString(),
+        id: savedId,
         kind: _kind,
         source: SavedContentSource.customAi,
         topic: _topic.text.trim(),
@@ -367,6 +369,16 @@ class _GenerationScreenState extends State<GenerationScreen> {
         excerptTitles: _hits.map((hit) => hit.title).toList(),
         teachingContext: widget.teachingContext,
       ),
+    );
+    unawaited(
+      RecentWorkStore()
+          .update(
+            RecentWorkReference(
+              type: _kind == 'lesson' ? 'lesson' : 'test',
+              id: savedId,
+            ),
+          )
+          .catchError((_) {}),
     );
     if (mounted) {
       setState(() => _saved = true);

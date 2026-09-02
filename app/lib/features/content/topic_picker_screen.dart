@@ -7,6 +7,7 @@ import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../curriculum/curriculum_catalog.dart';
 import '../curriculum/recent_access_store.dart';
+import '../curriculum/recent_work_store.dart';
 import '../curriculum/teaching_context.dart';
 import '../curriculum/teaching_context_selector.dart';
 import '../curriculum/workflow_context_store.dart';
@@ -333,6 +334,11 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
         contentJson: test.toJson(),
         teachingContext: _context,
       ),
+    );
+    unawaited(
+      RecentWorkStore()
+          .update(RecentWorkReference(type: 'test', id: test.id))
+          .catchError((_) {}),
     );
   }
 
