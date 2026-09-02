@@ -206,6 +206,13 @@ abstract final class OmrRegistration {
       }
     }
 
+    // The shipping PDF draws a thin answer-box border through the fiducial
+    // centers. Remove thin strokes before connected-component extraction so that
+    // the border cannot glue all four solid squares into one giant component.
+    // Filled squares survive this small erosion; thin print/borders do not.
+    final erosionRadius = (math.min(width, height) ~/ 360).clamp(1, 3);
+    final componentMask = _erodeMask(mask, width, height, erosionRadius);
+
     final visited = Uint8List(width * height);
     final queue = <int>[];
     final candidates = <_MarkerCandidate>[];
@@ -215,7 +222,7 @@ abstract final class OmrRegistration {
     for (var y = 0; y < height; y++) {
       for (var x = 0; x < width; x++) {
         final start = y * width + x;
-        if (mask[start] == 0 || visited[start] != 0) continue;
+        if (componentMask[start] == 0 || visited[start] != 0) continue;
         queue
           ..clear()
           ..add(start);
@@ -249,7 +256,7 @@ abstract final class OmrRegistration {
               final ny = py + oy;
               if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
               final next = ny * width + nx;
-              if (mask[next] == 0 || visited[next] != 0) continue;
+              if (componentMask[next] == 0 || visited[next] != 0) continue;
               visited[next] = 1;
               queue.add(next);
             }
@@ -287,6 +294,32 @@ abstract final class OmrRegistration {
       }
     }
     return candidates;
+  }
+
+  static Uint8List _erodeMask(
+    Uint8List mask,
+    int width,
+    int height,
+    int radius,
+  ) {
+    if (radius <= 0) return Uint8List.fromList(mask);
+    final out = Uint8List(width * height);
+    for (var y = radius; y < height - radius; y++) {
+      for (var x = radius; x < width - radius; x++) {
+        var solid = true;
+        for (var oy = -radius; oy <= radius && solid; oy++) {
+          final row = (y + oy) * width;
+          for (var ox = -radius; ox <= radius; ox++) {
+            if (mask[row + x + ox] == 0) {
+              solid = false;
+              break;
+            }
+          }
+        }
+        if (solid) out[y * width + x] = 1;
+      }
+    }
+    return out;
   }
 
   static double _geometryScore(

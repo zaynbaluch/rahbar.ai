@@ -80,14 +80,21 @@ abstract final class OmrImageQuality {
     final darkFraction = sampled == 0 ? 0.0 : dark / sampled;
     final lightFraction = sampled == 0 ? 0.0 : light / sampled;
     final warnings = <String>[];
-    if (width < 240 || height < 240)
+    if (width < 240 || height < 240) {
       warnings.add('image resolution is too small');
-    if (mean < 70) warnings.add('image is very dark');
-    if (mean > 246) warnings.add('image is very bright');
-    if (darkFraction > .45)
+    }
+    if (mean < 70) {
+      warnings.add('image is very dark');
+    }
+    if (mean > 246) {
+      warnings.add('image is very bright');
+    }
+    if (darkFraction > .45) {
       warnings.add('large parts of the image are clipped dark');
-    if (lightFraction > .97)
+    }
+    if (lightFraction > .97) {
       warnings.add('large parts of the image are clipped light');
+    }
     if (blurVariance < 18 && width >= 240 && height >= 240) {
       warnings.add('image may be out of focus');
     }
