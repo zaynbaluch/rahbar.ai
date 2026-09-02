@@ -3,7 +3,7 @@ import 'package:bayaz_ai/features/rag/rag_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('builds a compact grounded prompt from only recent turns', () {
+  test('builds a compact contextual prompt from recent turns', () {
     final prompt = ClarificationPromptBuilder.build(
       context: ClarificationContext(
         kind: 'lesson',
@@ -31,7 +31,6 @@ void main() {
         ClarificationTurn(role: 'assistant', text: 'recent 4'),
       ],
     );
-
     expect(prompt.system, contains('factual authority'));
     expect(prompt.user, contains('Photosynthesis'));
     expect(prompt.user, isNot(contains('old 1')));
@@ -39,15 +38,19 @@ void main() {
     expect(prompt.user.length, lessThan(7000));
   });
 
-  test('labels an ungrounded prompt when retrieval is unavailable', () {
+  test('does not force source-search disclosure when excerpts are absent', () {
     final prompt = ClarificationPromptBuilder.build(
-      context: ClarificationContext.general,
+      context: const ClarificationContext(
+        kind: 'lesson',
+        title: 'Force',
+        material: 'Students are learning about force.',
+      ),
       question: 'What is force?',
       retrieved: const [],
       history: const [],
     );
-
-    expect(prompt.system, contains('Curriculum retrieval is unavailable'));
     expect(prompt.user, contains('What is force?'));
+    expect(prompt.user.toLowerCase(), isNot(contains('curriculum-grounded')));
+    expect(prompt.user.toLowerCase(), isNot(contains('ungrounded')));
   });
 }
