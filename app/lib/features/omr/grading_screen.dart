@@ -87,7 +87,8 @@ class _GradingScreenState extends State<GradingScreen> {
       if (initialResult != null) {
         setState(() {
           _diagnostics = initialResult.diagnostics;
-          if (initialResult.fiducialsFound) {
+          if (initialResult.fiducialsFound &&
+              initialResult.diagnostics?.status != OmrScanStatus.rejected) {
             _result = initialResult;
             _name.text = 'Student $_nextStudentNumber';
           } else {
@@ -167,7 +168,8 @@ class _GradingScreenState extends State<GradingScreen> {
       await _studentNamesReady;
       final bytes = await File(path).readAsBytes();
       final result = await _imageProcessor.process(bytes, widget.test);
-      if (!result.fiducialsFound) {
+      if (!result.fiducialsFound ||
+          result.diagnostics?.status == OmrScanStatus.rejected) {
         if (mounted) setState(() => _diagnostics = result.diagnostics);
         throw const FormatException('markers');
       }
@@ -294,6 +296,7 @@ class _GradingScreenState extends State<GradingScreen> {
                   ],
                   if (_error != null) ...[
                     _ReadError(
+                      diagnostics: _diagnostics,
                       onRetake: () => _grade(ImageSource.camera),
                       onChoose: () => _grade(ImageSource.gallery),
                     ),
@@ -432,31 +435,39 @@ class _ReadingState extends StatelessWidget {
 }
 
 class _ReadError extends StatelessWidget {
-  const _ReadError({required this.onRetake, required this.onChoose});
+  const _ReadError({
+    required this.onRetake,
+    required this.onChoose,
+    this.diagnostics,
+  });
   final VoidCallback onRetake;
   final VoidCallback onChoose;
+  final OmrDiagnostics? diagnostics;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: AppSpacing.lg),
-    child: Column(
-      children: [
-        const Icon(Icons.error_outline, size: 44),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          'Couldn’t read this answer sheet',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        const Text(
-          'Make sure all four markers are visible and avoid shadows over the answer box.',
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: AppSpacing.md),
-        FilledButton(onPressed: onRetake, child: const Text('Retake')),
-        TextButton(onPressed: onChoose, child: const Text('Choose image')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final guidance = diagnostics?.failureCode == OmrFailureCode.templateMismatch
+        ? 'This image doesn’t match the Bayaz answer grid. Use the answer box from a test PDF created by Bayaz.'
+        : 'Make sure all four markers are visible and avoid shadows over the answer box.';
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.lg),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, size: 44),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Couldn’t read this answer sheet',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(guidance, textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(onPressed: onRetake, child: const Text('Retake')),
+          TextButton(onPressed: onChoose, child: const Text('Choose image')),
+        ],
+      ),
+    );
+  }
 }
 
 class _ResultSummary extends StatelessWidget {
@@ -571,8 +582,12 @@ class _DiagnosticsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalMs = diagnostics.stageTimingsMs['total'];
+    final rejectionNote =
+        diagnostics.failureCode == OmrFailureCode.templateMismatch
+        ? diagnostics.templateNote
+        : diagnostics.registrationNote;
     final subtitle = diagnostics.status == OmrScanStatus.rejected
-        ? '${diagnostics.failureCode.name} · ${diagnostics.registrationNote}'
+        ? '${diagnostics.failureCode.name} · $rejectionNote'
         : '${diagnostics.markerCandidateCount} marker candidates${totalMs == null ? '' : ' · ${totalMs}ms'}';
     return BayazCard(
       child: ExpansionTile(

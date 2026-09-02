@@ -5,6 +5,7 @@ enum OmrFailureCode {
   imageTooSmall,
   fiducialsNotFound,
   invalidFiducialGeometry,
+  templateMismatch,
 }
 
 enum OmrDecisionKind { marked, blank, ambiguous }
@@ -137,6 +138,10 @@ class OmrDiagnostics {
     this.registrationScore = 0,
     this.registrationNote = '',
     this.stageTimingsMs = const {},
+    this.templateMatchScore = 0,
+    this.templateMatchedBubbles = 0,
+    this.templateExpectedBubbles = 0,
+    this.templateNote = '',
     this.blankBaseline = 0,
     this.blankMad = 0,
     this.markThreshold = 0,
@@ -159,6 +164,10 @@ class OmrDiagnostics {
   final double registrationScore;
   final String registrationNote;
   final Map<String, int> stageTimingsMs;
+  final double templateMatchScore;
+  final int templateMatchedBubbles;
+  final int templateExpectedBubbles;
+  final String templateNote;
   final double blankBaseline;
   final double blankMad;
   final double markThreshold;
@@ -181,6 +190,10 @@ class OmrDiagnostics {
     'registrationScore': registrationScore,
     'registrationNote': registrationNote,
     'stageTimingsMs': stageTimingsMs,
+    'templateMatchScore': templateMatchScore,
+    'templateMatchedBubbles': templateMatchedBubbles,
+    'templateExpectedBubbles': templateExpectedBubbles,
+    'templateNote': templateNote,
     'blankBaseline': blankBaseline,
     'blankMad': blankMad,
     'markThreshold': markThreshold,
@@ -220,6 +233,10 @@ class OmrDiagnostics {
     stageTimingsMs: (json['stageTimingsMs'] as Map? ?? const {}).map(
       (key, value) => MapEntry(key.toString(), (value as num).toInt()),
     ),
+    templateMatchScore: (json['templateMatchScore'] as num? ?? 0).toDouble(),
+    templateMatchedBubbles: json['templateMatchedBubbles'] as int? ?? 0,
+    templateExpectedBubbles: json['templateExpectedBubbles'] as int? ?? 0,
+    templateNote: json['templateNote'] as String? ?? '',
     blankBaseline: (json['blankBaseline'] as num? ?? 0).toDouble(),
     blankMad: (json['blankMad'] as num? ?? 0).toDouble(),
     markThreshold: (json['markThreshold'] as num? ?? 0).toDouble(),
@@ -253,6 +270,11 @@ class OmrDiagnostics {
     if (fiducials.isNotEmpty) {
       buffer.writeln(
         'fiducials=${fiducials.map((point) => '(${point.x.toStringAsFixed(1)},${point.y.toStringAsFixed(1)})').join(' ')}',
+      );
+    }
+    if (templateExpectedBubbles > 0 || templateNote.isNotEmpty) {
+      buffer.writeln(
+        'template score=${f(templateMatchScore)} matched=$templateMatchedBubbles/$templateExpectedBubbles note=${templateNote.isEmpty ? '-' : templateNote}',
       );
     }
     buffer.writeln(

@@ -10,6 +10,7 @@ import 'omr_rectifier.dart';
 import 'omr_registration.dart';
 import 'omr_result.dart';
 import 'omr_template.dart';
+import 'omr_template_verifier.dart';
 
 abstract final class OmrPipeline {
   static OmrResult scan(img.Image image, McqTest key) {
@@ -79,6 +80,53 @@ abstract final class OmrPipeline {
       layout,
     );
     timings['rectification'] = stage.elapsedMilliseconds;
+
+    stage
+      ..reset()
+      ..start();
+    final templateMatch = OmrTemplateVerifier.verify(canonical, layout);
+    timings['template'] = stage.elapsedMilliseconds;
+    if (!templateMatch.matches) {
+      timings['total'] = totalWatch.elapsedMilliseconds;
+      final diagnostics = OmrDiagnostics(
+        status: OmrScanStatus.rejected,
+        failureCode: OmrFailureCode.templateMismatch,
+        sourceWidth: gray.width,
+        sourceHeight: gray.height,
+        canonicalWidth: canonical.width,
+        canonicalHeight: canonical.height,
+        meanLuminance: quality.meanLuminance,
+        darkClipFraction: quality.darkClipFraction,
+        lightClipFraction: quality.lightClipFraction,
+        blurVariance: quality.blurVariance,
+        warnings: quality.warnings,
+        markerCandidateCount: registration.candidateCount,
+        fiducials: registration.fiducials,
+        registrationScore: registration.score,
+        registrationNote: registration.note,
+        stageTimingsMs: timings,
+        templateMatchScore: templateMatch.score,
+        templateMatchedBubbles: templateMatch.matchedBubbles,
+        templateExpectedBubbles: templateMatch.totalBubbles,
+        templateNote: templateMatch.note,
+      );
+      return OmrResult(
+        fiducialsFound: true,
+        diagnostics: diagnostics,
+        questions: [
+          for (final question in key.questions)
+            OmrQuestion(
+              number: question.number,
+              marked: null,
+              correct: answers[question.number],
+              fill: 0,
+              confidence: 0,
+              decision: OmrDecisionKind.blank,
+              decisionReason: 'scan rejected: template mismatch',
+            ),
+        ],
+      );
+    }
 
     stage
       ..reset()
@@ -162,6 +210,10 @@ abstract final class OmrPipeline {
       registrationScore: registration.score,
       registrationNote: registration.note,
       stageTimingsMs: timings,
+      templateMatchScore: templateMatch.score,
+      templateMatchedBubbles: templateMatch.matchedBubbles,
+      templateExpectedBubbles: templateMatch.totalBubbles,
+      templateNote: templateMatch.note,
       blankBaseline: calibration.blankBaseline,
       blankMad: calibration.blankMad,
       markThreshold: calibration.markThreshold,

@@ -89,3 +89,11 @@ Before printing physical sheets, run the five image-generated manual fixtures su
 For each run, record: pass/fail, any wrong confident answer, number of rows requiring review, and the copied diagnostics. A confident wrong read is more severe than a rejected/ambiguous row.
 
 These five images are only the Level-A smoke set. Physical A05 photographs remain mandatory before the OMR feature can be described as camera-validated.
+
+## Template-fidelity lesson from the first generated smoke sheet
+
+The first purely image-generated smoke sheet was **not** a valid Bayaz OMR fixture even though it looked visually plausible. Manual testing on 2026-08-26 showed confident fiducial registration (`0.975`) but incorrect/blank row reads. The copied diagnostics and image inspection showed why: the generator moved the bubble grid relative to the four markers. The generated first row was around normalized `y=0.27`, while the shipping ten-question Bayaz template expects Q1 around `y=0.15`; the columns also differed.
+
+This is now treated as a test-fixture failure, not a reason to retune Bayaz to arbitrary OMR layouts. `omr_debug` verifies the expected bubble-outline geometry after rectification and returns `templateMismatch` when four plausible markers surround a non-Bayaz grid. The UI tells the tester to use an answer box from a PDF created by Bayaz and keeps the full diagnostic report available.
+
+For future synthetic/manual fixtures, **the base answer grid must come from the real Bayaz PDF geometry**. Generative image tools may be used for photographic appearance or adversarial variation only if the marker/bubble geometry is preserved. Any generated image that fails the template-fidelity check is not valid grading ground truth.
