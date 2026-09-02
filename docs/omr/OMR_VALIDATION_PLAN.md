@@ -122,3 +122,27 @@ Regression coverage now includes both sides of this failure:
 - a dim but structurally correct Bayaz grid must remain accepted and grade normally.
 
 The production PDF crop was also rechecked after this change and matched all 40 expected bubble outlines plus all four locally contrasted border sides.
+
+## Full-page localisation and bounded search
+
+Manual A05 testing on 2026-08-26 showed that a tightly framed answer box graded correctly while a full-page photograph failed registration with `marker candidates were missing from at least one expected quadrant`. The old registration code partitioned the **entire photograph** into TL/TR/BR/BL quadrants before geometry scoring. That assumption is invalid for the shipping PDF because its answer box is intentionally placed in the upper-right of the page; all four correct fiducials can therefore occupy the same half of a full-page photograph.
+
+Registration now searches for the Bayaz box **anywhere in the image**. It does not brute-force every 4-combination. The search is deliberately bounded:
+
+- retain at most 48 strongest square-like candidates;
+- for each possible top-left marker, keep at most 10 plausible right partners and 10 plausible downward partners;
+- predict the bottom-right location from each right/down pair and keep at most 4 nearby candidates;
+- score only the surviving quadrilaterals;
+- keep at most 8 geometric hypotheses; and
+- run the more expensive rectification/template check on at most 5 hypotheses, using a reduced canonical preview before one full-resolution rectification.
+
+The absolute worst-case geometric evaluation bound is therefore `48 * 10 * 10 * 4 = 19,200` cheap coordinate-only hypotheses, not `n choose 4` over unbounded page clutter. Normal scans are far below this ceiling. The first real failed full-page photo produced 16 raw candidates and only 26 geometric evaluations.
+
+The template is the final judge. A larger/cleaner decoy quadrilateral can outrank the real answer box geometrically, so the pipeline verifies the top bounded hypotheses against the Bayaz bubble grid + answer-box border and selects the first strong structural match rather than blindly trusting geometry rank 1.
+
+A manual regression using the two teacher-supplied A05 photographs confirmed both paths after this change:
+
+- full-page image: 16 candidates, 26 geometric combinations, valid Bayaz template recovered, scan completed;
+- zoomed-in image: 9 candidates, 6 geometric combinations, valid Bayaz template recovered, scan completed.
+
+The full-page scan read the visible marks as `A, B, C, C, B, blank, A, D, A, blank`, matching the supplied photograph. These local manual probes are useful development evidence but do not replace the wider physical release matrix above.
