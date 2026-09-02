@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Content extends ContentService {
-  final topics = const [
+  List<Topic> get topics => const [
     Topic(
       id: 'cells',
       chapter: 2,
@@ -54,7 +54,7 @@ class _Content extends ContentService {
 
 class _GroupedContent extends _Content {
   @override
-  final topics = const [
+  List<Topic> get topics => const [
     Topic(
       id: 'cells',
       chapter: 1,
