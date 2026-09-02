@@ -125,6 +125,17 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
     return grouped;
   }
 
+  String _chapterLabel(int chapter, List<Topic> topics) {
+    Topic lead = topics.first;
+    for (final topic in topics) {
+      if (topic.sectionNo.split('.').length == 2) {
+        lead = topic;
+        break;
+      }
+    }
+    return 'Chapter $chapter · ${lead.title}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -189,15 +200,12 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
           ]
         else
           for (final entry in grouped.entries) ...[
-            Text(
-              'Chapter ${entry.key}',
-              style: Theme.of(context).textTheme.titleMedium,
+            _ChapterSection(
+              label: _chapterLabel(entry.key, entry.value),
+              topics: entry.value,
+              initiallyExpanded: entry.key == grouped.keys.first,
+              onTopicTap: _openTopic,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            for (final topic in entry.value) ...[
-              _TopicTile(topic: topic, onTap: () => _openTopic(topic)),
-              const SizedBox(height: AppSpacing.sm),
-            ],
             const SizedBox(height: AppSpacing.sm),
           ],
         if (topics.isNotEmpty) ...[
@@ -488,25 +496,43 @@ class _CurriculumTestSetupScreenState
                     ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.xl),
-              FilledButton(
-                onPressed: _count == null || _creating
-                    ? null
-                    : () async {
-                        setState(() => _creating = true);
-                        try {
-                          await widget.onCreate(_count!);
-                        } finally {
-                          if (mounted) setState(() => _creating = false);
-                        }
-                      },
-                child: Text(_creating ? 'Creating…' : 'Create test'),
-              ),
             ],
           ],
         ),
       ),
+      bottomNavigationBar: available.isEmpty
+          ? null
+          : SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                ),
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border(top: BorderSide(color: AppColors.outline)),
+                ),
+                child: FilledButton(
+                  onPressed: _count == null || _creating ? null : _create,
+                  child: Text(_creating ? 'Creating…' : 'Create test'),
+                ),
+              ),
+            ),
     );
+  }
+
+  Future<void> _create() async {
+    final count = _count;
+    if (count == null || _creating) return;
+    setState(() => _creating = true);
+    try {
+      await widget.onCreate(count);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
   }
 }
 
@@ -530,6 +556,65 @@ class _ContextRow extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ChapterSection extends StatelessWidget {
+  const _ChapterSection({
+    required this.label,
+    required this.topics,
+    required this.initiallyExpanded,
+    required this.onTopicTap,
+  });
+
+  final String label;
+  final List<Topic> topics;
+  final bool initiallyExpanded;
+  final ValueChanged<Topic> onTopicTap;
+
+  @override
+  Widget build(BuildContext context) => BayazCard(
+    padding: EdgeInsets.zero,
+    child: ExpansionTile(
+      initiallyExpanded: initiallyExpanded,
+      tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      childrenPadding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      children: [
+        for (final topic in topics)
+          _ChapterTopicRow(topic: topic, onTap: () => onTopicTap(topic)),
+      ],
+    ),
+  );
+}
+
+class _ChapterTopicRow extends StatelessWidget {
+  const _ChapterTopicRow({required this.topic, required this.onTap});
+  final Topic topic;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+    leading: SizedBox(
+      width: 44,
+      child: Text(
+        topic.sectionNo,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+    title: Text(topic.title),
+    trailing: const Icon(Icons.chevron_right_rounded),
+    onTap: onTap,
+  );
 }
 
 class _TopicTile extends StatelessWidget {
