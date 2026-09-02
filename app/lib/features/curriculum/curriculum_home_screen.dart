@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/bayaz_card.dart';
-import '../../design_system/components/section_header.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
 import '../content/topic_picker_screen.dart';
+import 'teaching_context.dart';
+import 'teaching_context_selector.dart';
+import 'workflow_context_resolver.dart';
+import 'workflow_context_store.dart';
 import '../onboarding/onboarding_store.dart';
 import '../resources/background_ai_download_controller.dart';
 import '../settings/settings_screen.dart';
@@ -37,12 +40,14 @@ class CurriculumHomeScreen extends StatefulWidget {
 class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
   late final OnboardingStore _onboardingStore;
   late Future<OnboardingState> _teacher;
+  late final WorkflowContextStore _workflowContexts;
   bool _downloadCardDismissed = false;
 
   @override
   void initState() {
     super.initState();
     _onboardingStore = widget.onboardingStore ?? OnboardingStore();
+    _workflowContexts = WorkflowContextStore();
     _teacher = _onboardingStore.read();
   }
 
@@ -120,14 +125,14 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
                       label: 'Prepare Lesson',
                       onTap:
                           widget.onPrepareLesson ??
-                          () => _openClass(CurriculumCatalog.classes.first),
+                          () => _openWorkflow(TopicPickerMode.lesson),
                     ),
                     _ActionTile(
                       icon: Icons.quiz_outlined,
                       label: 'Create Test',
                       onTap:
                           widget.onCreateTest ??
-                          () => _openClass(CurriculumCatalog.classes.first),
+                          () => _openWorkflow(TopicPickerMode.test),
                     ),
                     _ActionTile(
                       icon: Icons.camera_alt_outlined,
@@ -251,54 +256,52 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     setState(() => _teacher = _onboardingStore.read());
   }
 
-  Future<void> _openClass(CurriculumClass curriculumClass) =>
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => SubjectPickerScreen(curriculumClass: curriculumClass),
+  Future<void> _openWorkflow(TopicPickerMode mode) async {
+    final state = await _onboardingStore.read();
+    final workflowKey = mode == TopicPickerMode.lesson ? 'lesson' : 'test';
+    final last = await _workflowContexts.lastFor(workflowKey);
+    final resolution = WorkflowContextResolver.resolve(
+      state: state,
+      classes: CurriculumCatalog.classes,
+      last: last,
+    );
+    if (!mounted) return;
+
+    TeachingContext? selected = resolution.context;
+    if (resolution.needsSelector) {
+      final selectedClasses = CurriculumCatalog.classes
+          .where((item) => state.selectedClasses.contains(item.code))
+          .toList(growable: false);
+      selected = await showTeachingContextSelector(
+        context,
+        classes: selectedClasses,
+        selectedSubjectsByClass: state.selectedSubjectsByClass,
+        initial: last,
+      );
+      if (selected == null || !mounted) return;
+      await _workflowContexts.save(workflowKey, selected);
+    }
+    if (!mounted) return;
+    if (selected == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose a class and subject in Settings first.'),
         ),
       );
-}
-
-class SubjectPickerScreen extends StatelessWidget {
-  const SubjectPickerScreen({super.key, required this.curriculumClass});
-  final CurriculumClass curriculumClass;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(curriculumClass.name)),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          children: [
-            const SectionHeader(title: 'Choose a subject'),
-            const SizedBox(height: AppSpacing.sm),
-            for (final subject in curriculumClass.subjects)
-              BayazCard(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TopicPickerScreen(
-                      classCode: curriculumClass.code,
-                      subjectCode: subject.code,
-                      className: curriculumClass.name,
-                      subjectName: subject.name,
-                    ),
-                  ),
-                ),
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.softGold,
-                    child: Icon(
-                      Icons.science_outlined,
-                      color: AppColors.warningText,
-                    ),
-                  ),
-                  title: Text(subject.name),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                ),
-              ),
-          ],
+      return;
+    }
+    if (resolution.context != null) {
+      await _workflowContexts.save(workflowKey, selected);
+      if (!mounted) return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TopicPickerScreen(
+          mode: mode,
+          teachingContext: selected!,
+          showContextChange: resolution.showContextChange,
+          onboardingStore: _onboardingStore,
+          workflowContextStore: _workflowContexts,
         ),
       ),
     );

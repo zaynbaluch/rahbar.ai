@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bayaz_ai/features/export/pdf_export.dart';
+import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 
 // Real Qwen3 1.7B digestive-system test (same fixture as mcq_parser_test).
@@ -100,25 +101,37 @@ void main() {
     File(out).writeAsBytesSync(bytes);
   });
 
-  test('refuses to export a paper that does not match its expected count', () async {
-    final paper = McqTest(
-      topic: 'Incomplete paper',
-      expectedCount: 2,
-      questions: const [
-        McqQuestion(
-          number: 1,
-          difficulty: 'easy',
-          text: 'Only question',
-          options: {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
-          answer: 'A',
-        ),
-      ],
-    );
+  test(
+    'refuses to export a paper that does not match its expected count',
+    () async {
+      final paper = McqTest(
+        topic: 'Incomplete paper',
+        expectedCount: 2,
+        questions: const [
+          McqQuestion(
+            number: 1,
+            difficulty: 'easy',
+            text: 'Only question',
+            options: {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
+            answer: 'A',
+          ),
+        ],
+      );
 
-    await expectLater(
-      PdfExport.build(paper),
-      throwsA(isA<InvalidMcqPaperException>()),
+      await expectLater(
+        PdfExport.build(paper),
+        throwsA(isA<InvalidMcqPaperException>()),
+      );
+    },
+  );
+
+  test('lesson PDF teaching header comes from route context', () {
+    expect(
+      PdfExport.teachingLabel(
+        const TeachingContext(className: 'Class 8', subjectName: 'Biology'),
+      ),
+      'Class 8 · Biology',
     );
+    expect(PdfExport.teachingLabel(null), isEmpty);
   });
-
 }
