@@ -20,6 +20,8 @@ Rules you MUST follow:
 - **Mixed difficulty**: roughly 40% easy (recall), 40% medium (understand/apply),
   and 20% hard (analyse). Tag each question's difficulty.
 - Simple, clear English suitable for 11–12 year-olds. One idea per question.
+- Each question must stand alone for a student. Never ask what is or is not "mentioned" in the excerpts or provided sources.
+- Never mention excerpts, sources, retrieval, chapter numbers, or section numbers in question or option text.
 - Output **only** the format below — no preamble, no explanations outside the format.
 - Never copy or mention the `CURRICULUM SOURCE` boundary labels.
 
