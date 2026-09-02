@@ -8,31 +8,25 @@ import 'package:bayaz_ai/features/settings/resource_management_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// A manager that never touches the network or the file system.
-///
-/// [install] hands the progress callback back to the test and stays pending, so
-/// the screen can be held in the state it reaches before the first progress
-/// event arrives.
 class _StubResourceManager extends ResourceManager {
-  _StubResourceManager(this._resources);
+  _StubResourceManager(this._resources, {Set<String>? installed})
+    : installed = installed ?? <String>{};
 
   final List<ResourceDescriptor> _resources;
-  final download = Completer<File>();
+  final Set<String> installed;
+  final downloads = <String, Completer<File>>{};
   void Function(DownloadProgress progress)? onProgress;
   DownloadCancellationToken? token;
 
   @override
   Future<void> init() async {}
-
   @override
-  List<ResourceDescriptor> resources({ResourceKind? kind}) => _resources
-      .where((resource) => kind == null || resource.kind == kind)
-      .toList(growable: false);
-
+  List<ResourceDescriptor> resources({ResourceKind? kind}) =>
+      _resources.where((r) => kind == null || r.kind == kind).toList();
   @override
   Future<bool> isInstalled(String id) async =>
-      _resources.firstWhere((resource) => resource.id == id).isBundled;
-
+      _resources.firstWhere((r) => r.id == id).isBundled ||
+      installed.contains(id);
   @override
   Future<File> install(
     String id, {
@@ -41,19 +35,26 @@ class _StubResourceManager extends ResourceManager {
   }) {
     token = cancellationToken;
     this.onProgress = onProgress;
-    return download.future;
+    final c = Completer<File>();
+    downloads[id] = c;
+    return c.future.then((file) {
+      installed.add(id);
+      return file;
+    });
   }
 
+  @override
+  Future<void> remove(String id) async => installed.remove(id);
   @override
   void dispose() {}
 }
 
-const _bundledCurriculum = ResourceDescriptor(
-  id: 'curriculum.test.class6',
+const _curriculum = ResourceDescriptor(
+  id: 'curriculum.test',
   kind: ResourceKind.curriculumModule,
-  version: '1.0.0',
+  version: '1',
   displayName: 'Class 6 General Science',
-  fileName: 'content_pack.db',
+  fileName: 'content.db',
   sizeBytes: 0,
   sha256: '',
   required: true,
@@ -61,29 +62,36 @@ const _bundledCurriculum = ResourceDescriptor(
   licenseUrl: '',
   bundledAsset: 'assets/content/content_pack.db',
 );
-
-final _languageModel = ResourceDescriptor(
-  id: 'model.test.language',
+final _language = ResourceDescriptor(
+  id: 'language.private.internal',
   kind: ResourceKind.languageModel,
-  version: '1.0.0',
-  displayName: 'Test language model',
+  version: '1',
+  displayName: 'Secret model name',
   fileName: 'model.gguf',
-  sizeBytes: 104857600,
+  sizeBytes: 100 * 1024 * 1024,
   sha256: 'a' * 64,
   required: false,
-  licenseName: '',
+  licenseName: 'provider license',
   licenseUrl: '',
-  downloadUrl: Uri.parse('https://example.test/model.gguf'),
+  downloadUrl: Uri.parse('https://example.test/language'),
+);
+final _embedding = ResourceDescriptor(
+  id: 'embedding.private.internal',
+  kind: ResourceKind.embeddingModel,
+  version: '1',
+  displayName: 'Secret embedding name',
+  fileName: 'embed.gguf',
+  sizeBytes: 50 * 1024 * 1024,
+  sha256: 'b' * 64,
+  required: false,
+  licenseName: 'provider license',
+  licenseUrl: '',
+  downloadUrl: Uri.parse('https://example.test/embedding'),
 );
 
-/// A viewport tall enough to lay out every card, so the list does not defer
-/// building the model section the tests look at.
-Future<void> _pumpScreen(
-  WidgetTester tester,
-  _StubResourceManager manager,
-) async {
-  tester.view.physicalSize = const Size(600, 2400);
-  tester.view.devicePixelRatio = 1.0;
+Future<void> _pump(WidgetTester tester, _StubResourceManager manager) async {
+  tester.view.physicalSize = const Size(600, 1200);
+  tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
@@ -93,59 +101,51 @@ Future<void> _pumpScreen(
 }
 
 void main() {
-  testWidgets('a download that has not reported progress yet does not crash', (
+  testWidgets('offline AI page is aggregate and hides model internals', (
     tester,
   ) async {
-    final manager = _StubResourceManager([_bundledCurriculum, _languageModel]);
-    await _pumpScreen(tester, manager);
-
-    await tester.tap(find.text('Download'));
-    // A single frame: the card is downloading, but `install` has not called back
-    // yet, so the progress value is still null. An indeterminate bar animates
-    // forever, so this must not be a `pumpAndSettle`.
-    await tester.pump();
-
-    expect(tester.takeException(), isNull);
-    expect(manager.token, isNotNull);
-    expect(find.text('Starting download…'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsOneWidget);
-
-    final bar = tester.widget<LinearProgressIndicator>(
-      find.byType(LinearProgressIndicator),
-    );
-    expect(bar.value, isNull);
-
-    manager.onProgress!(
-      const DownloadProgress(receivedBytes: 52428800, totalBytes: 104857600),
-    );
-    await tester.pump();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('Starting download…'), findsNothing);
-    expect(find.text('50 MB of 100 MB'), findsOneWidget);
-    expect(
-      tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
-      0.5,
-    );
-
-    // Leave the screen idle so no animation or pending download outlives the
-    // test.
-    manager.download.completeError(const DownloadCancelled());
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
+    final manager = _StubResourceManager([_curriculum, _language, _embedding]);
+    await _pump(tester, manager);
+    expect(find.text('Offline AI'), findsOneWidget);
+    expect(find.text('Needs download'), findsOneWidget);
+    expect(find.text('Download Offline AI'), findsOneWidget);
+    expect(find.textContaining('Secret model'), findsNothing);
+    expect(find.textContaining('embedding'), findsNothing);
+    expect(find.textContaining('SHA'), findsNothing);
+    expect(find.textContaining('provider'), findsNothing);
+    expect(find.textContaining('coursework'), findsNothing);
   });
 
-  testWidgets('bundled coursework reads as included, not misconfigured', (
+  testWidgets('download begins with generic progress and can be cancelled', (
     tester,
   ) async {
-    final manager = _StubResourceManager([_bundledCurriculum, _languageModel]);
-    await _pumpScreen(tester, manager);
+    final manager = _StubResourceManager([_language]);
+    await _pump(tester, manager);
+    await tester.tap(find.text('Download Offline AI'));
+    await tester.pump();
+    expect(find.text('Starting download…'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(manager.token, isNotNull);
+    manager.onProgress!(
+      const DownloadProgress(receivedBytes: 50, totalBytes: 100),
+    );
+    await tester.pump();
+    expect(find.text('50%'), findsOneWidget);
+    manager.token!.cancel();
+    manager.downloads.values.single.completeError(const DownloadCancelled());
+    await tester.pumpAndSettle();
+  });
 
-    expect(find.text('Coursework module - Included with app'), findsOneWidget);
-    expect(find.textContaining('Size not configured'), findsNothing);
-    expect(find.text('Content generation model - 100 MB'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+  testWidgets('ready state offers removal without exposing file details', (
+    tester,
+  ) async {
+    final manager = _StubResourceManager(
+      [_language, _embedding],
+      installed: {_language.id, _embedding.id},
+    );
+    await _pump(tester, manager);
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Remove downloads'), findsOneWidget);
+    expect(find.textContaining('.gguf'), findsNothing);
   });
 }
