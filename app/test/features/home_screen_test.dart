@@ -215,4 +215,42 @@ void main() {
     expect(find.text('Open My Work'), findsOneWidget);
     expect(await recent.current(), isNull);
   });
+
+  testWidgets('home uses a tappable elevated 2 by 2 card grid on a phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(home: CurriculumHomeScreen(onboardingStore: _Store())),
+    );
+    await tester.pumpAndSettle();
+
+    Rect cardRect(String label) => tester.getRect(
+      find
+          .ancestor(of: find.text(label), matching: find.byType(Material))
+          .first,
+    );
+    final lesson = cardRect('Prepare Lesson');
+    final test = cardRect('Create Test');
+    final grade = cardRect('Grade Papers');
+    final recent = cardRect('Continue Recent');
+    expect((lesson.center.dy - test.center.dy).abs(), lessThan(3));
+    expect((grade.center.dy - recent.center.dy).abs(), lessThan(3));
+    expect(lesson.center.dx, lessThan(test.center.dx));
+    expect(grade.center.dx, lessThan(recent.center.dx));
+    expect(lesson.center.dy, lessThan(grade.center.dy));
+    final cardMaterial = tester.widget<Material>(
+      find
+          .ancestor(
+            of: find.text('Prepare Lesson'),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    expect(cardMaterial.elevation, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
 }

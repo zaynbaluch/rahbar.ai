@@ -139,6 +139,8 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    final tiles = _homeTiles();
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -174,95 +176,54 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
-              FutureBuilder<OnboardingState>(
-                future: _teacher,
-                builder: (context, snapshot) {
-                  final name = snapshot.data?.teacherName.trim() ?? '';
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              if (largeText)
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(top: AppSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _homeHero(),
+                        const SizedBox(height: AppSpacing.xl),
+                        for (var i = 0; i < tiles.length; i++) ...[
+                          SizedBox(height: 220, child: tiles[i]),
+                          if (i < tiles.length - 1)
+                            const SizedBox(height: AppSpacing.sm),
+                        ],
+                      ],
+                    ),
+                  ),
+                )
+              else ...[
+                Expanded(flex: 4, child: _homeHero()),
+                const SizedBox(height: AppSpacing.md),
+                Expanded(
+                  flex: 5,
+                  child: Column(
                     children: [
-                      Text(
-                        name.isEmpty ? 'السلام علیکم' : 'السلام علیکم، $name',
-                        textDirection: TextDirection.rtl,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'آج کیا تیار کرنا ہے؟',
-                        textDirection: TextDirection.rtl,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final textScale = MediaQuery.textScalerOf(context).scale(1);
-                    final useSingleColumn =
-                        constraints.maxWidth < 360 || textScale > 1.3;
-                    final tiles = [
-                      _ActionTile(
-                        icon: Icons.menu_book_outlined,
-                        label: 'Prepare Lesson',
-                        onTap:
-                            widget.onPrepareLesson ??
-                            () => _openWorkflow(TopicPickerMode.lesson),
-                      ),
-                      _ActionTile(
-                        icon: Icons.quiz_outlined,
-                        label: 'Create Test',
-                        onTap:
-                            widget.onCreateTest ??
-                            () => _openWorkflow(TopicPickerMode.test),
-                      ),
-                      _ActionTile(
-                        icon: Icons.camera_alt_outlined,
-                        label: 'Grade Papers',
-                        onTap: widget.onGradePapers ?? _openGradePapers,
-                      ),
-                      FutureBuilder<_ContinueRecentTarget>(
-                        future: _recentTarget,
-                        builder: (context, snapshot) {
-                          final target =
-                              snapshot.data ??
-                              const _ContinueRecentTarget.fallback();
-                          return _ActionTile(
-                            icon: Icons.refresh_rounded,
-                            label: target.actionLabel,
-                            subtitle: target.subtitle,
-                            onTap: () => _continueRecent(target),
-                          );
-                        },
-                      ),
-                    ];
-                    if (useSingleColumn) {
-                      return SingleChildScrollView(
-                        child: Column(
+                      Expanded(
+                        child: Row(
                           children: [
-                            for (var i = 0; i < tiles.length; i++) ...[
-                              tiles[i],
-                              if (i < tiles.length - 1)
-                                const SizedBox(height: AppSpacing.md),
-                            ],
+                            Expanded(child: tiles[0]),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(child: tiles[1]),
                           ],
                         ),
-                      );
-                    }
-                    return GridView.count(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: AppSpacing.md,
-                      crossAxisSpacing: AppSpacing.md,
-                      childAspectRatio: 1.08,
-                      children: tiles,
-                    );
-                  },
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Expanded(child: tiles[2]),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(child: tiles[3]),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
               if (widget.backgroundAiController != null)
                 StreamBuilder<BackgroundAiDownloadState>(
                   stream: widget.backgroundAiController!.stream,
@@ -276,6 +237,69 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
       ),
     );
   }
+
+  Widget _homeHero() => FutureBuilder<OnboardingState>(
+    future: _teacher,
+    builder: (context, snapshot) {
+      final name = snapshot.data?.teacherName.trim() ?? '';
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              name.isEmpty ? 'السلام علیکم' : 'السلام علیکم، $name',
+              textDirection: TextDirection.rtl,
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'آج کیا تیار کرنا ہے؟',
+              textDirection: TextDirection.rtl,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  List<Widget> _homeTiles() => [
+    _ActionTile(
+      icon: Icons.menu_book_outlined,
+      label: 'Prepare Lesson',
+      onTap:
+          widget.onPrepareLesson ?? () => _openWorkflow(TopicPickerMode.lesson),
+    ),
+    _ActionTile(
+      icon: Icons.quiz_outlined,
+      label: 'Create Test',
+      onTap: widget.onCreateTest ?? () => _openWorkflow(TopicPickerMode.test),
+    ),
+    _ActionTile(
+      icon: Icons.camera_alt_outlined,
+      label: 'Grade Papers',
+      onTap: widget.onGradePapers ?? _openGradePapers,
+    ),
+    FutureBuilder<_ContinueRecentTarget>(
+      future: _recentTarget,
+      builder: (context, snapshot) {
+        final target = snapshot.data ?? const _ContinueRecentTarget.fallback();
+        return _ActionTile(
+          icon: Icons.refresh_rounded,
+          label: target.actionLabel,
+          subtitle: target.subtitle,
+          onTap: () => _continueRecent(target),
+        );
+      },
+    ),
+  ];
 
   Widget _downloadStatus(BackgroundAiDownloadState state) {
     if (state.completed || (!state.running && !state.needsAttention)) {
@@ -543,31 +567,62 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget iconBox() => Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: AppColors.softBlue,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      alignment: Alignment.center,
+      child: Icon(icon, size: 22, color: AppColors.primary),
+    );
+
+    Widget labels() => Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        if (subtitle != null && subtitle!.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            subtitle!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
+
     return BayazCard(
       onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 36, color: AppColors.primary),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          if (subtitle != null && subtitle!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              subtitle!,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ],
+      elevation: 3,
+      borderColor: Colors.transparent,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxHeight < 115) {
+            return Row(
+              children: [
+                iconBox(),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(child: labels()),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [iconBox(), const Spacer(), labels()],
+          );
+        },
       ),
     );
   }
