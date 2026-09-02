@@ -329,7 +329,7 @@ class _ActionBar extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: exporting ? null : onExport,
             icon: const Icon(Icons.picture_as_pdf_outlined),
-            label: Text(exporting ? 'Preparing…' : 'Print / PDF'),
+            label: Text(exporting ? 'Preparing…' : 'Share'),
           ),
           OutlinedButton.icon(
             onPressed: onGrade,

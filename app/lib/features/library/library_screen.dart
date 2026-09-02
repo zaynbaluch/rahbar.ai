@@ -69,7 +69,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         title: const BrandAppBarTitle(subtitle: 'Saved teaching materials'),
         actions: [
           IconButton(
-            tooltip: 'Refresh Library',
+            tooltip: 'Refresh My Work',
             onPressed: _reload,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -211,7 +211,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (libraryEmpty) {
       return const BayazEmptyState(
         asset: 'assets/ui/illustrations/empty_library.webp',
-        title: 'Your Library is empty',
+        title: 'Your My Work is empty',
         message:
             'Save a lesson plan or MCQ paper and it will remain available here for reopening and printing.',
       );
@@ -411,7 +411,7 @@ class _LibraryError extends StatelessWidget {
             Icon(Icons.error_outline,
                 size: 44, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: AppSpacing.sm),
-            Text('Could not open the Library',
+            Text('Could not open My Work',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.xs),
             Text(error,
