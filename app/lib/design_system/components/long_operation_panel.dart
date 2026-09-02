@@ -21,12 +21,16 @@ class LongOperationPanel extends StatefulWidget {
       'lesson_saved',
     ],
     this.rotateEvery = const Duration(seconds: 10),
+    this.progress,
+    this.progressLabel,
   });
 
   final String primaryStatus;
   final List<String> messages;
   final List<String> animationNames;
   final Duration rotateEvery;
+  final double? progress;
+  final String? progressLabel;
 
   @override
   State<LongOperationPanel> createState() => _LongOperationPanelState();
@@ -55,7 +59,8 @@ class _LongOperationPanelState extends State<LongOperationPanel> {
 
   void _start() {
     _timer?.cancel();
-    if (widget.messages.length <= 1 && widget.animationNames.length <= 1) return;
+    if (widget.messages.length <= 1 && widget.animationNames.length <= 1)
+      return;
     _timer = Timer.periodic(widget.rotateEvery, (_) {
       if (!mounted) return;
       setState(() => _index++);
@@ -97,11 +102,19 @@ class _LongOperationPanelState extends State<LongOperationPanel> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
+          if (widget.progressLabel != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              widget.progressLabel!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ],
           const SizedBox(height: AppSpacing.sm),
-          const LinearProgressIndicator(),
+          LinearProgressIndicator(value: widget.progress),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'You can keep this screen open. Bayaz is working entirely on this device.',
+            'Please keep this screen open.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.labelSmall,
           ),

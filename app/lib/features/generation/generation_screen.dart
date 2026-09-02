@@ -20,6 +20,7 @@ import '../resources/offline_ai_gate.dart';
 import '../resources/offline_ai_navigation.dart';
 import '../resources/offline_ai_policy.dart';
 import 'generated_output_sanitizer.dart';
+import 'generation_progress.dart';
 import 'lesson_plan.dart';
 import 'lesson_plan_parser.dart';
 import 'lesson_plan_view.dart';
@@ -388,6 +389,28 @@ class _GenerationScreenState extends State<GenerationScreen> {
     }
   }
 
+  Widget _operationPanel({
+    required String primaryStatus,
+    required List<String> messages,
+  }) {
+    final progress = _phase == _Phase.generating
+        ? (_kind == 'mcq'
+              ? GenerationProgress.mcq(_output, _expectedCount)
+              : GenerationProgress.lesson(_output))
+        : null;
+    final progressLabel = progress == null
+        ? null
+        : _kind == 'mcq'
+        ? '${progress.completed} of ${progress.total} questions ready'
+        : '${progress.completed} of ${progress.total} sections ready';
+    return LongOperationPanel(
+      primaryStatus: primaryStatus,
+      messages: messages,
+      progress: progress?.fraction,
+      progressLabel: progressLabel,
+    );
+  }
+
   String get _phaseLabel => switch (_phase) {
     _Phase.idle when _routeLifecycle.closing => 'Closing offline AI safely…',
     _Phase.idle =>
@@ -511,7 +534,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 if (_busy)
-                  LongOperationPanel(
+                  _operationPanel(
                     primaryStatus: _phaseLabel,
                     messages: const [
                       'Preparing the chalkboard…',
@@ -716,9 +739,9 @@ class _GenerationScreenState extends State<GenerationScreen> {
               ),
               if (_busy) ...[
                 const SizedBox(height: AppSpacing.md),
-                const LongOperationPanel(
+                _operationPanel(
                   primaryStatus: 'Preparing your classroom material…',
-                  messages: [
+                  messages: const [
                     'Finding the most useful teaching points…',
                     'Putting the classroom material together…',
                     'Checking the final structure…',
