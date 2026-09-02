@@ -108,6 +108,33 @@ McqTest _paper() => McqTest(
 );
 
 void main() {
+  testWidgets(
+    'home uses the branded 72px header and keeps settings on the brand',
+    (tester) async {
+      var settingsOpened = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CurriculumHomeScreen(
+            onboardingStore: _Store(),
+            openSettings: (_) async => settingsOpened = true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final bar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(bar.toolbarHeight, 72);
+      expect(find.text('Bayaz AI'), findsOneWidget);
+      expect(find.text('Teacher workspace'), findsNothing);
+      expect(find.byIcon(Icons.settings_outlined), findsNothing);
+      expect(find.byIcon(Icons.forum_outlined), findsNothing);
+      expect(find.byTooltip('Open Settings'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Open Settings'));
+      await tester.pump();
+      expect(settingsOpened, isTrue);
+    },
+  );
   testWidgets('home is action-first and shows the teacher greeting', (
     tester,
   ) async {
