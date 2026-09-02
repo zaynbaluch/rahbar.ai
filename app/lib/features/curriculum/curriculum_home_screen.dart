@@ -200,46 +200,67 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
               ),
               const SizedBox(height: AppSpacing.xl),
               Expanded(
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: AppSpacing.md,
-                  crossAxisSpacing: AppSpacing.md,
-                  childAspectRatio: 1.08,
-                  children: [
-                    _ActionTile(
-                      icon: Icons.menu_book_outlined,
-                      label: 'Prepare Lesson',
-                      onTap:
-                          widget.onPrepareLesson ??
-                          () => _openWorkflow(TopicPickerMode.lesson),
-                    ),
-                    _ActionTile(
-                      icon: Icons.quiz_outlined,
-                      label: 'Create Test',
-                      onTap:
-                          widget.onCreateTest ??
-                          () => _openWorkflow(TopicPickerMode.test),
-                    ),
-                    _ActionTile(
-                      icon: Icons.camera_alt_outlined,
-                      label: 'Grade Papers',
-                      onTap: widget.onGradePapers ?? _openGradePapers,
-                    ),
-                    FutureBuilder<_ContinueRecentTarget>(
-                      future: _recentTarget,
-                      builder: (context, snapshot) {
-                        final target =
-                            snapshot.data ??
-                            const _ContinueRecentTarget.fallback();
-                        return _ActionTile(
-                          icon: Icons.refresh_rounded,
-                          label: target.actionLabel,
-                          subtitle: target.subtitle,
-                          onTap: () => _continueRecent(target),
-                        );
-                      },
-                    ),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final textScale = MediaQuery.textScalerOf(context).scale(1);
+                    final useSingleColumn =
+                        constraints.maxWidth < 360 || textScale > 1.3;
+                    final tiles = [
+                      _ActionTile(
+                        icon: Icons.menu_book_outlined,
+                        label: 'Prepare Lesson',
+                        onTap:
+                            widget.onPrepareLesson ??
+                            () => _openWorkflow(TopicPickerMode.lesson),
+                      ),
+                      _ActionTile(
+                        icon: Icons.quiz_outlined,
+                        label: 'Create Test',
+                        onTap:
+                            widget.onCreateTest ??
+                            () => _openWorkflow(TopicPickerMode.test),
+                      ),
+                      _ActionTile(
+                        icon: Icons.camera_alt_outlined,
+                        label: 'Grade Papers',
+                        onTap: widget.onGradePapers ?? _openGradePapers,
+                      ),
+                      FutureBuilder<_ContinueRecentTarget>(
+                        future: _recentTarget,
+                        builder: (context, snapshot) {
+                          final target =
+                              snapshot.data ??
+                              const _ContinueRecentTarget.fallback();
+                          return _ActionTile(
+                            icon: Icons.refresh_rounded,
+                            label: target.actionLabel,
+                            subtitle: target.subtitle,
+                            onTap: () => _continueRecent(target),
+                          );
+                        },
+                      ),
+                    ];
+                    if (useSingleColumn) {
+                      return SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < tiles.length; i++) ...[
+                              tiles[i],
+                              if (i < tiles.length - 1)
+                                const SizedBox(height: AppSpacing.md),
+                            ],
+                          ],
+                        ),
+                      );
+                    }
+                    return GridView.count(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: AppSpacing.md,
+                      crossAxisSpacing: AppSpacing.md,
+                      childAspectRatio: 1.08,
+                      children: tiles,
+                    );
+                  },
                 ),
               ),
               if (widget.backgroundAiController != null)

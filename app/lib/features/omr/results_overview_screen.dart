@@ -28,7 +28,20 @@ class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
     super.dispose();
   }
 
-  void _reload() => setState(() => _future = _store.loadAll());
+  void _reload() {
+    setState(() {
+      _future = _store.loadAll();
+    });
+  }
+
+  Future<void> _refresh() async {
+    final next = _store.loadAll();
+    setState(() {
+      _future = next;
+    });
+    await next;
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Class Results')),
@@ -102,38 +115,44 @@ class _ResultsOverviewScreenState extends State<ResultsOverviewScreen> {
                 (ctx?.className ?? '').toLowerCase().contains(query) ||
                 (ctx?.subjectName ?? '').toLowerCase().contains(query);
           }).toList();
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              AppSpacing.sm,
-              AppSpacing.md,
-              AppSpacing.xl,
-            ),
-            children: [
-              if (load.recoveredCorruptData) ...[
-                RecoveredDataNotice(
-                  count: load.recoveredFiles,
-                  itemLabel: 'grading result',
-                ),
-                const SizedBox(height: AppSpacing.sm),
-              ],
-              TextField(
-                controller: _search,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  hintText: 'Search results',
-                  prefixIcon: Icon(Icons.search_rounded),
-                ),
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
+                AppSpacing.xl,
               ),
-              const SizedBox(height: AppSpacing.lg),
-              if (visible.isNotEmpty)
-                Text('Recent', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.sm),
-              for (final group in visible) ...[
-                _SessionCard(results: group),
+              children: [
+                if (load.recoveredCorruptData) ...[
+                  RecoveredDataNotice(
+                    count: load.recoveredFiles,
+                    itemLabel: 'grading result',
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+                TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'Search results',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                if (visible.isNotEmpty)
+                  Text(
+                    'Recent',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 const SizedBox(height: AppSpacing.sm),
+                for (final group in visible) ...[
+                  _SessionCard(results: group),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
               ],
-            ],
+            ),
           );
         },
       ),
