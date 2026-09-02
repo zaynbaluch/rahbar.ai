@@ -4,8 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bayaz_ai/features/generation/lesson_plan.dart';
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 import 'package:bayaz_ai/features/library/saved_test.dart';
+import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
 
 void main() {
+  test('teaching context round-trips and copyWith preserves it', () {
+    const context = TeachingContext(classCode: '6', className: 'Class 6', subjectCode: 'science', subjectName: 'Science');
+    const saved = SavedTest(id: 'ctx', kind: 'lesson', topic: 'Cells', createdAtMillis: 1, teachingContext: context);
+    final restored = SavedTest.fromJson(saved.toJson());
+    expect(restored.teachingContext?.subjectName, 'Science');
+    expect(saved.copyWith().teachingContext, context);
+  });
+
   test('SavedTest survives a JSON round-trip and re-parses to a test', () {
     const raw = '''
 Q1 [easy]

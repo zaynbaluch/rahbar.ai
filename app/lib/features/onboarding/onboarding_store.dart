@@ -76,8 +76,7 @@ class OnboardingState {
             (json['selected_subjects'] as List? ?? const ['general_science'])
                 .map((item) => item.toString())
                 .toList(growable: false),
-        selectedSubjectsByClass: ((json['selected_subjects_by_class'] as Map?) ?? const {})
-            .map((key, value) => MapEntry(key.toString(), (value as List).map((e) => e.toString()).toList())),
+        selectedSubjectsByClass: _subjectsByClassFromJson(json),
         offlineAiEnabled: json['offline_ai_enabled'] as bool? ?? false,
       );
 }
@@ -110,4 +109,21 @@ class OnboardingStore {
     final file = await _file();
     if (await file.exists()) await file.delete();
   }
+}
+
+Map<String, List<String>> _subjectsByClassFromJson(Map<String, Object?> json) {
+  final raw = json['selected_subjects_by_class'] as Map?;
+  if (raw != null && raw.isNotEmpty) {
+    return raw.map((key, value) => MapEntry(
+      key.toString(),
+      (value as List? ?? const []).map((e) => e.toString()).toList(growable: false),
+    ));
+  }
+  final classes = (json['selected_classes'] as List? ?? const ['6'])
+      .map((e) => e.toString())
+      .toList(growable: false);
+  final subjects = (json['selected_subjects'] as List? ?? const ['general_science'])
+      .map((e) => e.toString())
+      .toList(growable: false);
+  return {for (final classCode in classes) classCode: List<String>.of(subjects)};
 }

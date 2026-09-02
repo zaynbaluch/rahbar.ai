@@ -3,8 +3,15 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bayaz_ai/features/omr/graded_result.dart';
 import 'package:bayaz_ai/features/omr/omr_grader.dart';
+import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
 
 void main() {
+  test('grading context survives storage', () {
+    const context = TeachingContext(classCode: '6', className: 'Class 6', subjectCode: 'science', subjectName: 'Science');
+    const item = GradedResult(id: '1', testId: 't', testTopic: 'Cells', studentName: 'A', correct: 1, total: 1, marks: 'A', correctAnswers: 'A', createdAtMillis: 1, teachingContext: context);
+    expect(GradedResult.fromJson(item.toJson()).teachingContext?.className, 'Class 6');
+  });
+
   test('GradedResult from an OmrResult captures score + marks and round-trips', () {
     final omr = OmrResult(
       fiducialsFound: true,

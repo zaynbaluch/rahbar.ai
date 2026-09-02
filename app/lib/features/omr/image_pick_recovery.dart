@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/storage/atomic_file_store.dart';
 import '../generation/mcq_parser.dart';
+import '../curriculum/teaching_context.dart';
 
 class PendingImagePick {
   const PendingImagePick({
@@ -14,18 +15,21 @@ class PendingImagePick {
     required this.source,
     required this.createdAtMillis,
     this.recoveredImagePath,
+    this.teachingContext,
   });
 
   final McqTest test;
   final String source;
   final int createdAtMillis;
   final String? recoveredImagePath;
+  final TeachingContext? teachingContext;
 
   Map<String, Object?> toJson() => {
         'test': test.toJson(),
         'source': source,
         'created_at_millis': createdAtMillis,
         'recovered_image_path': recoveredImagePath,
+        if (teachingContext != null) 'teaching_context': teachingContext!.toJson(),
       };
 
   factory PendingImagePick.fromJson(Map<String, dynamic> json) =>
@@ -36,6 +40,9 @@ class PendingImagePick {
         source: json['source'] as String? ?? 'unknown',
         createdAtMillis: json['created_at_millis'] as int? ?? 0,
         recoveredImagePath: json['recovered_image_path'] as String?,
+        teachingContext: json['teaching_context'] == null
+            ? null
+            : TeachingContext.fromJson(Map<String, dynamic>.from(json['teaching_context'] as Map)),
       );
 
   PendingImagePick copyWith({String? recoveredImagePath}) => PendingImagePick(
@@ -43,6 +50,7 @@ class PendingImagePick {
         source: source,
         createdAtMillis: createdAtMillis,
         recoveredImagePath: recoveredImagePath ?? this.recoveredImagePath,
+        teachingContext: teachingContext,
       );
 }
 
@@ -61,7 +69,11 @@ class PendingImagePickStore {
     return File(p.join(support.path, 'preferences', 'pending_image_pick.v1.json'));
   }
 
-  Future<void> begin(McqTest test, ImageSource source) async {
+  Future<void> begin(
+    McqTest test,
+    ImageSource source, {
+    TeachingContext? teachingContext,
+  }) async {
     final file = await _fileProvider();
     await AtomicFileStore.shared.writeJson(
       file,
@@ -69,6 +81,7 @@ class PendingImagePickStore {
         test: test,
         source: source.name,
         createdAtMillis: _nowMillis(),
+        teachingContext: teachingContext,
       ).toJson(),
     );
   }
@@ -147,10 +160,11 @@ class ImagePickerLostDataProvider implements LostImageDataProvider {
 }
 
 class RecoveredImagePick {
-  const RecoveredImagePick({required this.test, required this.imagePath});
+  const RecoveredImagePick({required this.test, required this.imagePath, this.teachingContext});
 
   final McqTest test;
   final String imagePath;
+  final TeachingContext? teachingContext;
 }
 
 class ImagePickRecoveryService {
@@ -184,7 +198,7 @@ class ImagePickRecoveryService {
 
     final existingPath = pending.recoveredImagePath;
     if (existingPath != null && await File(existingPath).exists()) {
-      return RecoveredImagePick(test: pending.test, imagePath: existingPath);
+      return RecoveredImagePick(test: pending.test, imagePath: existingPath, teachingContext: pending.teachingContext);
     }
 
     if (lost.error != null || lost.paths.isEmpty) {
@@ -208,6 +222,6 @@ class ImagePickRecoveryService {
     await source.copy(destination.path);
     final updated = pending.copyWith(recoveredImagePath: destination.path);
     await store.save(updated);
-    return RecoveredImagePick(test: pending.test, imagePath: destination.path);
+    return RecoveredImagePick(test: pending.test, imagePath: destination.path, teachingContext: pending.teachingContext);
   }
 }
