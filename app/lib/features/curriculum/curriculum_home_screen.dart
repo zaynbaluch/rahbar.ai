@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/bayaz_card.dart';
-import '../../design_system/components/brand_app_bar.dart';
-import '../../design_system/components/empty_state.dart';
 import '../../design_system/components/section_header.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
-import '../chat/clarification_context.dart';
-import '../chat/clarification_screen.dart';
 import '../content/content_service.dart';
 import '../content/topic_picker_screen.dart';
 import '../content/topic_screen.dart';
 import '../settings/settings_screen.dart';
-import '../resources/offline_ai_navigation.dart';
 import 'curriculum_catalog.dart';
 import 'recent_access_store.dart';
 
