@@ -99,4 +99,33 @@ void main() {
     await tester.pump();
     expect(find.text('Cells'), findsOneWidget);
   });
+
+  testWidgets('empty My Work shows only two simple creation shortcuts', (
+    tester,
+  ) async {
+    var lesson = false;
+    var test = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(
+          store: _Library(const []),
+          gradebookStore: _Gradebook(const []),
+          onPrepareLesson: () => lesson = true,
+          onCreateTest: () => test = true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing saved yet'), findsOneWidget);
+    expect(
+      find.text('Lessons and tests you save or share will appear here.'),
+      findsNothing,
+    );
+    expect(find.widgetWithText(FilledButton, 'Create Lesson'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Create Test'), findsOneWidget);
+    await tester.tap(find.text('Create Lesson'));
+    await tester.tap(find.text('Create Test'));
+    expect(lesson, isTrue);
+    expect(test, isTrue);
+  });
 }
