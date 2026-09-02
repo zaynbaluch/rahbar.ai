@@ -124,18 +124,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                const _SettingsSectionTitle('Data & support'),
+                const _SettingsSectionTitle('Support'),
                 _SettingsCard(
                   children: [
-                    _SettingsRow(
-                      icon: Icons.phone_android_outlined,
-                      title: 'Data on this device',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const DataOnDeviceScreen(),
-                        ),
-                      ),
-                    ),
                     _SettingsRow(
                       icon: Icons.bug_report_outlined,
                       title: 'Report a problem',
@@ -365,34 +356,6 @@ class _TeachingSettingsScreenState extends State<TeachingSettingsScreen> {
             child: Text(_saving ? 'Saving…' : 'Save'),
           ),
         ],
-      ),
-    ),
-  );
-}
-
-class DataOnDeviceScreen extends StatelessWidget {
-  const DataOnDeviceScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Data on this device')),
-    body: const SafeArea(
-      child: Padding(
-        padding: EdgeInsets.all(AppSpacing.md),
-        child: BayazCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Bayaz keeps your saved lessons, tests, class results, and teaching settings on this device.',
-              ),
-              SizedBox(height: AppSpacing.sm),
-              Text(
-                'Nothing is automatically uploaded or synchronized in this build. Files leave the device only when you deliberately share them.',
-              ),
-            ],
-          ),
-        ),
       ),
     ),
   );
