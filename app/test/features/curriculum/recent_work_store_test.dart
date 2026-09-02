@@ -14,7 +14,9 @@ void main() {
 
   test('recent reference persists and can be cleared', () async {
     final store = RecentWorkStore(fileProvider: () async => file);
-    await store.update(const RecentWorkReference(type: 'lesson', id: 'lesson-1'));
+    await store.update(
+      const RecentWorkReference(type: 'lesson', id: 'lesson-1'),
+    );
     final reopened = RecentWorkStore(fileProvider: () async => file);
     expect((await reopened.current())?.id, 'lesson-1');
     await reopened.clear();

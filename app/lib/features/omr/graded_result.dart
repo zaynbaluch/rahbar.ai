@@ -28,6 +28,7 @@ class GradedResult {
 
   /// Per-question marked options joined by '|', '' = blank (e.g. "A|C||B").
   final String marks;
+
   /// Immutable answer-key snapshot used when this result was confirmed.
   final String correctAnswers;
   final int createdAtMillis;
@@ -35,7 +36,8 @@ class GradedResult {
   final TeachingContext? teachingContext;
 
   int get pct => total == 0 ? 0 : (100 * correct / total).round();
-  DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(createdAtMillis);
+  DateTime get createdAt =>
+      DateTime.fromMillisecondsSinceEpoch(createdAtMillis);
 
   static GradedResult fromGrading({
     required String testId,
@@ -57,30 +59,34 @@ class GradedResult {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'testId': testId,
-        'testTopic': testTopic,
-        'studentName': studentName,
-        'correct': correct,
-        'total': total,
-        'marks': marks,
-        'correctAnswers': correctAnswers,
-        'createdAtMillis': createdAtMillis,
-        'schemaVersion': schemaVersion,
-        if (teachingContext != null) 'teachingContext': teachingContext!.toJson(),
-      };
+    'id': id,
+    'testId': testId,
+    'testTopic': testTopic,
+    'studentName': studentName,
+    'correct': correct,
+    'total': total,
+    'marks': marks,
+    'correctAnswers': correctAnswers,
+    'createdAtMillis': createdAtMillis,
+    'schemaVersion': schemaVersion,
+    if (teachingContext != null) 'teachingContext': teachingContext!.toJson(),
+  };
 
   factory GradedResult.fromJson(Map<String, dynamic> j) => GradedResult(
-        id: j['id'] as String,
-        testId: j['testId'] as String? ?? '',
-        testTopic: j['testTopic'] as String? ?? '',
-        studentName: j['studentName'] as String? ?? '',
-        correct: j['correct'] as int? ?? 0,
-        total: j['total'] as int? ?? 0,
-        marks: j['marks'] as String? ?? '',
-        correctAnswers: j['correctAnswers'] as String? ?? '',
-        createdAtMillis: j['createdAtMillis'] as int? ?? 0,
-        schemaVersion: j['schemaVersion'] as int? ?? 1,
-        teachingContext: j['teachingContext'] == null ? null : TeachingContext.fromJson(Map<String,dynamic>.from(j['teachingContext'] as Map)),
-      );
+    id: j['id'] as String,
+    testId: j['testId'] as String? ?? '',
+    testTopic: j['testTopic'] as String? ?? '',
+    studentName: j['studentName'] as String? ?? '',
+    correct: j['correct'] as int? ?? 0,
+    total: j['total'] as int? ?? 0,
+    marks: j['marks'] as String? ?? '',
+    correctAnswers: j['correctAnswers'] as String? ?? '',
+    createdAtMillis: j['createdAtMillis'] as int? ?? 0,
+    schemaVersion: j['schemaVersion'] as int? ?? 1,
+    teachingContext: j['teachingContext'] == null
+        ? null
+        : TeachingContext.fromJson(
+            Map<String, dynamic>.from(j['teachingContext'] as Map),
+          ),
+  );
 }
