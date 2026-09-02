@@ -23,22 +23,22 @@ class OmrQuestion {
   bool get isRight => marked != null && marked == correct;
 
   Map<String, dynamic> toJson() => {
-        'number': number,
-        'marked': marked,
-        'correct': correct,
-        'fill': fill,
-        'confidence': confidence,
-        'reviewed': reviewed,
-      };
+    'number': number,
+    'marked': marked,
+    'correct': correct,
+    'fill': fill,
+    'confidence': confidence,
+    'reviewed': reviewed,
+  };
 
   factory OmrQuestion.fromJson(Map<String, dynamic> json) => OmrQuestion(
-        number: json['number'] as int,
-        marked: json['marked'] as String?,
-        correct: json['correct'] as String?,
-        fill: (json['fill'] as num).toDouble(),
-        confidence: (json['confidence'] as num).toDouble(),
-        reviewed: json['reviewed'] as bool? ?? false,
-      );
+    number: json['number'] as int,
+    marked: json['marked'] as String?,
+    correct: json['correct'] as String?,
+    fill: (json['fill'] as num).toDouble(),
+    confidence: (json['confidence'] as num).toDouble(),
+    reviewed: json['reviewed'] as bool? ?? false,
+  );
 }
 
 /// Result of grading one answer sheet against a test's key.
@@ -51,42 +51,41 @@ class OmrResult {
   int get correct => questions.where((q) => q.isRight).length;
   int get blank => questions.where((q) => q.marked == null).length;
   int get needsReview => questions
-      .where(
-        (q) => !q.reviewed && (q.marked == null || q.confidence < 0.20),
-      )
+      .where((q) => !q.reviewed && (q.marked == null || q.confidence < 0.20))
       .length;
 
   Map<String, dynamic> toJson() => {
-        'fiducialsFound': fiducialsFound,
-        'questions': questions.map((question) => question.toJson()).toList(),
-      };
+    'fiducialsFound': fiducialsFound,
+    'questions': questions.map((question) => question.toJson()).toList(),
+  };
 
   factory OmrResult.fromJson(Map<String, dynamic> json) => OmrResult(
-        fiducialsFound: json['fiducialsFound'] as bool,
-        questions: (json['questions'] as List)
-            .map((question) => OmrQuestion.fromJson(
-                  Map<String, dynamic>.from(question as Map),
-                ))
-            .toList(growable: false),
-      );
+    fiducialsFound: json['fiducialsFound'] as bool,
+    questions: (json['questions'] as List)
+        .map(
+          (question) =>
+              OmrQuestion.fromJson(Map<String, dynamic>.from(question as Map)),
+        )
+        .toList(growable: false),
+  );
 
   OmrResult withMark(int questionNumber, String? mark) => OmrResult(
-        fiducialsFound: fiducialsFound,
-        questions: [
-          for (final question in questions)
-            if (question.number == questionNumber)
-              OmrQuestion(
-                number: question.number,
-                marked: mark,
-                correct: question.correct,
-                fill: question.fill,
-                confidence: question.confidence,
-                reviewed: true,
-              )
-            else
-              question,
-        ],
-      );
+    fiducialsFound: fiducialsFound,
+    questions: [
+      for (final question in questions)
+        if (question.number == questionNumber)
+          OmrQuestion(
+            number: question.number,
+            marked: mark,
+            correct: question.correct,
+            fill: question.fill,
+            confidence: question.confidence,
+            reviewed: true,
+          )
+        else
+          question,
+    ],
+  );
 }
 
 /// Reads a photographed OMR sheet and scores it against the stored key — no SLM.
@@ -106,8 +105,9 @@ class OmrGrader {
     }
     final gray = img.grayscale(image);
     final w = gray.width, h = gray.height;
+    final layout = OmrTemplate.layoutFor(key.expectedCount);
 
-    final fids = _findFiducials(gray);
+    final fids = _findFiducials(gray, layout);
     final mapper = fids == null ? null : ProjectiveMapper.fromUnitSquare(fids);
     final answers = {for (final q in key.questions) q.number: q.answer};
 
@@ -115,9 +115,9 @@ class OmrGrader {
     for (final q in key.questions) {
       final fills = <double>[];
       for (var c = 0; c < OmrTemplate.options; c++) {
-        final (u, v) = OmrTemplate.bubbleNorm(q.number, c);
+        final (u, v) = layout.bubbleNorm(q.number, c);
         final (px, py) = mapper?.map(u, v) ?? (0.0, 0.0);
-        fills.add(_sampleFill(gray, px, py, w, h));
+        fills.add(_sampleFill(gray, px, py, w, h, layout));
       }
       out.add(_decide(q.number, fills, answers[q.number]));
     }
@@ -125,8 +125,9 @@ class OmrGrader {
   }
 
   static OmrQuestion _decide(int number, List<double> fills, String? correct) {
-    final ranked = [for (var i = 0; i < fills.length; i++) (index: i, fill: fills[i])]
-      ..sort((a, b) => b.fill.compareTo(a.fill));
+    final ranked = [
+      for (var i = 0; i < fills.length; i++) (index: i, fill: fills[i]),
+    ]..sort((a, b) => b.fill.compareTo(a.fill));
     final best = ranked.first;
     final secondFill = ranked.length > 1 ? ranked[1].fill : 0.0;
     final margin = (best.fill - secondFill).clamp(0.0, 1.0).toDouble();
@@ -143,13 +144,16 @@ class OmrGrader {
   }
 
   /// The 4 fiducial centers in photo pixels (TL, TR, BR, BL), or null if not found.
-  static List<(double, double)>? _findFiducials(img.Image gray) {
+  static List<(double, double)>? _findFiducials(
+    img.Image gray,
+    OmrLayout layout,
+  ) {
     final w = gray.width, h = gray.height;
     // Search a generous corner window for the spot with the highest local darkness
     // — the solid square beats thin print. The teacher photographs the answer box,
     // so the corner squares sit near the image corners (with some framing margin).
     // Window ~ a fiducial as it appears when the box roughly fills the frame.
-    final win = ((OmrTemplate.fidSize / OmrTemplate.boxH) * h * 0.9).round().clamp(6, 80);
+    final win = ((layout.fidSize / layout.boxH) * h * 0.9).round().clamp(6, 80);
     final regionW = (w * 0.45).round(), regionH = (h * 0.45).round();
     final corners = <(int, int, int, int)>[
       (0, 0, regionW, regionH), // TL
@@ -185,8 +189,10 @@ class OmrGrader {
     final left2 = distance(points[0], points[3]);
     final minHorizontal2 = width * width * 0.12;
     final minVertical2 = height * height * 0.12;
-    if (top2 < minHorizontal2 || bottom2 < minHorizontal2 ||
-        left2 < minVertical2 || right2 < minVertical2) {
+    if (top2 < minHorizontal2 ||
+        bottom2 < minHorizontal2 ||
+        left2 < minVertical2 ||
+        right2 < minVertical2) {
       return false;
     }
     final horizontalRatio = top2 > bottom2 ? top2 / bottom2 : bottom2 / top2;
@@ -205,7 +211,13 @@ class OmrGrader {
   /// dark-pixel **centroid** inside it — precise regardless of where the square sat
   /// within the sliding window.
   static (double, double)? _darkestWindow(
-      img.Image g, int x0, int y0, int x1, int y1, int win) {
+    img.Image g,
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    int win,
+  ) {
     double bestDark = -1;
     int bx = -1, by = -1;
     final step = (win ~/ 4).clamp(2, 15);
@@ -231,12 +243,16 @@ class OmrGrader {
     final ringPad = (win ~/ 2).clamp(4, 30);
     double ringDark = 0;
     int ringCount = 0;
-    for (var y = (by - ringPad).clamp(y0, y1 - 1);
-        y < (by + win + ringPad).clamp(y0 + 1, y1);
-        y += 2) {
-      for (var x = (bx - ringPad).clamp(x0, x1 - 1);
-          x < (bx + win + ringPad).clamp(x0 + 1, x1);
-          x += 2) {
+    for (
+      var y = (by - ringPad).clamp(y0, y1 - 1);
+      y < (by + win + ringPad).clamp(y0 + 1, y1);
+      y += 2
+    ) {
+      for (
+        var x = (bx - ringPad).clamp(x0, x1 - 1);
+        x < (bx + win + ringPad).clamp(x0 + 1, x1);
+        x += 2
+      ) {
         if (x >= bx && x < bx + win && y >= by && y < by + win) continue;
         ringDark += 255 - g.getPixel(x, y).luminance.toDouble();
         ringCount++;
@@ -247,12 +263,16 @@ class OmrGrader {
     // Centroid of dark pixels within the winning window (± a small pad).
     const pad = 4;
     double sx = 0, sy = 0, wsum = 0;
-    for (var y = (by - pad).clamp(0, g.height - 1);
-        y < (by + win + pad).clamp(0, g.height);
-        y++) {
-      for (var x = (bx - pad).clamp(0, g.width - 1);
-          x < (bx + win + pad).clamp(0, g.width);
-          x++) {
+    for (
+      var y = (by - pad).clamp(0, g.height - 1);
+      y < (by + win + pad).clamp(0, g.height);
+      y++
+    ) {
+      for (
+        var x = (bx - pad).clamp(0, g.width - 1);
+        x < (bx + win + pad).clamp(0, g.width);
+        x++
+      ) {
         final dark = 255 - g.getPixel(x, y).luminance.toDouble();
         if (dark > 128) {
           sx += x * dark;
@@ -266,10 +286,17 @@ class OmrGrader {
   }
 
   /// Average darkness (0..1) inside a small disc at (px,py) — the bubble interior.
-  static double _sampleFill(img.Image g, double px, double py, int w, int h) {
+  static double _sampleFill(
+    img.Image g,
+    double px,
+    double py,
+    int w,
+    int h,
+    OmrLayout layout,
+  ) {
     // Sample radius slightly under the printed bubble radius to skip the outline.
     // Scale to the box (the framed region), not the whole page.
-    final r = ((OmrTemplate.bubbleR * 0.7 / OmrTemplate.boxH) * h).round().clamp(2, 40);
+    final r = ((layout.bubbleR * 0.7 / layout.boxH) * h).round().clamp(2, 40);
     final cx = px.round(), cy = py.round();
     double sum = 0;
     int count = 0;

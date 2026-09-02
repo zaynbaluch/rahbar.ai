@@ -122,15 +122,16 @@ void main() {
       expect(q1.difficulty, 'easy');
       expect(q1.text, 'What is the function of amylase, protease and lipase?');
       expect(q1.options.length, 4);
-      expect(q1.options['A'],
-          'They break down carbohydrates, proteins and fats into smaller molecules');
+      expect(
+        q1.options['A'],
+        'They break down carbohydrates, proteins and fats into smaller molecules',
+      );
       expect(q1.answer, 'A');
 
       // Difficulty mix survives.
       expect(t.questions.where((q) => q.difficulty == 'hard').length, 2);
       // Answer key line reconstructed.
-      expect(t.keyLine,
-          '1=A 2=C 3=A 4=B 5=D 6=C 7=A 8=A 9=B 10=A');
+      expect(t.keyLine, '1=A 2=C 3=A 4=B 5=D 6=C 7=A 8=A 9=B 10=A');
     });
 
     test('preserves an existing paper ID when parsing saved model output', () {
@@ -144,10 +145,33 @@ void main() {
 
     test('KEY line back-fills answers when per-question ANSWER is missing', () {
       // Strip the inline ANSWER lines; the trailing KEY must still populate them.
-      final noAnswers = _qwen3.replaceAll(RegExp(r'^ANSWER:.*\$', multiLine: true), '');
+      final noAnswers = _qwen3.replaceAll(
+        RegExp(r'^ANSWER:.*\$', multiLine: true),
+        '',
+      );
       final t = McqParser.parse(noAnswers);
       expect(t.questions[1].answer, 'C'); // Q2 from KEY
       expect(t.questions[8].answer, 'B'); // Q9 from KEY
+    });
+
+    test('parses a complete fifteen-question custom paper when requested', () {
+      final raw = List.generate(
+        15,
+        (index) =>
+            '''
+Q${index + 1} [easy]
+Question ${index + 1}?
+A) One
+B) Two
+C) Three
+D) Four
+ANSWER: A
+''',
+      ).join('\n');
+      final paper = McqParser.parse(raw, topic: 'Cells', expectedCount: 15);
+      expect(paper.count, 15);
+      expect(paper.expectedCount, 15);
+      expect(paper.isReady, isTrue);
     });
 
     test('tolerates degenerate output without crashing or fabricating', () {
