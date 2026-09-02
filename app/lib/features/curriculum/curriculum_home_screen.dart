@@ -42,93 +42,41 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 72,
-        title: const BrandAppBarTitle(subtitle: 'Offline teacher toolkit'),
-        actions: [
-          IconButton(
-            tooltip: 'Ask Bayaz',
-            onPressed: () => openOfflineAiScreen(
-              context,
-              (_) => const ClarificationScreen(
-                contextMaterial: ClarificationContext.general,
-              ),
-            ),
-            icon: const Icon(Icons.forum_outlined),
-          ),
-          IconButton(
-            tooltip: 'Setup and privacy',
-            onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const SettingsScreen()))
-                .then((_) => _refresh()),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            AppSpacing.xl,
-          ),
-          children: [
-            _WelcomeCard(onOpen: () => _openClass(CurriculumCatalog.classes.first)),
-            const SizedBox(height: AppSpacing.lg),
-            FutureBuilder<List<RecentCurriculumAccess>>(
-              future: _recentFuture,
-              builder: (context, snapshot) {
-                final items = snapshot.data ?? const [];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Open Settings',
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                    icon: const Icon(Icons.auto_awesome_rounded),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const Text('السلام علیکم', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              const Text('آج کیا تیار کرنا ہے؟'),
+              const SizedBox(height: AppSpacing.xl),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: AppSpacing.md,
+                  crossAxisSpacing: AppSpacing.md,
                   children: [
-                    const SectionHeader(
-                      title: 'Recently accessed',
-                      subtitle: 'Return to a topic without repeating the full path',
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    if (items.isEmpty)
-                      const BayazEmptyState(
-                        asset: 'assets/ui/illustrations/empty_library.webp',
-                        title: 'No recent topics yet',
-                        message: 'Open a curriculum topic and it will appear here.',
-                      )
-                    else
-                      for (final item in items.take(4)) ...[
-                        _RecentTopicCard(
-                          item: item,
-                          onTap: () => _openRecent(item),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                      ],
+                    _ActionTile(icon: Icons.menu_book_outlined, label: 'Prepare Lesson', onTap: () => _openClass(CurriculumCatalog.classes.first)),
+                    _ActionTile(icon: Icons.quiz_outlined, label: 'Create Test', onTap: () => _openClass(CurriculumCatalog.classes.first)),
+                    _ActionTile(icon: Icons.camera_alt_outlined, label: 'Grade Papers', onTap: () {}),
+                    _ActionTile(icon: Icons.refresh_rounded, label: 'Continue Recent', onTap: _refresh),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(
-              title: 'Browse coursework',
-              subtitle: 'Choose a class, then a subject, then a topic',
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            for (final curriculumClass in CurriculumCatalog.classes)
-              BayazCard(
-                onTap: () => _openClass(curriculumClass),
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.softBlue,
-                    child: Icon(Icons.school_outlined, color: AppColors.primary),
-                  ),
-                  title: Text(curriculumClass.name),
-                  subtitle: Text(
-                    '${curriculumClass.subjects.length} installed subject${curriculumClass.subjects.length == 1 ? '' : 's'}',
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -275,4 +223,10 @@ class _RecentTopicCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({required this.icon, required this.label, required this.onTap});
+  final IconData icon; final String label; final VoidCallback onTap;
+  @override Widget build(BuildContext context) => BayazCard(onTap: onTap, child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 32), const SizedBox(height: 8), Text(label, textAlign: TextAlign.center)])));
 }
