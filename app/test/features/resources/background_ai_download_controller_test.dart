@@ -93,4 +93,36 @@ void main() {
     expect(controller.state.completed, isFalse);
     expect(resources.languageInstalls + resources.embeddingInstalls, 0);
   });
+  test('manual download ignores the auto-download developer switch', () async {
+    final resources = _FakeResources(
+      languageInstalled: false,
+      embeddingInstalled: false,
+    );
+    final controller = BackgroundAiDownloadController(
+      resources: resources,
+      autoDownloadEnabled: false,
+    );
+
+    await controller.downloadMissing();
+
+    expect(controller.state.completed, isTrue);
+    expect(resources.languageInstalls, 1);
+    expect(resources.embeddingInstalls, 1);
+  });
+
+  test('refresh reflects resources removed outside the controller', () async {
+    final resources = _FakeResources(
+      languageInstalled: true,
+      embeddingInstalled: true,
+    );
+    final controller = BackgroundAiDownloadController(resources: resources);
+    await controller.refresh();
+    expect(controller.state.completed, isTrue);
+
+    resources.languageInstalled = false;
+    await controller.refresh();
+
+    expect(controller.state.running, isFalse);
+    expect(controller.state.completed, isFalse);
+  });
 }

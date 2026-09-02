@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:bayaz_ai/features/resources/background_ai_download_controller.dart';
 import 'package:bayaz_ai/features/resources/download_manager.dart';
+import 'package:bayaz_ai/features/resources/local_ai_resources.dart';
 import 'package:bayaz_ai/features/resources/resource_manager.dart';
 import 'package:bayaz_ai/features/resources/resource_manifest.dart';
 import 'package:bayaz_ai/features/settings/resource_management_screen.dart';
@@ -49,6 +51,49 @@ class _StubResourceManager extends ResourceManager {
   void dispose() {}
 }
 
+class _ManagerBackedResources extends LocalAiResources {
+  _ManagerBackedResources(this.manager);
+
+  final _StubResourceManager manager;
+
+  @override
+  Future<LocalAiAvailability> inspect() async => LocalAiAvailability(
+    languageModel: LocalAiComponentAvailability(
+      resource: _language,
+      installed: manager.installed.contains(_language.id),
+      downloadConfigured: true,
+    ),
+    embeddingModel: LocalAiComponentAvailability(
+      resource: _embedding,
+      installed: manager.installed.contains(_embedding.id),
+      downloadConfigured: true,
+    ),
+  );
+
+  @override
+  Future<File> installLanguageModel({
+    DownloadCancellationToken? cancellationToken,
+    void Function(DownloadProgress progress)? onProgress,
+  }) => manager.install(
+    _language.id,
+    cancellationToken: cancellationToken,
+    onProgress: onProgress,
+  );
+
+  @override
+  Future<File> installEmbeddingModel({
+    DownloadCancellationToken? cancellationToken,
+    void Function(DownloadProgress progress)? onProgress,
+  }) => manager.install(
+    _embedding.id,
+    cancellationToken: cancellationToken,
+    onProgress: onProgress,
+  );
+
+  @override
+  void dispose() {}
+}
+
 const _curriculum = ResourceDescriptor(
   id: 'curriculum.test',
   kind: ResourceKind.curriculumModule,
@@ -89,15 +134,28 @@ final _embedding = ResourceDescriptor(
   downloadUrl: Uri.parse('https://example.test/embedding'),
 );
 
-Future<void> _pump(WidgetTester tester, _StubResourceManager manager) async {
+Future<BackgroundAiDownloadController> _pump(
+  WidgetTester tester,
+  _StubResourceManager manager,
+) async {
+  final controller = BackgroundAiDownloadController(
+    resources: _ManagerBackedResources(manager),
+    autoDownloadEnabled: false,
+  );
   tester.view.physicalSize = const Size(600, 1200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
-    MaterialApp(home: ResourceManagementScreen(manager: manager)),
+    MaterialApp(
+      home: ResourceManagementScreen(
+        manager: manager,
+        downloadController: controller,
+      ),
+    ),
   );
   await tester.pumpAndSettle();
+  return controller;
 }
 
 void main() {
@@ -119,7 +177,7 @@ void main() {
   testWidgets('download begins with generic progress and can be cancelled', (
     tester,
   ) async {
-    final manager = _StubResourceManager([_language]);
+    final manager = _StubResourceManager([_language, _embedding]);
     await _pump(tester, manager);
     await tester.tap(find.text('Download Offline AI'));
     await tester.pump();
@@ -130,7 +188,7 @@ void main() {
       const DownloadProgress(receivedBytes: 50, totalBytes: 100),
     );
     await tester.pump();
-    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('25%'), findsOneWidget);
     manager.token!.cancel();
     manager.downloads.values.single.completeError(const DownloadCancelled());
     await tester.pumpAndSettle();
@@ -147,5 +205,23 @@ void main() {
     expect(find.text('Ready'), findsOneWidget);
     expect(find.text('Remove downloads'), findsOneWidget);
     expect(find.textContaining('.gguf'), findsNothing);
+  });
+  testWidgets('manual download uses the shared controller state', (
+    tester,
+  ) async {
+    final manager = _StubResourceManager([_language, _embedding]);
+    final controller = await _pump(tester, manager);
+
+    await tester.tap(find.text('Download Offline AI'));
+    await tester.pump();
+
+    expect(controller.state.running, isTrue);
+    expect(find.text('Downloading'), findsOneWidget);
+    expect(find.text('Download Offline AI'), findsNothing);
+    expect(find.text('Cancel'), findsOneWidget);
+
+    controller.cancel();
+    manager.downloads.values.single.completeError(const DownloadCancelled());
+    await tester.pumpAndSettle();
   });
 }

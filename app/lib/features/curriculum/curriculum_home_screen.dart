@@ -384,9 +384,12 @@ class _CurriculumHomeScreenState extends State<CurriculumHomeScreen> {
     if (override != null) {
       await override(context);
     } else {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              SettingsScreen(downloadController: widget.backgroundAiController),
+        ),
+      );
     }
     if (!mounted) return;
     setState(() {

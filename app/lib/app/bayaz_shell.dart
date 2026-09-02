@@ -27,21 +27,13 @@ class _BayazShellState extends State<BayazShell> {
   int _libraryRevision = 0;
   int _resultsRevision = 0;
   late final BackgroundAiDownloadController _backgroundAi;
-  late final bool _ownsBackgroundAi;
 
   @override
   void initState() {
     super.initState();
-    _ownsBackgroundAi = widget.backgroundAiController == null;
     _backgroundAi =
-        widget.backgroundAiController ?? BackgroundAiDownloadController();
+        widget.backgroundAiController ?? BackgroundAiDownloadController.shared;
     if (widget.autoStartAi) unawaited(_backgroundAi.startIfNeeded());
-  }
-
-  @override
-  void dispose() {
-    if (_ownsBackgroundAi) _backgroundAi.dispose();
-    super.dispose();
   }
 
   void _selectTab(int value) {

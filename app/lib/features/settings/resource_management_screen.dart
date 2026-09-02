@@ -1,16 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
-import '../resources/download_manager.dart';
+import '../resources/background_ai_download_controller.dart';
 import '../resources/resource_manager.dart';
 import '../resources/resource_manifest.dart';
 
 class ResourceManagementScreen extends StatefulWidget {
-  const ResourceManagementScreen({super.key, this.manager});
+  const ResourceManagementScreen({
+    super.key,
+    this.manager,
+    this.downloadController,
+  });
 
   final ResourceManager? manager;
+  final BackgroundAiDownloadController? downloadController;
 
   @override
   State<ResourceManagementScreen> createState() =>
@@ -19,12 +26,13 @@ class ResourceManagementScreen extends StatefulWidget {
 
 class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
   late final ResourceManager _manager = widget.manager ?? ResourceManager();
+  late final BackgroundAiDownloadController _downloads =
+      widget.downloadController ?? BackgroundAiDownloadController.shared;
+  StreamSubscription<BackgroundAiDownloadState>? _downloadSubscription;
   List<ResourceDescriptor> _resources = const [];
   final Set<String> _installed = {};
-  DownloadCancellationToken? _token;
   bool _loading = true;
-  bool _downloading = false;
-  double? _progress;
+  bool _downloadWasRunning = false;
   String? _error;
 
   bool get _ready =>
@@ -37,14 +45,26 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
   @override
   void initState() {
     super.initState();
+    _downloadWasRunning = _downloads.state.running;
+    _downloadSubscription = _downloads.stream.listen(_onDownloadState);
     _load();
   }
 
   @override
   void dispose() {
-    _token?.cancel();
+    _downloadSubscription?.cancel();
     _manager.dispose();
     super.dispose();
+  }
+
+  void _onDownloadState(BackgroundAiDownloadState state) {
+    if (!mounted) return;
+    final terminalAfterDownload = _downloadWasRunning && !state.running;
+    _downloadWasRunning = state.running;
+    setState(() {});
+    if (terminalAfterDownload || state.completed) {
+      unawaited(_load());
+    }
   }
 
   Future<void> _load() async {
@@ -77,58 +97,8 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
   }
 
   Future<void> _downloadAll() async {
-    if (_downloading) return;
-    final missing = _resources
-        .where((resource) => !_installed.contains(resource.id))
-        .toList(growable: false);
-    if (missing.isEmpty) return;
-    final token = DownloadCancellationToken();
-    setState(() {
-      _token = token;
-      _downloading = true;
-      _progress = null;
-      _error = null;
-    });
-    try {
-      for (var index = 0; index < missing.length; index++) {
-        final resource = missing[index];
-        if (!resource.isDownloadable) {
-          throw StateError('download unavailable');
-        }
-        await _manager.install(
-          resource.id,
-          cancellationToken: token,
-          onProgress: (progress) {
-            if (!mounted) return;
-            final combined =
-                (index + (progress.fraction ?? 0)) / missing.length.toDouble();
-            setState(() => _progress = combined.clamp(0, 1));
-          },
-        );
-        _installed.add(resource.id);
-      }
-      if (!mounted) return;
-      setState(() {
-        _downloading = false;
-        _token = null;
-        _progress = 1;
-      });
-    } on DownloadCancelled {
-      if (!mounted) return;
-      setState(() {
-        _downloading = false;
-        _token = null;
-        _progress = null;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _downloading = false;
-        _token = null;
-        _progress = null;
-        _error = 'The offline download needs attention.';
-      });
-    }
+    await _downloads.downloadMissing();
+    if (mounted) await _load();
   }
 
   Future<void> _removeAll() async {
@@ -157,11 +127,11 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
         await _manager.remove(resource.id);
       }
     }
+    await _downloads.refresh();
     if (!mounted) return;
     setState(() {
       _installed.clear();
       _error = null;
-      _progress = null;
     });
   }
 
@@ -176,13 +146,21 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
   );
 
   Widget _body(BuildContext context) {
-    final status = _downloading
+    final downloadState = _downloads.state;
+    final downloading = downloadState.running;
+    final ready = _ready || downloadState.completed;
+    final controllerError = downloadState.needsAttention
+        ? 'The offline download needs attention.'
+        : null;
+    final visibleError = _error ?? controllerError;
+    final status = downloading
         ? 'Downloading'
-        : _error != null
+        : visibleError != null
         ? 'Needs attention'
-        : _ready
+        : ready
         ? 'Ready'
         : 'Needs download';
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.md,
@@ -198,14 +176,12 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: _ready
+                    backgroundColor: ready
                         ? const Color(0xFFE7F6EC)
                         : AppColors.softBlue,
                     child: Icon(
-                      _ready
-                          ? Icons.check_rounded
-                          : Icons.offline_bolt_outlined,
-                      color: _ready ? AppColors.success : AppColors.primary,
+                      ready ? Icons.check_rounded : Icons.offline_bolt_outlined,
+                      color: ready ? AppColors.success : AppColors.primary,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -218,7 +194,7 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         Text(
-                          _ready
+                          ready
                               ? 'Offline features are available on this device.'
                               : 'Offline AI supports custom lessons, custom tests, and Ask Bayaz.',
                         ),
@@ -227,45 +203,45 @@ class _ResourceManagementScreenState extends State<ResourceManagementScreen> {
                   ),
                 ],
               ),
-              if (!_ready && !_downloading && _totalBytes > 0) ...[
+              if (!ready && !downloading && _totalBytes > 0) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text('Download size: about ${_formatBytes(_totalBytes)}'),
               ],
-              if (_downloading) ...[
+              if (downloading) ...[
                 const SizedBox(height: AppSpacing.lg),
-                LinearProgressIndicator(value: _progress),
+                LinearProgressIndicator(value: downloadState.progress),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  _progress == null
+                  downloadState.progress == null
                       ? 'Starting download…'
-                      : '${(_progress! * 100).round()}%',
+                      : '${(downloadState.progress! * 100).round()}%',
                 ),
               ],
-              if (_error != null) ...[
+              if (visibleError != null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  _error!,
+                  visibleError,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
               const SizedBox(height: AppSpacing.lg),
-              if (_downloading)
+              if (downloading)
                 OutlinedButton.icon(
-                  onPressed: () => _token?.cancel(),
+                  onPressed: _downloads.cancel,
                   icon: const Icon(Icons.close_rounded),
                   label: const Text('Cancel'),
                 )
-              else if (!_ready)
+              else if (!ready)
                 FilledButton.icon(
                   onPressed: _downloadAll,
                   icon: const Icon(Icons.download_rounded),
                   label: Text(
-                    _error == null
+                    visibleError == null
                         ? 'Download Offline AI'
                         : 'Try download again',
                   ),
                 ),
-              if (_hasAny && !_downloading) ...[
+              if (_hasAny && !downloading) ...[
                 const SizedBox(height: AppSpacing.xs),
                 TextButton(
                   onPressed: _removeAll,
