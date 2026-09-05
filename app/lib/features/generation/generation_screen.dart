@@ -62,7 +62,7 @@ class GenerationScreen extends StatefulWidget {
 enum _Phase { idle, preparing, retrieving, loadingModel, generating }
 
 class _GenerationScreenState extends State<GenerationScreen> {
-  final _rag = RagService();
+  late final RagService _rag;
   final _llama = LlamaCppService();
   final _modelHandoff = const LocalModelHandoff();
   final _routeLifecycle = LocalAiRouteLifecycle();
@@ -93,6 +93,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
   @override
   void initState() {
     super.initState();
+    _rag = RagService(teachingContext: widget.teachingContext);
     _offlineAiPolicy = widget.offlineAiPolicy ?? OfflineAiPolicy();
   }
 

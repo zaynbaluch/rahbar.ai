@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../curriculum/curriculum_module_registry.dart';
 import '../curriculum/teaching_context.dart';
 import '../resources/resource_manager.dart';
 import 'embedding_request.dart';
@@ -47,12 +48,19 @@ class GroundedPrompt {
 /// (cosine 0.9999998 query parity) so on-device results match the validated pipeline.
 /// See docs/decisions/ADR-004.
 class RagService {
-  RagService({Duration embeddingTimeout = const Duration(seconds: 30)})
-    : _embeddingRequests = EmbeddingRequestRunner(timeout: embeddingTimeout);
+  RagService({
+    TeachingContext? teachingContext,
+    Duration embeddingTimeout = const Duration(seconds: 30),
+  }) : _module = CurriculumModuleRegistry.resolve(teachingContext),
+       _embeddingRequests = EmbeddingRequestRunner(timeout: embeddingTimeout);
 
   static const int dim = 384;
 
+  final CurriculumModuleAssets _module;
   final EmbeddingRequestRunner _embeddingRequests;
+
+  String get moduleId => _module.moduleId;
+  String get curriculumAsset => _module.ragAsset;
   LlamaParent? _embedder;
   Database? _db;
   final Map<String, String> _templates = {}; // kind -> raw template text
@@ -81,8 +89,12 @@ class RagService {
 
       // --- curriculum.db: copy the read-only asset to a file sqlite3 can open. ---
       final support = await getApplicationSupportDirectory();
-      final dbPath = p.join(support.path, 'curriculum.db');
-      final dbBytes = await rootBundle.load('assets/rag/curriculum.db');
+      final safeModuleId = _module.moduleId.replaceAll(
+        RegExp(r'[^a-zA-Z0-9._-]'),
+        '_',
+      );
+      final dbPath = p.join(support.path, 'curriculum.$safeModuleId.db');
+      final dbBytes = await rootBundle.load(_module.ragAsset);
       await File(
         dbPath,
       ).writeAsBytes(dbBytes.buffer.asUint8List(), flush: true);
