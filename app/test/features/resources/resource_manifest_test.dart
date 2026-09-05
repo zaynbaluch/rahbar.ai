@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:convert';
 
+import 'package:bayaz_ai/features/curriculum/curriculum_module_registry.dart';
 import 'package:bayaz_ai/features/resources/resource_manifest.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
@@ -105,4 +107,31 @@ void main() {
       'ac63aeef935e5a4ca147ad6d966487bb0c23220ea20a5f49ad315614392f104e',
     );
   });
+
+  test('every supported curriculum module has bundled content and RAG assets', () {
+    final raw = File('assets/config/runtime_manifest.json').readAsStringSync();
+    final manifest = ResourceManifest.fromJson(
+      Map<String, Object?>.from(jsonDecode(raw) as Map),
+    );
+
+    for (final module in CurriculumModuleRegistry.modules) {
+      final content = manifest.resources.singleWhere(
+        (resource) => resource.id == module.moduleId,
+      );
+      final rag = manifest.resources.singleWhere(
+        (resource) => resource.id == '${module.moduleId}.rag',
+      );
+
+      expect(content.kind, ResourceKind.curriculumModule);
+      expect(content.classCode, module.classCode);
+      expect(content.subjectCode, module.subjectCode);
+      expect(content.bundledAsset, module.contentAsset);
+      expect(rag.kind, ResourceKind.curriculumModule);
+      expect(rag.classCode, module.classCode);
+      expect(rag.subjectCode, module.subjectCode);
+      expect(rag.bundledAsset, module.ragAsset);
+
+    }
+  });
+
 }
