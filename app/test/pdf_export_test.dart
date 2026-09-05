@@ -1,8 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rahbar_ai/features/export/pdf_export.dart';
-import 'package:rahbar_ai/features/generation/mcq_parser.dart';
+import 'package:bayaz_ai/features/export/pdf_export.dart';
+import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
+import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 
 // Real Qwen3 1.7B digestive-system test (same fixture as mcq_parser_test).
 const _qwen3 = '''
@@ -96,7 +97,66 @@ void main() {
     expect(bytes.lengthInBytes, greaterThan(2000));
 
     // Dump to a stable path so the harness can rasterize + inspect the layout.
-    final out = Platform.environment['PDF_OUT'] ?? '/tmp/rahbar_test.pdf';
+    final out = Platform.environment['PDF_OUT'] ?? '/tmp/bayaz_test.pdf';
     File(out).writeAsBytesSync(bytes);
+  });
+
+  test(
+    'refuses to export a paper that does not match its expected count',
+    () async {
+      final paper = McqTest(
+        topic: 'Incomplete paper',
+        expectedCount: 2,
+        questions: const [
+          McqQuestion(
+            number: 1,
+            difficulty: 'easy',
+            text: 'Only question',
+            options: {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
+            answer: 'A',
+          ),
+        ],
+      );
+
+      await expectLater(
+        PdfExport.build(paper),
+        throwsA(isA<InvalidMcqPaperException>()),
+      );
+    },
+  );
+
+  test('exports a valid fifteen-question OMR paper', () async {
+    final paper = McqTest(
+      topic: 'Cells',
+      expectedCount: 15,
+      questions: [
+        for (var i = 1; i <= 15; i++)
+          McqQuestion(
+            number: i,
+            difficulty: 'easy',
+            text: 'Question $i?',
+            options: const {'A': 'One', 'B': 'Two', 'C': 'Three', 'D': 'Four'},
+            answer: 'A',
+          ),
+      ],
+    );
+    final bytes = await PdfExport.build(
+      paper,
+      teachingContext: const TeachingContext(
+        className: 'Class 6',
+        subjectName: 'General Science',
+      ),
+    );
+    expect(bytes.lengthInBytes, greaterThan(2000));
+  });
+
+  test('lesson PDF teaching header comes from route context', () {
+    expect(
+      PdfExport.teachingLabel(
+        const TeachingContext(className: 'Class 8', subjectName: 'Biology'),
+      ),
+      'Class 8 · Biology',
+    );
+    expect(PdfExport.teachingLabel(null), isEmpty);
   });
 }

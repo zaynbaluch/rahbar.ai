@@ -1,0 +1,560 @@
+import 'dart:math' as math;
+
+import 'package:bayaz_ai/features/generation/mcq_parser.dart';
+import 'package:bayaz_ai/features/omr/omr_diagnostics.dart';
+import 'package:bayaz_ai/features/omr/omr_pipeline.dart';
+import 'package:bayaz_ai/features/omr/omr_template.dart';
+import 'package:bayaz_ai/features/omr/projective_mapper.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+
+McqTest _key({int count = 10}) => McqTest(
+  topic: 'Cells',
+  expectedCount: count,
+  questions: [
+    for (var i = 1; i <= count; i++)
+      McqQuestion(
+        number: i,
+        difficulty: 'easy',
+        text: 'Q$i',
+        options: const {'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd'},
+        answer: 'ABCD'[(i - 1) % 4],
+      ),
+  ],
+);
+
+img.Image _renderSheet({
+  int count = 10,
+  Set<int> blank = const {},
+  Map<int, Set<String>> extraMarks = const {},
+  Set<int> shadowRows = const {},
+  int paperLuminance = 246,
+}) {
+  final layout = OmrTemplate.layoutFor(count);
+  const scale = 4.0;
+  const pad = 18.0;
+  final originX = layout.boxLeft - pad;
+  final originY = layout.boxTop - pad;
+  final width = ((layout.boxW + 2 * pad) * scale).round();
+  final height = ((layout.boxH + 2 * pad) * scale).round();
+  final image = img.Image(width: width, height: height);
+  img.fill(
+    image,
+    color: img.ColorRgb8(paperLuminance, paperLuminance, paperLuminance),
+  );
+  int sx(double x) => ((x - originX) * scale).round();
+  int sy(double y) => ((y - originY) * scale).round();
+  final markerHalf = (layout.fidSize * scale / 2).round();
+  for (final (x, y) in layout.fiducials) {
+    img.fillRect(
+      image,
+      x1: sx(x) - markerHalf,
+      y1: sy(y) - markerHalf,
+      x2: sx(x) + markerHalf,
+      y2: sy(y) + markerHalf,
+      color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+  final black = img.ColorRgb8(0, 0, 0);
+  img.drawLine(
+    image,
+    x1: sx(layout.boxLeft),
+    y1: sy(layout.boxTop),
+    x2: sx(layout.boxRight),
+    y2: sy(layout.boxTop),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxRight),
+    y1: sy(layout.boxTop),
+    x2: sx(layout.boxRight),
+    y2: sy(layout.boxBottom),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxRight),
+    y1: sy(layout.boxBottom),
+    x2: sx(layout.boxLeft),
+    y2: sy(layout.boxBottom),
+    color: black,
+    thickness: 3,
+  );
+  img.drawLine(
+    image,
+    x1: sx(layout.boxLeft),
+    y1: sy(layout.boxBottom),
+    x2: sx(layout.boxLeft),
+    y2: sy(layout.boxTop),
+    color: black,
+    thickness: 3,
+  );
+  final radius = (layout.bubbleR * scale).round();
+  for (var q = 1; q <= count; q++) {
+    if (shadowRows.contains(q)) {
+      final y = sy(layout.rowY(q));
+      img.fillRect(
+        image,
+        x1: sx(layout.boxLeft + 18),
+        y1: y - radius * 2,
+        x2: sx(layout.boxRight - 10),
+        y2: y + radius * 2,
+        color: img.ColorRgb8(155, 155, 155),
+      );
+    }
+    final correct = 'ABCD'[(q - 1) % 4];
+    for (var c = 0; c < 4; c++) {
+      final option = 'ABCD'[c];
+      final (x, y) = layout.bubbleCenter(q, c);
+      img.drawCircle(
+        image,
+        x: sx(x),
+        y: sy(y),
+        radius: radius,
+        color: img.ColorRgb8(15, 15, 15),
+      );
+      final selected = !blank.contains(q) && correct == option;
+      final extra = extraMarks[q]?.contains(option) ?? false;
+      if (selected || extra) {
+        img.fillCircle(
+          image,
+          x: sx(x),
+          y: sy(y),
+          radius: radius - 2,
+          color: img.ColorRgb8(20, 20, 20),
+        );
+      }
+    }
+  }
+  return image;
+}
+
+img.Image _renderPerspectiveSheet() {
+  final layout = OmrTemplate.layoutFor(10);
+  final image = img.Image(width: 900, height: 1200);
+  img.fill(image, color: img.ColorRgb8(242, 242, 242));
+  final corners = <(double, double)>[
+    (130, 100),
+    (790, 175),
+    (720, 1085),
+    (190, 1015),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 24,
+      y1: y.round() - 24,
+      x2: x.round() + 24,
+      y2: y.round() + 24,
+      color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+  final black = img.ColorRgb8(0, 0, 0);
+  for (var i = 0; i < 4; i++) {
+    final a = corners[i];
+    final b = corners[(i + 1) % 4];
+    img.drawLine(
+      image,
+      x1: a.$1.round(),
+      y1: a.$2.round(),
+      x2: b.$1.round(),
+      y2: b.$2.round(),
+      color: black,
+      thickness: 3,
+    );
+  }
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (u, v) = layout.bubbleNorm(q, c);
+      final (x, y) = mapper.map(u, v);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 23,
+        color: img.ColorRgb8(15, 15, 15),
+      );
+      if ('ABCD'[c] == 'ABCD'[(q - 1) % 4]) {
+        img.fillCircle(
+          image,
+          x: x.round(),
+          y: y.round(),
+          radius: 21,
+          color: img.ColorRgb8(20, 20, 20),
+        );
+      }
+    }
+  }
+  return image;
+}
+
+img.Image _renderFullPageBayazSheet({int clutterSquares = 24}) {
+  final layout = OmrTemplate.layoutFor(10);
+  final image = img.Image(width: 1500, height: 2000);
+  img.fill(image, color: img.ColorRgb8(238, 238, 238));
+  final black = img.ColorRgb8(12, 12, 12);
+
+  // Deliberately place the complete answer box in the upper-right of the
+  // photograph. All four true fiducials are right of the image midpoint, so a
+  // global-image quadrant assumption cannot find this valid Bayaz sheet.
+  final corners = <(double, double)>[
+    (930, 150),
+    (1390, 185),
+    (1370, 835),
+    (910, 805),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 24,
+      y1: y.round() - 24,
+      x2: x.round() + 24,
+      y2: y.round() + 24,
+      color: black,
+    );
+  }
+  for (var i = 0; i < 4; i++) {
+    final a = corners[i];
+    final b = corners[(i + 1) % 4];
+    img.drawLine(
+      image,
+      x1: a.$1.round(),
+      y1: a.$2.round(),
+      x2: b.$1.round(),
+      y2: b.$2.round(),
+      color: black,
+      thickness: 3,
+    );
+  }
+
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (u, v) = layout.bubbleNorm(q, c);
+      final (x, y) = mapper.map(u, v);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 18,
+        color: black,
+      );
+      if ('ABCD'[c] == 'ABCD'[(q - 1) % 4]) {
+        img.fillCircle(
+          image,
+          x: x.round(),
+          y: y.round(),
+          radius: 16,
+          color: img.ColorRgb8(25, 25, 25),
+        );
+      }
+    }
+  }
+
+  // Full-page question text / UI clutter. Some blocks are intentionally
+  // square-ish and dark so candidate extraction sees many plausible distractors.
+  for (var i = 0; i < clutterSquares; i++) {
+    final x = 45 + (i % 6) * 120;
+    final y = 120 + (i ~/ 6) * 165;
+    final size = 18 + (i % 3) * 4;
+    img.fillRect(
+      image,
+      x1: x,
+      y1: y,
+      x2: x + size,
+      y2: y + size,
+      color: img.ColorRgb8(35, 35, 35),
+    );
+    img.drawLine(
+      image,
+      x1: x + size + 12,
+      y1: y + size ~/ 2,
+      x2: math.min(850, x + size + 190),
+      y2: y + size ~/ 2,
+      color: img.ColorRgb8(70, 70, 70),
+      thickness: 2,
+    );
+  }
+  return image;
+}
+
+img.Image _renderFullPageWithDecoyQuadrilateral() {
+  final image = _renderFullPageBayazSheet(clutterSquares: 8);
+  final black = img.ColorRgb8(0, 0, 0);
+
+  // A larger, cleaner four-square rectangle elsewhere on the page deliberately
+  // outranks the real OMR box on geometry alone. It has no Bayaz border/bubbles,
+  // so template verification must reject it and try another hypothesis.
+  const decoy = <(int, int)>[(90, 1040), (650, 1040), (650, 1830), (90, 1830)];
+  for (final (x, y) in decoy) {
+    img.fillRect(
+      image,
+      x1: x - 28,
+      y1: y - 28,
+      x2: x + 28,
+      y2: y + 28,
+      color: black,
+    );
+  }
+  return image;
+}
+
+img.Image _renderForeignTemplateSheet({int paperLuminance = 246}) {
+  final image = img.Image(width: 900, height: 1200);
+  img.fill(
+    image,
+    color: img.ColorRgb8(paperLuminance, paperLuminance, paperLuminance),
+  );
+  final corners = <(double, double)>[
+    (90, 85),
+    (810, 85),
+    (810, 1115),
+    (90, 1115),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 22,
+      y1: y.round() - 22,
+      x2: x.round() + 22,
+      y2: y.round() + 22,
+      color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+
+  // This deliberately mirrors the first image-generated smoke sheet: valid
+  // square markers, but a bubble grid that is not the Bayaz PDF template.
+  const columns = [.33, .485, .638, .789];
+  const rows = [.271, .339, .408, .474, .541, .607, .673, .736, .800, .864];
+  for (var q = 0; q < 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (x, y) = mapper.map(columns[c], rows[q]);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 20,
+        color: img.ColorRgb8(15, 15, 15),
+      );
+      if ('ABCD'[c] == 'BDACBDCABD'[q]) {
+        img.fillCircle(
+          image,
+          x: x.round(),
+          y: y.round(),
+          radius: 18,
+          color: img.ColorRgb8(20, 20, 20),
+        );
+      }
+    }
+  }
+  return image;
+}
+
+img.Image _renderAliasedTemplateSheet() {
+  final layout = OmrTemplate.layoutFor(10);
+  final image = img.Image(width: 900, height: 1200);
+  img.fill(image, color: img.ColorRgb8(246, 246, 246));
+  final corners = <(double, double)>[
+    (90, 85),
+    (810, 85),
+    (810, 1115),
+    (90, 1115),
+  ];
+  final mapper = ProjectiveMapper.fromUnitSquare(corners)!;
+  for (final (x, y) in corners) {
+    img.fillRect(
+      image,
+      x1: x.round() - 22,
+      y1: y.round() - 22,
+      x2: x.round() + 22,
+      y2: y.round() + 22,
+      color: img.ColorRgb8(0, 0, 0),
+    );
+  }
+
+  // A deliberately wrong lookalike: it uses Bayaz's column spacing and row
+  // pitch, but the entire bubble grid is shifted down by exactly one row.
+  // A bubble-only verifier can therefore alias Q2..Q10 onto Q1..Q9 and
+  // report ~36/40 matches even though this is not the Bayaz PDF template.
+  for (var q = 1; q <= 10; q++) {
+    for (var c = 0; c < 4; c++) {
+      final (u, _) = layout.bubbleNorm(q, c);
+      final (_, shiftedV) = layout.bubbleNorm(math.min(q + 1, 10), c);
+      final v = q == 10 ? shiftedV + layout.rowPitch / layout.boxH : shiftedV;
+      final (x, y) = mapper.map(u, v);
+      img.drawCircle(
+        image,
+        x: x.round(),
+        y: y.round(),
+        radius: 20,
+        color: img.ColorRgb8(15, 15, 15),
+      );
+    }
+  }
+  return image;
+}
+
+void main() {
+  test('pipeline grades a clean sheet and records stage diagnostics', () {
+    final result = OmrPipeline.scan(_renderSheet(), _key());
+
+    expect(result.fiducialsFound, isTrue);
+    expect(result.correct, 10);
+    expect(result.needsReview, 0);
+    expect(result.diagnostics, isNotNull);
+    expect(result.diagnostics!.status, OmrScanStatus.complete);
+    expect(result.diagnostics!.rows, hasLength(10));
+    expect(result.diagnostics!.markThreshold, inInclusiveRange(.10, .32));
+    expect(
+      result.diagnostics!.stageTimingsMs.keys,
+      containsAll(['quality', 'registration', 'rectification', 'analysis']),
+    );
+  });
+
+  test('pipeline still accepts a dim but structurally correct Bayaz sheet', () {
+    final result = OmrPipeline.scan(_renderSheet(paperLuminance: 170), _key());
+
+    expect(result.diagnostics!.status, OmrScanStatus.complete);
+    expect(result.correct, 10);
+    expect(result.needsReview, 0);
+    expect(result.diagnostics!.templateMatchedBubbles, 40);
+    expect(result.diagnostics!.templateBorderCoverage, greaterThan(.90));
+  });
+
+  test(
+    'pipeline survives perspective distortion after canonical rectification',
+    () {
+      final result = OmrPipeline.scan(_renderPerspectiveSheet(), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.correct, 10);
+      expect(result.diagnostics!.registrationScore, greaterThan(.45));
+    },
+  );
+
+  test('pipeline uses local contrast under an uneven dark band', () {
+    final result = OmrPipeline.scan(
+      _renderSheet(shadowRows: const {4, 5, 6}),
+      _key(),
+    );
+
+    expect(result.fiducialsFound, isTrue);
+    expect(result.correct, 10);
+  });
+
+  test('pipeline sends blank and double-mark rows to teacher review', () {
+    final result = OmrPipeline.scan(
+      _renderSheet(
+        blank: const {7},
+        extraMarks: const {
+          3: {'A'},
+        },
+      ),
+      _key(),
+    );
+
+    expect(result.questions[2].decision, OmrDecisionKind.ambiguous);
+    expect(result.questions[2].marked, isNull);
+    expect(result.questions[6].decision, OmrDecisionKind.blank);
+    expect(result.needsReview, 2);
+  });
+
+  test(
+    'registration failure returns actionable diagnostics instead of guessing',
+    () {
+      final image = img.Image(width: 900, height: 1200);
+      img.fill(image, color: img.ColorRgb8(245, 245, 245));
+
+      final result = OmrPipeline.scan(image, _key());
+
+      expect(result.fiducialsFound, isFalse);
+      expect(result.correct, 0);
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode, OmrFailureCode.fiducialsNotFound);
+      expect(result.diagnostics!.registrationNote, isNotEmpty);
+      expect(
+        result.diagnostics!.toReport(),
+        contains('failure=fiducialsNotFound'),
+      );
+    },
+  );
+
+  test(
+    'template verification rejects a row-shifted alias grid without the Bayaz border',
+    () {
+      final result = OmrPipeline.scan(_renderAliasedTemplateSheet(), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(
+        result.diagnostics!.templateMatchedBubbles,
+        greaterThanOrEqualTo(32),
+      );
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode, OmrFailureCode.templateMismatch);
+    },
+  );
+
+  test(
+    'template verification rejects a dim foreign sheet instead of treating gray paper as print',
+    () {
+      final result = OmrPipeline.scan(
+        _renderForeignTemplateSheet(paperLuminance: 170),
+        _key(),
+      );
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode, OmrFailureCode.templateMismatch);
+      expect(result.correct, 0);
+    },
+  );
+
+  test(
+    'pipeline locates a valid Bayaz answer box anywhere on a cluttered full page',
+    () {
+      final result = OmrPipeline.scan(
+        _renderFullPageBayazSheet(clutterSquares: 36),
+        _key(),
+      );
+
+      expect(result.diagnostics!.status, OmrScanStatus.complete);
+      expect(result.correct, 10);
+      expect(result.needsReview, 0);
+      expect(result.diagnostics!.markerCandidateCount, greaterThan(4));
+    },
+  );
+
+  test(
+    'pipeline verifies multiple bounded hypotheses when geometry alone picks a decoy',
+    () {
+      final result = OmrPipeline.scan(
+        _renderFullPageWithDecoyQuadrilateral(),
+        _key(),
+      );
+
+      expect(result.diagnostics!.status, OmrScanStatus.complete);
+      expect(result.correct, 10);
+      expect(result.needsReview, 0);
+      expect(result.diagnostics!.registrationNote, contains('hypotheses'));
+    },
+  );
+
+  test(
+    'pipeline rejects a registered sheet whose bubble grid is not the Bayaz template',
+    () {
+      final result = OmrPipeline.scan(_renderForeignTemplateSheet(), _key());
+
+      expect(result.fiducialsFound, isTrue);
+      expect(result.diagnostics!.status, OmrScanStatus.rejected);
+      expect(result.diagnostics!.failureCode.name, 'templateMismatch');
+      expect(result.correct, 0);
+      expect(result.diagnostics!.toReport(), contains('template'));
+    },
+  );
+}

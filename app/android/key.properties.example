@@ -1,0 +1,5 @@
+# Copy this file to key.properties. Never commit the real file.
+storeFile=/absolute/path/to/bayaz-release.jks
+storePassword=replace-me
+keyAlias=bayaz-release
+keyPassword=replace-me

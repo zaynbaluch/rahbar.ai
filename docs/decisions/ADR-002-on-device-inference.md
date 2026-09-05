@@ -1,5 +1,8 @@
 # ADR-002 — On-device inference engine: flutter_gemma (LiteRT), llama.cpp as fallback
 
+> **Status: Superseded for production runtime.** Real-device experiments selected llama.cpp through the pinned `llama_cpp_dart` dependency. This ADR is retained as historical research; see `../01-architecture.md` and `../resources/MODEL_AND_MODULE_DELIVERY.md`.
+
+
 **Status:** Accepted (pending Week-1 spike confirmation) · **Date:** 2026-07-04
 
 ## Context

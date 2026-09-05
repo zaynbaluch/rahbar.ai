@@ -1,0 +1,542 @@
+{
+  "palette": {
+    "primary": "#003CFF",
+    "secondary": "#FFC300",
+    "canvas": "#F7F9FF",
+    "navy": "#0B1F5B",
+    "success": "#198754",
+    "error": "#D64545"
+  },
+  "animations": {
+    "grading_complete_spritesheet.png": {
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 3,
+      "frameCount": 12,
+      "suggestedFps": 8,
+      "loop": false
+    },
+    "lesson_saved_spritesheet.png": {
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 3,
+      "frameCount": 12,
+      "suggestedFps": 8,
+      "loop": false
+    },
+    "scanning_answers_spritesheet.png": {
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 3,
+      "frameCount": 12,
+      "suggestedFps": 8,
+      "loop": true
+    },
+    "test_ready_spritesheet.png": {
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 3,
+      "frameCount": 12,
+      "suggestedFps": 8,
+      "loop": false
+    }
+  },
+  "assets": {
+    "animations/frames/grading_complete/01.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/02.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/03.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/04.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/05.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/06.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/07.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/08.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/09.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/10.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/11.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/grading_complete/12.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/01.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/02.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/03.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/04.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/05.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/06.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/07.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/08.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/09.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/10.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/11.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/lesson_saved/12.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/01.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/02.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/03.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/04.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/05.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/06.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/07.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/08.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/09.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/10.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/11.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/scanning_answers/12.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/01.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/02.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/03.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/04.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/05.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/06.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/07.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/08.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/09.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/10.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/11.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/frames/test_ready/12.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/grading_complete_spritesheet.png": {
+      "width": 2048,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/lesson_saved_spritesheet.png": {
+      "width": 2048,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/scanning_answers_spritesheet.png": {
+      "width": 2048,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "animations/test_ready_spritesheet.png": {
+      "width": 2048,
+      "height": 1536,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "branding/launcher_192.png": {
+      "width": 192,
+      "height": 192,
+      "mode": "RGBA",
+      "transparent": false
+    },
+    "branding/launcher_512.png": {
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "transparent": false
+    },
+    "branding/launcher_source_1024.png": {
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA",
+      "transparent": false
+    },
+    "branding/rahbar_logo_horizontal.png": {
+      "width": 1319,
+      "height": 394,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "branding/rahbar_mark.png": {
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "branding/rahbar_mark.svg": {
+      "format": "svg",
+      "validXml": true
+    },
+    "branding/rahbar_mark_dark.png": {
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "branding/rahbar_mark_dark.svg": {
+      "format": "svg",
+      "validXml": true
+    },
+    "branding/rahbar_mark_white.png": {
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "branding/rahbar_mark_white.svg": {
+      "format": "svg",
+      "validXml": true
+    },
+    "branding/rahbar_wordmark.png": {
+      "width": 1038,
+      "height": 167,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "grading/omr_alignment_example.png": {
+      "width": 900,
+      "height": 900,
+      "mode": "RGB",
+      "transparent": false
+    },
+    "grading/omr_alignment_example.webp": {
+      "width": 900,
+      "height": 900,
+      "mode": "RGB",
+      "transparent": false
+    },
+    "grading/omr_bad_capture_example.png": {
+      "width": 900,
+      "height": 900,
+      "mode": "RGB",
+      "transparent": false
+    },
+    "grading/omr_bad_capture_example.webp": {
+      "width": 900,
+      "height": 900,
+      "mode": "RGB",
+      "transparent": false
+    },
+    "grading/omr_capture_guide.png": {
+      "width": 1080,
+      "height": 1350,
+      "mode": "RGB",
+      "transparent": false
+    },
+    "grading/omr_capture_guide.webp": {
+      "width": 1080,
+      "height": 1350,
+      "mode": "RGB",
+      "transparent": false
+    },
+    "illustrations/create_lesson_plan.png": {
+      "width": 675,
+      "height": 698,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/create_lesson_plan.webp": {
+      "width": 675,
+      "height": 698,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/create_mcq_test.png": {
+      "width": 711,
+      "height": 711,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/create_mcq_test.webp": {
+      "width": 711,
+      "height": 711,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/empty_library.png": {
+      "width": 619,
+      "height": 588,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/empty_library.webp": {
+      "width": 619,
+      "height": 588,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/empty_results.png": {
+      "width": 610,
+      "height": 585,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/empty_results.webp": {
+      "width": 610,
+      "height": 585,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/no_saved_lessons.png": {
+      "width": 800,
+      "height": 600,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/no_saved_lessons.webp": {
+      "width": 800,
+      "height": 600,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/no_saved_tests.png": {
+      "width": 800,
+      "height": 600,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/no_saved_tests.webp": {
+      "width": 800,
+      "height": 600,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/no_search_results.png": {
+      "width": 633,
+      "height": 593,
+      "mode": "RGBA",
+      "transparent": true
+    },
+    "illustrations/no_search_results.webp": {
+      "width": 633,
+      "height": 593,
+      "mode": "RGBA",
+      "transparent": true
+    }
+  }
+}

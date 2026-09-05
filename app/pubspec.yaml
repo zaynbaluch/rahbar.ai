@@ -1,5 +1,5 @@
-name: rahbar_ai
-description: "A new Flutter project."
+name: bayaz_ai
+description: "Offline-first teacher toolkit for Class 6 General Science."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -33,26 +33,19 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
-  flutter_gemma: ^1.2.0
   # Vendored (git v0.2.0 + pinned llama.cpp submodule); run scripts/setup-llama.sh.
   # Primary on-device runtime for budget devices — see ADR-002.
   llama_cpp_dart:
     path: ../third_party/llama_cpp_dart
-  drift: ^2.34.0
   sqlite3: ^3.0.0 # raw read of the bundled curriculum.db (RAG vectors)
   sqlite3_flutter_libs: ^0.6.0 # bundles the native libsqlite3 for Android
   path_provider: ^2.1.6
   path: ^1.9.1
   pdf: ^3.13.0
   printing: ^5.15.0
-  qr_flutter: ^4.1.0
-  mobile_scanner: ^7.2.0
-  drift_flutter: ^0.3.0
-  flutter_gemma_mediapipe: ^1.0.3
-  flutter_gemma_litertlm: ^1.0.2
   image: ^4.9.1
   image_picker: ^1.2.3
+  crypto: ^3.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -63,8 +56,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  drift_dev: ^2.34.1+1
-  build_runner: ^2.15.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -81,6 +72,18 @@ flutter:
     - assets/rag/curriculum.db # prebuilt vector DB (bge-small, 384-dim, 341 chunks)
     - assets/content/content_pack.db # verified MCQ bank + 5E section variants (ADR-008)
     - assets/prompts/ # grounded templates for the on-device escape hatch
+    - assets/ui/ # metadata files stored directly in the UI asset root
+    - assets/config/ # runtime resource manifest and module metadata
+    - assets/curricula/pk/class7/general_science/
+    - assets/curricula/pk/class7/history/
+    - assets/ui/branding/
+    - assets/ui/illustrations/
+    - assets/ui/grading/
+    - assets/ui/animations/
+    - assets/ui/animations/frames/grading_complete/
+    - assets/ui/animations/frames/lesson_saved/
+    - assets/ui/animations/frames/scanning_answers/
+    - assets/ui/animations/frames/test_ready/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

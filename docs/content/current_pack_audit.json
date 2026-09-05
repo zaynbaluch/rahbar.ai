@@ -1,0 +1,348 @@
+{
+  "pack": "app\\assets\\content\\content_pack.db",
+  "integrity": "ok",
+  "topic_count": 88,
+  "verified_item_count": 1447,
+  "answer_counts": {
+    "A": 196,
+    "B": 732,
+    "C": 441,
+    "D": 78
+  },
+  "answer_percentages": {
+    "A": 13.55,
+    "B": 50.59,
+    "C": 30.48,
+    "D": 5.39
+  },
+  "thin_topics": [
+    {
+      "id": "ch05-5_1_1-461a",
+      "chapter": 5,
+      "section_no": "5.1.1",
+      "title": "Particles in Material Objects",
+      "n_items": 5
+    }
+  ],
+  "normalized_duplicate_stem_groups": 62,
+  "normalized_duplicate_stem_items": 138,
+  "duplicate_stem_examples": [
+    [
+      {
+        "id": "ch01-1_1-7cf7-q003",
+        "topic_id": "ch01-1_1-7cf7",
+        "stem": "What is the function of the cell membrane?"
+      },
+      {
+        "id": "ch01-1_1_1-5970-q001",
+        "topic_id": "ch01-1_1_1-5970",
+        "stem": "What is the function of the cell membrane?"
+      }
+    ],
+    [
+      {
+        "id": "ch01-1_1-7cf7-q004",
+        "topic_id": "ch01-1_1-7cf7",
+        "stem": "What is the main function of the cytoplasm?"
+      },
+      {
+        "id": "ch01-1_1_1-5970-q003",
+        "topic_id": "ch01-1_1_1-5970",
+        "stem": "What is the main function of the cytoplasm?"
+      }
+    ],
+    [
+      {
+        "id": "ch01-1_1_1-5970-q019",
+        "topic_id": "ch01-1_1_1-5970",
+        "stem": "Which of the following is a function of the nucleus?"
+      },
+      {
+        "id": "ch01-1_1_4-0703-q005",
+        "topic_id": "ch01-1_1_4-0703",
+        "stem": "Which of the following is a function of the nucleus?"
+      }
+    ],
+    [
+      {
+        "id": "ch01-1_1_2-08db-q008",
+        "topic_id": "ch01-1_1_2-08db",
+        "stem": "Which of the following is a function of the circulatory system?"
+      },
+      {
+        "id": "ch01-1_3_1-e5b8-q002",
+        "topic_id": "ch01-1_3_1-e5b8",
+        "stem": "Which of the following is a function of the circulatory system?"
+      }
+    ],
+    [
+      {
+        "id": "ch01-1_1_4-0703-q001",
+        "topic_id": "ch01-1_1_4-0703",
+        "stem": "Which of the following is made up of different tissues?"
+      },
+      {
+        "id": "ch01-1_3_1-e5b8-q015",
+        "topic_id": "ch01-1_3_1-e5b8",
+        "stem": "Which of the following is made up of different tissues?"
+      }
+    ],
+    [
+      {
+        "id": "ch01-1_3-c9d3-q012",
+        "topic_id": "ch01-1_3-c9d3",
+        "stem": "Which of the following is an example of an organ system?"
+      },
+      {
+        "id": "ch01-1_3_1-e5b8-q012",
+        "topic_id": "ch01-1_3_1-e5b8",
+        "stem": "Which of the following is an example of an organ system?"
+      }
+    ],
+    [
+      {
+        "id": "ch01-1_3-c9d3-q013",
+        "topic_id": "ch01-1_3-c9d3",
+        "stem": "Which of the following is a function of the respiratory system?"
+      },
+      {
+        "id": "ch01-1_3_1-e5b8-q001",
+        "topic_id": "ch01-1_3_1-e5b8",
+        "stem": "Which of the following is a function of the respiratory system?"
+      }
+    ],
+    [
+      {
+        "id": "ch02-2_1-3d2c-q005",
+        "topic_id": "ch02-2_1-3d2c",
+        "stem": "Which of the following is an example of natural vegetative propagation?"
+      },
+      {
+        "id": "ch02-2_1_2-9f1b-q002",
+        "topic_id": "ch02-2_1_2-9f1b",
+        "stem": "Which of the following is an example of natural vegetative propagation?"
+      },
+      {
+        "id": "ch02-2_1_3-f448-q007",
+        "topic_id": "ch02-2_1_3-f448",
+        "stem": "Which of the following is an example of natural vegetative propagation?"
+      }
+    ],
+    [
+      {
+        "id": "ch02-2_1_2-9f1b-q009",
+        "topic_id": "ch02-2_1_2-9f1b",
+        "stem": "Which of the following is an example of artificial vegetative propagation?"
+      },
+      {
+        "id": "ch02-2_1_3-f448-q003",
+        "topic_id": "ch02-2_1_3-f448",
+        "stem": "Which of the following is an example of artificial vegetative propagation?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_1_1-e5b1-q000",
+        "topic_id": "ch03-3_1_1-e5b1",
+        "stem": "Which of the following is a source of carbohydrates?"
+      },
+      {
+        "id": "ch03-3_2-3ecf-q010",
+        "topic_id": "ch03-3_2-3ecf",
+        "stem": "Which of the following is a source of carbohydrates?"
+      },
+      {
+        "id": "ch03-3_3-e786-q004",
+        "topic_id": "ch03-3_3-e786",
+        "stem": "Which of the following is a source of carbohydrates?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_1_1-e5b1-q013",
+        "topic_id": "ch03-3_1_1-e5b1",
+        "stem": "Which of the following is a function of vitamins?"
+      },
+      {
+        "id": "ch03-3_1_4-a0ee-q001",
+        "topic_id": "ch03-3_1_4-a0ee",
+        "stem": "Which of the following is a function of vitamins?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_1_3-7bce-q003",
+        "topic_id": "ch03-3_1_3-7bce",
+        "stem": "What is the role of fats in the body?"
+      },
+      {
+        "id": "ch03-3_2-3ecf-q011",
+        "topic_id": "ch03-3_2-3ecf",
+        "stem": "What is the role of fats in the body?"
+      },
+      {
+        "id": "ch03-3_3-e786-q003",
+        "topic_id": "ch03-3_3-e786",
+        "stem": "What is the role of fats in the body?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_1_4-a0ee-q003",
+        "topic_id": "ch03-3_1_4-a0ee",
+        "stem": "Which of the following is a fat-soluble vitamin?"
+      },
+      {
+        "id": "ch03-3_2_2-cd0e-q003",
+        "topic_id": "ch03-3_2_2-cd0e",
+        "stem": "Which of the following is a fat-soluble vitamin?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_1_7-4df5-q003",
+        "topic_id": "ch03-3_1_7-4df5",
+        "stem": "Which of the following is a compound?"
+      },
+      {
+        "id": "ch07-7_2_1-d4a4-q003",
+        "topic_id": "ch07-7_2_1-d4a4",
+        "stem": "Which of the following is a compound?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_2-3ecf-q008",
+        "topic_id": "ch03-3_2-3ecf",
+        "stem": "Which of the following is a consequence of an unbalanced diet?"
+      },
+      {
+        "id": "ch03-3_2_1-6bfa-q019",
+        "topic_id": "ch03-3_2_1-6bfa",
+        "stem": "Which of the following is a consequence of an unbalanced diet?"
+      }
+    ],
+    [
+      {
+        "id": "ch03-3_2-3ecf-q017",
+        "topic_id": "ch03-3_2-3ecf",
+        "stem": "Which of the following is a source of proteins?"
+      },
+      {
+        "id": "ch03-3_3-e786-q013",
+        "topic_id": "ch03-3_3-e786",
+        "stem": "Which of the following is a source of proteins?"
+      }
+    ],
+    [
+      {
+        "id": "ch04-4_1-e09b-q012",
+        "topic_id": "ch04-4_1-e09b",
+        "stem": "Which of the following is a digestive gland?"
+      },
+      {
+        "id": "ch04-4_1_1-0e8e-q003",
+        "topic_id": "ch04-4_1_1-0e8e",
+        "stem": "Which of the following is a digestive gland?"
+      },
+      {
+        "id": "ch04-4_2-4c9f-q000",
+        "topic_id": "ch04-4_2-4c9f",
+        "stem": "Which of the following is a digestive gland?"
+      },
+      {
+        "id": "ch04-4_3-d49c-q010",
+        "topic_id": "ch04-4_3-d49c",
+        "stem": "Which of the following is a digestive gland?"
+      }
+    ],
+    [
+      {
+        "id": "ch04-4_1-e09b-q014",
+        "topic_id": "ch04-4_1-e09b",
+        "stem": "What is the main function of the digestive system?"
+      },
+      {
+        "id": "ch04-4_1_1-0e8e-q000",
+        "topic_id": "ch04-4_1_1-0e8e",
+        "stem": "What is the main function of the digestive system?"
+      },
+      {
+        "id": "ch04-4_3-d49c-q001",
+        "topic_id": "ch04-4_3-d49c",
+        "stem": "What is the main function of the digestive system?"
+      }
+    ],
+    [
+      {
+        "id": "ch04-4_1_2-68fe-q008",
+        "topic_id": "ch04-4_1_2-68fe",
+        "stem": "Which of the following is true about the large intestine?"
+      },
+      {
+        "id": "ch04-4_3_2-2e93-q010",
+        "topic_id": "ch04-4_3_2-2e93",
+        "stem": "Which of the following is true about the large intestine?"
+      }
+    ],
+    [
+      {
+        "id": "ch04-4_1_2-68fe-q012",
+        "topic_id": "ch04-4_1_2-68fe",
+        "stem": "Which of the following is a function of the small intestine?"
+      },
+      {
+        "id": "ch04-4_3-d49c-q011",
+        "topic_id": "ch04-4_3-d49c",
+        "stem": "Which of the following is a function of the small intestine?"
+      },
+      {
+        "id": "ch04-4_3_1-7e81-q009",
+        "topic_id": "ch04-4_3_1-7e81",
+        "stem": "Which of the following is a function of the small intestine?"
+      },
+      {
+        "id": "ch04-4_3_3-73cc-q009",
+        "topic_id": "ch04-4_3_3-73cc",
+        "stem": "Which of the following is a function of the small intestine?"
+      }
+    ]
+  ],
+  "duplicate_section_numbers": [
+    {
+      "chapter": 1,
+      "section_no": "1.3.1",
+      "topics": [
+        "Organs and Organ Systems in Plants",
+        "Organs and Organ Systems in Human Body"
+      ]
+    },
+    {
+      "chapter": 8,
+      "section_no": "8.4",
+      "topics": [
+        "Law of Conservation of Energy",
+        "Sources of Energy"
+      ]
+    },
+    {
+      "chapter": 9,
+      "section_no": "9.2",
+      "topics": [
+        "Current Electricity",
+        "Electromagnets"
+      ]
+    },
+    {
+      "chapter": 11,
+      "section_no": "11.3",
+      "topics": [
+        "Preparation of Cheese at Home",
+        "How to Make a Solar Oven and Assemble an Electric Bell"
+      ]
+    }
+  ],
+  "unsafe_plan_variant_count": 0,
+  "unsafe_plan_variant_examples": [],
+  "incomplete_plans": []
+}

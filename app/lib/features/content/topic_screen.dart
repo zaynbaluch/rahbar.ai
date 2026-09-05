@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../../design_system/components/bayaz_card.dart';
+import '../../design_system/components/status_chip.dart';
+import '../../design_system/theme/app_colors.dart';
+import '../../design_system/theme/app_spacing.dart';
+import '../generation/generation_screen.dart';
+import '../resources/offline_ai_navigation.dart';
 import '../generation/lesson_plan_view.dart';
+import '../generation/mcq_parser.dart';
 import '../generation/mcq_test_view.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import 'content_service.dart';
 
-/// One topic: draw a test or assemble a lesson plan. Both are **instant** — the content
-/// was generated and verified off-device (ADR-008), so nothing runs a model here.
-///
-/// The old flow spent ~3.5 min per artifact and throttled hard on a second run. This one
-/// has no dead air, which is what makes the demo work.
+/// Existing topic workspace: lesson-plan assembly and MCQ-paper sampling.
 class TopicScreen extends StatefulWidget {
   const TopicScreen({super.key, required this.content, required this.topic});
 
@@ -23,59 +26,116 @@ class TopicScreen extends StatefulWidget {
 
 class _TopicScreenState extends State<TopicScreen> {
   final _library = LibraryStore();
+  bool _openingTest = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final t = widget.topic;
-
+    final topic = widget.topic;
     return Scaffold(
-      appBar: AppBar(title: Text(t.title)),
+      appBar: AppBar(title: const Text('Topic workspace')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.md,
+            AppSpacing.xl,
+          ),
           children: [
-            if (t.summary.isNotEmpty)
-              Text(t.summary, style: theme.textTheme.bodyLarge),
-            const SizedBox(height: 16),
-            if (t.slos.isNotEmpty) ...[
-              Text('Learning outcomes', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              for (final s in t.slos)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('•  '),
-                      Expanded(child: Text(s, style: theme.textTheme.bodyMedium)),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 20),
+            _TopicHeader(topic: topic),
+            const SizedBox(height: AppSpacing.lg),
+            if (topic.slos.isNotEmpty) ...[
+              _LearningOutcomes(slos: topic.slos),
+              const SizedBox(height: AppSpacing.lg),
             ],
-            FilledButton.icon(
-              icon: const Icon(Icons.menu_book),
-              label: const Text('Lesson plan'),
+            Text('What do you need?',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.sm),
+            _TaskCard(
+              image: 'assets/ui/illustrations/create_lesson_plan.webp',
+              title: 'Prepare a lesson plan',
+              description:
+                  'Assemble a structured 50-minute plan and swap individual activity variants instantly.',
+              buttonLabel: 'Open lesson plan',
+              icon: Icons.menu_book_outlined,
               onPressed: _openPlan,
             ),
-            const SizedBox(height: 10),
-            FilledButton.tonalIcon(
-              icon: const Icon(Icons.checklist),
-              label: Text(t.hasTest
-                  ? 'Make a 10-question test'
-                  : 'Make a test (${t.nItems} questions available)'),
-              onPressed: t.nItems == 0 ? null : _openTest,
+            const SizedBox(height: AppSpacing.sm),
+            _TaskCard(
+              image: 'assets/ui/illustrations/create_mcq_test.webp',
+              title: 'Create an MCQ paper',
+              description: topic.hasTest
+                  ? 'Draw a fresh paper from ${topic.nItems} verified questions, then save, print, or grade it.'
+                  : 'This topic currently has ${topic.nItems} verified questions, so the paper may contain fewer than 10 questions.',
+              buttonLabel: _openingTest ? 'Preparing…' : 'Create paper',
+              icon: Icons.fact_check_outlined,
+              enabled: topic.nItems > 0 && !_openingTest,
+              accent: true,
+              onPressed: _openTest,
             ),
-            const SizedBox(height: 12),
+            if (!topic.hasTest && topic.nItems > 0) ...[
+              const SizedBox(height: AppSpacing.sm),
+              BayazCard(
+                color: AppColors.softGold,
+                borderColor: const Color(0xFFFFD96A),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: AppColors.warningText),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Bayaz will use every currently available verified question. It will not invent missing items or imply that a 10-question paper exists.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.warningText,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.xl),
+            Text('Need something different?',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              '${t.nItems} verified questions in the bank · '
-              'Chapter ${t.chapter}, section ${t.sectionNo}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
+              'Custom offline AI is optional and slower than the verified curriculum content. It may take 4–5 minutes and must be reviewed.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openCustom('lesson'),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('Custom lesson'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openCustom('mcq'),
+                    icon: const Icon(Icons.quiz_outlined),
+                    label: const Text('Custom MCQs'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _openCustom(String kind) {
+    openOfflineAiScreen(
+      context,
+      (_) => GenerationScreen(
+        initialTopic: widget.topic.title,
+        initialKind: kind,
       ),
     );
   }
@@ -91,61 +151,290 @@ class _TopicScreenState extends State<TopicScreen> {
     ));
   }
 
-  /// Draw a fresh paper. Questions already used for this topic are excluded, so a second
-  /// test on the same topic is genuinely a different test rather than a reshuffle.
   Future<void> _openTest() async {
-    final used = await _usedItemIds(widget.topic.id);
-    if (!mounted) return;
+    if (_openingTest) return;
+    setState(() => _openingTest = true);
     try {
-      final test = widget.content.sampleTest(widget.topic.id, exclude: used);
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: Text(widget.topic.title)),
-          body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: McqTestView(
-                test: test,
-                onSave: () => _saveTest(test),
-                saved: false,
-              ),
-            ),
-          ),
-        ),
-      ));
-    } on StateError catch (e) {
+      final used = await _usedItemIds(widget.topic.id);
       if (!mounted) return;
-      // The bank is exhausted for this topic — say so plainly rather than silently
-      // repeating questions the teacher has already used.
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      McqTest test;
+      try {
+        test = widget.content.sampleTest(widget.topic.id, exclude: used);
+      } on InsufficientUnusedItemsException catch (shortage) {
+        final reuse = await _confirmReuse(shortage);
+        if (reuse != true || !mounted) return;
+        test = widget.content.sampleTest(
+          widget.topic.id,
+          exclude: used,
+          allowReuse: true,
+        );
+      }
+      await _presentTest(test);
+    } on StateError catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _openingTest = false);
     }
   }
 
-  /// Every bank item this teacher has already put on a paper for this topic.
+  Future<bool?> _confirmReuse(InsufficientUnusedItemsException shortage) =>
+      showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Some questions will repeat'),
+          content: Text(
+            'Only ${shortage.availableUnused} unused verified questions remain. '
+            'A ${shortage.required}-question paper needs ${shortage.reuseCount} '
+            'previously used question${shortage.reuseCount == 1 ? '' : 's'}. '
+            'Bayaz will still reshuffle safe answer positions.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Create with repeats'),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _presentTest(McqTest test) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => McqTestScreen(
+        test: test,
+        showReadyAnimation: true,
+        onSave: () => _saveTest(test),
+      ),
+    ));
+  }
+
   Future<Set<String>> _usedItemIds(String topicId) async {
     final saved = await _library.list();
     final used = <String>{};
-    for (final s in saved) {
-      if (s.kind == 'mcq' && s.topicId == topicId && s.contentJson != null) {
-        used.addAll(s.toMcqTest().itemIds);
+    for (final item in saved) {
+      if (item.kind == 'mcq' &&
+          item.topicId == topicId &&
+          item.contentJson != null) {
+        used.addAll(item.toMcqTest().itemIds);
       }
     }
     return used;
   }
 
-  Future<void> _saveTest(dynamic test) async {
+  Future<void> _saveTest(McqTest test) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _library.save(SavedTest(
-      id: now.toString(),
+      id: test.id,
       kind: 'mcq',
+      source: SavedContentSource.curriculumPack,
       topic: widget.topic.title,
       topicId: widget.topic.id,
       createdAtMillis: now,
-      contentJson: test.toJson() as Map<String, dynamic>,
+      contentJson: test.toJson(),
     ));
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Saved to library')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved to Library')),
+      );
     }
+  }
+}
+
+class _TopicHeader extends StatelessWidget {
+  const _TopicHeader({required this.topic});
+  final Topic topic;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: [
+              _HeaderPill(label: 'Chapter ${topic.chapter}'),
+              _HeaderPill(label: 'Section ${topic.sectionNo}'),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            topic.title,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                ),
+          ),
+          if (topic.summary.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              topic.summary,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.88),
+                  ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          StatusChip(
+            label: '${topic.nItems} verified MCQs available',
+            icon: Icons.verified_outlined,
+            backgroundColor: Colors.white.withValues(alpha: 0.14),
+            foregroundColor: Colors.white,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
+}
+
+class _LearningOutcomes extends StatelessWidget {
+  const _LearningOutcomes({required this.slos});
+  final List<String> slos;
+
+  @override
+  Widget build(BuildContext context) {
+    return BayazCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.track_changes_outlined,
+                  color: AppColors.primary),
+              const SizedBox(width: AppSpacing.xs),
+              Text('Learning outcomes',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final outcome in slos) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 7),
+                  child: Icon(Icons.circle,
+                      size: 6, color: AppColors.primaryMedium),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(child: Text(outcome)),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  const _TaskCard({
+    required this.image,
+    required this.title,
+    required this.description,
+    required this.buttonLabel,
+    required this.icon,
+    required this.onPressed,
+    this.enabled = true,
+    this.accent = false,
+  });
+
+  final String image;
+  final String title;
+  final String description;
+  final String buttonLabel;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool enabled;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return BayazCard(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 430;
+          final text = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.xs),
+              Text(description, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: compact ? double.infinity : null,
+                child: accent
+                    ? FilledButton.icon(
+                        onPressed: enabled ? onPressed : null,
+                        icon: Icon(icon),
+                        label: Text(buttonLabel),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: enabled ? onPressed : null,
+                        icon: Icon(icon),
+                        label: Text(buttonLabel),
+                      ),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Image.asset(image, height: 132),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                text,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: text),
+              const SizedBox(width: AppSpacing.md),
+              Image.asset(image, width: 145, height: 145),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

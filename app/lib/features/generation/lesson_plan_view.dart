@@ -1,188 +1,568 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
+import '../../design_system/components/bayaz_card.dart';
+import '../../design_system/components/status_chip.dart';
+import '../../design_system/theme/app_colors.dart';
+import '../../design_system/theme/app_motion.dart';
+import '../../design_system/theme/app_radii.dart';
+import '../../design_system/theme/app_spacing.dart';
+import '../chat/clarification_context.dart';
+import '../chat/clarification_screen.dart';
 import '../content/content_service.dart';
+import '../curriculum/teaching_context.dart';
+import '../curriculum/recent_work_store.dart';
 import '../export/pdf_export.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
+import '../resources/offline_ai_navigation.dart';
+import '../resources/offline_ai_policy.dart';
 import 'lesson_plan.dart';
 
-/// A 5E lesson plan, rendered section by section — and **swappable**.
-///
-/// This is the payoff of generating content at build time (ADR-008). Each section ships
-/// 2–3 independent variants, so "give me a different activity" is a swap that returns in
-/// microseconds. Asking the on-device model to rewrite the plan would cost ~3 minutes, and
-/// modification-is-regeneration is exactly the trap this design avoids.
+typedef SharePdfCallback =
+    Future<bool> Function({required Uint8List bytes, required String filename});
+
 class LessonPlanScreen extends StatefulWidget {
   const LessonPlanScreen({
     super.key,
-    required this.content,
-    required this.topic,
     required this.plan,
+    this.content,
+    this.topic,
+    this.teachingContext,
+    this.initiallySaved = false,
+    this.libraryStore,
+    this.onSave,
+    this.sharePdf,
+    this.offlineAiPolicy,
   });
 
-  final ContentService content;
-  final Topic topic;
+  final ContentService? content;
+  final Topic? topic;
   final LessonPlan plan;
+  final TeachingContext? teachingContext;
+  final bool initiallySaved;
+  final LibraryStore? libraryStore;
+  final Future<void> Function()? onSave;
+  final SharePdfCallback? sharePdf;
+  final OfflineAiPolicy? offlineAiPolicy;
 
   @override
   State<LessonPlanScreen> createState() => _LessonPlanScreenState();
 }
 
 class _LessonPlanScreenState extends State<LessonPlanScreen> {
-  final _library = LibraryStore();
+  late final LibraryStore _library = widget.libraryStore ?? LibraryStore();
   late LessonPlan _plan = widget.plan;
   late final Map<String, List<PlanSection>> _variants =
-      widget.content.variantsFor(widget.topic.id);
-  bool _saved = false;
+      widget.content != null && widget.topic != null
+      ? widget.content!.variantsFor(widget.topic!.id)
+      : const {};
+  late bool _saved = widget.initiallySaved;
+  bool _saving = false;
+  bool _sharing = false;
 
-  /// Swap one section to its next variant. Everything else on the page is untouched —
-  /// the variants are written to stand alone, and the minute budget is fixed in the pack,
-  /// so no swap can overrun the 50-minute period.
   void _cycle(String section) {
     final options = _variants[section];
     if (options == null || options.length < 2) return;
     final current = _plan.sectionOf(section);
-    final i = options.indexWhere((v) => v.id == current?.id);
-    final next = options[(i + 1) % options.length];
+    final index = options.indexWhere((variant) => variant.id == current?.id);
+    final next = options[(index + 1) % options.length];
     setState(() {
       _plan = LessonPlan(
         topicId: _plan.topicId,
         topic: _plan.topic,
         slos: _plan.slos,
         sections: [
-          for (final s in _plan.sections) s.section == section ? next : s,
+          for (final item in _plan.sections)
+            item.section == section ? next : item,
         ],
       );
       _saved = false;
     });
   }
 
-  Future<void> _save() async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await _library.save(SavedTest(
-      id: now.toString(),
-      kind: 'lesson',
-      topic: _plan.topic,
-      topicId: _plan.topicId,
-      createdAtMillis: now,
-      contentJson: _plan.toJson(),
-    ));
-    if (mounted) {
+  Future<void> _save({bool showMessage = true}) async {
+    if (_saving || _saved) return;
+    setState(() => _saving = true);
+    try {
+      final override = widget.onSave;
+      if (override != null) {
+        await override();
+      } else {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final id = now.toString();
+        await _library.save(
+          SavedTest(
+            id: id,
+            kind: 'lesson',
+            source: widget.content == null
+                ? SavedContentSource.customAi
+                : SavedContentSource.curriculumPack,
+            topic: _plan.topic,
+            topicId: widget.topic?.id ?? _plan.topicId,
+            createdAtMillis: now,
+            contentJson: _plan.toJson(),
+            teachingContext: widget.teachingContext,
+          ),
+        );
+        unawaited(
+          RecentWorkStore()
+              .update(RecentWorkReference(type: 'lesson', id: id))
+              .catchError((_) {}),
+        );
+      }
+      if (!mounted) return;
       setState(() => _saved = true);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Saved to library')));
+      if (showMessage) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Saved in Bayaz')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _print() => Printing.layoutPdf(
-        onLayout: (_) => PdfExport.buildLessonPlan(_plan),
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    final neededSave = !_saved;
+    try {
+      if (neededSave) await _save(showMessage: false);
+      final bytes = await PdfExport.buildLessonPlan(
+        _plan,
+        teachingContext: widget.teachingContext,
       );
+      final filename = 'Bayaz-${_plan.topic}-lesson-plan.pdf';
+      final share =
+          widget.sharePdf ??
+          ({required Uint8List bytes, required String filename}) =>
+              Printing.sharePdf(bytes: bytes, filename: filename);
+      final shared = await share(bytes: bytes, filename: filename);
+      if (!mounted) return;
+      if (shared && neededSave) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✓ Saved in Bayaz & shared')),
+        );
+      } else if (!shared && neededSave) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('✓ Saved in Bayaz')));
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final materials = _plan.materials;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(_plan.topic),
+        title: Text(_plan.topic, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: 'Print / PDF',
-            icon: const Icon(Icons.print_outlined),
-            onPressed: _print,
-          ),
-          IconButton(
-            tooltip: _saved ? 'Saved' : 'Save',
-            icon: Icon(_saved ? Icons.bookmark : Icons.bookmark_border),
-            onPressed: _saved ? null : _save,
+            tooltip: 'Ask Bayaz',
+            onPressed: () => openOfflineAiScreen(
+              context,
+              (_) => ClarificationScreen(
+                contextMaterial: ClarificationContext.lesson(_plan),
+                teachingContext: widget.teachingContext,
+              ),
+              policy: widget.offlineAiPolicy,
+            ),
+            icon: const Icon(Icons.forum_outlined),
           ),
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              'Grade 6 · General Science · one ${_plan.totalMinutes}-minute period',
-              style: theme.textTheme.labelLarge
-                  ?.copyWith(color: theme.colorScheme.primary),
+        bottom: false,
+        child: LessonPlanDocument(
+          plan: _plan,
+          teachingContext: widget.teachingContext,
+          variants: _variants,
+          onCycle: _variants.isEmpty ? null : _cycle,
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.outline)),
+          ),
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _sharing ? null : _share,
+                icon: const Icon(Icons.ios_share_rounded),
+                label: Text(_sharing ? 'Sharing…' : 'Share'),
+              ),
+              if (!_saved)
+                FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: Text(_saving ? 'Saving…' : 'Save in Bayaz'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LessonPlanReadOnlyScreen extends StatelessWidget {
+  const LessonPlanReadOnlyScreen({
+    super.key,
+    required this.plan,
+    this.teachingContext,
+  });
+
+  final LessonPlan plan;
+  final TeachingContext? teachingContext;
+
+  @override
+  Widget build(BuildContext context) => LessonPlanScreen(
+    plan: plan,
+    teachingContext: teachingContext,
+    initiallySaved: true,
+  );
+}
+
+class LessonPlanDocument extends StatelessWidget {
+  const LessonPlanDocument({
+    super.key,
+    required this.plan,
+    this.variants = const {},
+    this.onCycle,
+    this.teachingContext,
+  });
+
+  final LessonPlan plan;
+  final Map<String, List<PlanSection>> variants;
+  final ValueChanged<String>? onCycle;
+  final TeachingContext? teachingContext;
+
+  @override
+  Widget build(BuildContext context) {
+    final materials = plan.materials;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.md,
+        AppSpacing.xl,
+      ),
+      children: [
+        _PlanHeader(plan: plan, teachingContext: teachingContext),
+        const SizedBox(height: AppSpacing.md),
+        if (plan.slos.isNotEmpty) ...[
+          _OutcomeCard(slos: plan.slos),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        if (materials.isNotEmpty) ...[
+          _MaterialsCard(materials: materials),
+          const SizedBox(height: AppSpacing.lg),
+        ] else
+          const SizedBox(height: AppSpacing.sm),
+        Text('Lesson sequence', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: AppSpacing.sm),
+        for (final section in plan.sections) ...[
+          _SectionCard(
+            section: section,
+            options: variants[section.section] ?? const [],
+            onCycle: onCycle,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ],
+    );
+  }
+}
+
+class _PlanHeader extends StatelessWidget {
+  const _PlanHeader({required this.plan, this.teachingContext});
+  final LessonPlan plan;
+  final TeachingContext? teachingContext;
+
+  @override
+  Widget build(BuildContext context) {
+    final teaching = [
+      teachingContext?.className,
+      teachingContext?.subjectName,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    return BayazCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (teaching.isNotEmpty)
+                  Text(
+                    teaching,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                if (teaching.isNotEmpty) const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${plan.totalMinutes} minutes total',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            if (materials.isNotEmpty) _materialsCard(theme, materials),
-            for (final s in _plan.sections) _sectionCard(theme, s),
+          ),
+          const Icon(Icons.schedule_outlined, color: AppColors.primary),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutcomeCard extends StatelessWidget {
+  const _OutcomeCard({required this.slos});
+  final List<String> slos;
+
+  @override
+  Widget build(BuildContext context) {
+    return BayazCard(
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: AppSpacing.xs),
+        leading: const Icon(
+          Icons.track_changes_outlined,
+          color: AppColors.primary,
+        ),
+        title: const Text('Learning outcomes'),
+        subtitle: Text('${slos.length} outcomes'),
+        children: [
+          for (final outcome in slos)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 7),
+                    child: Icon(
+                      Icons.circle,
+                      size: 6,
+                      color: AppColors.primaryMedium,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(child: Text(outcome)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MaterialsCard extends StatelessWidget {
+  const _MaterialsCard({required this.materials});
+  final List<String> materials;
+
+  @override
+  Widget build(BuildContext context) {
+    return BayazCard(
+      color: AppColors.softGold,
+      borderColor: const Color(0xFFFFD96A),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.warningText,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  'What to bring',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppColors.warningText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            materials.join(' · '),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.warningText),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.section,
+    required this.options,
+    this.onCycle,
+  });
+
+  final PlanSection section;
+  final List<PlanSection> options;
+  final ValueChanged<String>? onCycle;
+
+  @override
+  Widget build(BuildContext context) {
+    final canSwap = onCycle != null && options.length > 1;
+    return AnimatedSwitcher(
+      duration: AppMotion.standard,
+      switchInCurve: AppMotion.curve,
+      switchOutCurve: AppMotion.curve,
+      child: BayazCard(
+        key: ValueKey(section.id),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: AppColors.softBlue,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _sectionIcon(section.section),
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    LessonPlan.sectionTitles[section.section] ??
+                        section.section,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            if (section.minutes > 0 ||
+                (canSwap && section.variantLabel.isNotEmpty))
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    if (canSwap && section.variantLabel.isNotEmpty)
+                      Text(section.variantLabel),
+                    if (section.minutes > 0)
+                      StatusChip(
+                        label: '${section.minutes} min',
+                        icon: Icons.schedule_outlined,
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(section.body),
+            // A material can be a full sentence, so each one is a wrapping row
+            // rather than a chip: a chip lays its label out on one unbounded
+            // line and overflows the card on a narrow phone.
+            for (final material in section.materials)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: _SectionMaterial(material: material),
+              ),
+            if (canSwap) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => onCycle!(section.section),
+                  icon: const Icon(Icons.autorenew_rounded),
+                  label: Text('Try another (${options.length} available)'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  /// Materials are derived from the activity variants actually chosen, so this list always
-  /// matches what is on the page — swap the activity and the shopping list follows.
-  Widget _materialsCard(ThemeData theme, List<String> materials) => Card(
-        color: theme.colorScheme.secondaryContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                const Icon(Icons.shopping_basket_outlined, size: 18),
-                const SizedBox(width: 8),
-                Text('What to bring', style: theme.textTheme.labelLarge),
-              ]),
-              const SizedBox(height: 6),
-              Text(materials.join(' · '), style: theme.textTheme.bodyMedium),
-            ],
-          ),
-        ),
-      );
+  static IconData _sectionIcon(String section) => switch (section) {
+    'objectives' => Icons.flag_outlined,
+    'revision_starter' => Icons.refresh_rounded,
+    'engage' => Icons.lightbulb_outline_rounded,
+    'explore' => Icons.science_outlined,
+    'explain' => Icons.record_voice_over_outlined,
+    'socratic' => Icons.question_answer_outlined,
+    'elaborate' => Icons.account_tree_outlined,
+    'evaluate' => Icons.fact_check_outlined,
+    'differentiation' => Icons.groups_outlined,
+    'homework' => Icons.home_work_outlined,
+    'notes' => Icons.sticky_note_2_outlined,
+    _ => Icons.circle_outlined,
+  };
+}
 
-  Widget _sectionCard(ThemeData theme, PlanSection s) {
-    final options = _variants[s.section] ?? const [];
-    final canSwap = options.length > 1;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 8, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    LessonPlan.sectionTitles[s.section] ?? s.section,
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                if (s.minutes > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Chip(
-                      label: Text('${s.minutes} min'),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                if (canSwap)
-                  IconButton(
-                    tooltip: 'Try another (${options.length} options)',
-                    icon: const Icon(Icons.autorenew, size: 20),
-                    onPressed: () => _cycle(s.section),
-                  ),
-              ],
+/// One item a teacher has to bring for a section.
+///
+/// The text is free-form and can run to a full sentence, so it is given the
+/// whole card width and allowed to wrap onto as many lines as it needs.
+class _SectionMaterial extends StatelessWidget {
+  const _SectionMaterial({required this.material});
+
+  final String material;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F4FC),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.check_box_outline_blank,
+              size: 15,
+              color: AppColors.textSecondary,
             ),
-            if (canSwap)
-              Text(
-                s.variantLabel,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              material,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
               ),
-            const SizedBox(height: 8),
-            Text(s.body, style: theme.textTheme.bodyMedium),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

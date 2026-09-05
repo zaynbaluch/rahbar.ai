@@ -1,13 +1,46 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val signingProperties = Properties()
+val signingPropertiesFile = rootProject.file("key.properties")
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.inputStream().use(signingProperties::load)
+}
+
+fun signingValue(propertyName: String, environmentName: String): String? =
+    signingProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = signingValue("storeFile", "BAYAZ_KEYSTORE_PATH")
+val releaseStorePassword = signingValue("storePassword", "BAYAZ_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "BAYAZ_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "BAYAZ_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { it != null }
+val releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (releaseTaskRequested && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing is not configured. Provide android/key.properties " +
+            "or BAYAZ_KEYSTORE_PATH, BAYAZ_KEYSTORE_PASSWORD, " +
+            "BAYAZ_KEY_ALIAS, and BAYAZ_KEY_PASSWORD.",
+    )
 }
 
 android {
     namespace = "com.rahbarai.rahbar_ai"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -15,26 +48,40 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.rahbarai.rahbar_ai"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // The bundled llama.cpp runtime is intentionally built for arm64 only.
+        // Restrict every APK so unsupported x86/32-bit devices cannot install a
+        // package whose optional offline-AI runtime would fail to load.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
-            // flutter_gemma's MediaPipe classes trip R8's missing-class check. We use
-            // llama.cpp (not MediaPipe) for inference, so just disable code shrinking
-            // rather than carry keep-rules for an engine we don't ship.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else null
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
