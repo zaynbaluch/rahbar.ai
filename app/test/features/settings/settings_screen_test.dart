@@ -65,4 +65,113 @@ void main() {
     expect(store.state.teacherName, 'Sana');
     expect(store.state.completed, isTrue);
   });
+
+  testWidgets('selecting a one-subject class auto-selects its subject', (
+    tester,
+  ) async {
+    final store = _Store(
+      const OnboardingState(
+        selectedClasses: [],
+        selectedSubjects: [],
+        selectedSubjectsByClass: {},
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TeachingSettingsScreen(store: store, initial: store.state),
+      ),
+    );
+
+    await tester.tap(find.text('Class 6'));
+    await tester.pump();
+
+    final subject = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'General Science'),
+    );
+    expect(subject.value, isTrue);
+  });
+
+  testWidgets('deselecting the sole subject also deselects its class', (
+    tester,
+  ) async {
+    final store = _Store(
+      const OnboardingState(
+        selectedClasses: ['6'],
+        selectedSubjects: ['general_science'],
+        selectedSubjectsByClass: {
+          '6': ['general_science'],
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TeachingSettingsScreen(store: store, initial: store.state),
+      ),
+    );
+
+    await tester.tap(find.text('General Science'));
+    await tester.pump();
+
+    final classTile = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'Class 6'),
+    );
+    expect(classTile.value, isFalse);
+    expect(
+      find.widgetWithText(CheckboxListTile, 'General Science'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a multi-subject class cannot lose its final subject', (
+    tester,
+  ) async {
+    final store = _Store(
+      const OnboardingState(
+        selectedClasses: ['7'],
+        selectedSubjects: ['history'],
+        selectedSubjectsByClass: {
+          '7': ['history'],
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TeachingSettingsScreen(store: store, initial: store.state),
+      ),
+    );
+
+    await tester.tap(find.text('History'));
+    await tester.pump();
+
+    final history = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'History'),
+    );
+    final classTile = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'Class 7'),
+    );
+    expect(history.value, isTrue);
+    expect(classTile.value, isTrue);
+  });
+
+  testWidgets('an existing class with no subject is repaired on open', (
+    tester,
+  ) async {
+    final store = _Store(
+      const OnboardingState(
+        selectedClasses: ['6'],
+        selectedSubjects: [],
+        selectedSubjectsByClass: {'6': []},
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TeachingSettingsScreen(store: store, initial: store.state),
+      ),
+    );
+
+    final subject = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'General Science'),
+    );
+    expect(subject.value, isTrue);
+  });
 }

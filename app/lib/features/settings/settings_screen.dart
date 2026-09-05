@@ -279,15 +279,77 @@ class TeachingSettingsScreen extends StatefulWidget {
 }
 
 class _TeachingSettingsScreenState extends State<TeachingSettingsScreen> {
-  late final Set<String> _classes = widget.initial.selectedClasses.toSet();
-  late final Map<String, Set<String>> _subjects = {
-    for (final entry in widget.initial.selectedSubjectsByClass.entries)
-      entry.key: entry.value.toSet(),
-  };
+  late final Set<String> _classes;
+  late final Map<String, Set<String>> _subjects;
   bool _saving = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _classes = widget.initial.selectedClasses.toSet();
+    _subjects = {
+      for (final entry in widget.initial.selectedSubjectsByClass.entries)
+        entry.key: entry.value.toSet(),
+    };
+    for (final classCode in _classes) {
+      final item = CurriculumCatalog.classByCode(classCode);
+      if (item == null || item.subjects.isEmpty) continue;
+      final validCodes = item.subjects.map((subject) => subject.code).toSet();
+      final selected = _subjects.putIfAbsent(classCode, () => <String>{});
+      selected.removeWhere((code) => !validCodes.contains(code));
+      if (selected.isEmpty) selected.add(item.subjects.first.code);
+    }
+  }
+
+  bool get _canSave =>
+      _classes.isNotEmpty &&
+      _classes.every((code) => _subjects[code]?.isNotEmpty ?? false);
+
+  void _setClassSelected(CurriculumClass item, bool selected) {
+    setState(() {
+      if (!selected) {
+        _classes.remove(item.code);
+        _subjects.remove(item.code);
+        return;
+      }
+
+      _classes.add(item.code);
+      final values = _subjects.putIfAbsent(item.code, () => <String>{});
+      final validCodes = item.subjects.map((subject) => subject.code).toSet();
+      values.removeWhere((code) => !validCodes.contains(code));
+      if (values.isEmpty && item.subjects.isNotEmpty) {
+        values.add(item.subjects.first.code);
+      }
+    });
+  }
+
+  void _setSubjectSelected(
+    CurriculumClass item,
+    CurriculumSubject subject,
+    bool selected,
+  ) {
+    setState(() {
+      final values = _subjects.putIfAbsent(item.code, () => <String>{});
+      if (selected) {
+        _classes.add(item.code);
+        values.add(subject.code);
+        return;
+      }
+      if (!values.contains(subject.code)) return;
+
+      if (values.length == 1) {
+        if (item.subjects.length == 1) {
+          _classes.remove(item.code);
+          _subjects.remove(item.code);
+        }
+        return;
+      }
+      values.remove(subject.code);
+    });
+  }
+
   Future<void> _save() async {
-    if (_saving || _classes.isEmpty) return;
+    if (_saving || !_canSave) return;
     setState(() => _saving = true);
     final byClass = <String, List<String>>{
       for (final code in _classes)
@@ -317,17 +379,8 @@ class _TeachingSettingsScreenState extends State<TeachingSettingsScreen> {
               value: _classes.contains(item.code),
               title: Text(item.name),
               contentPadding: EdgeInsets.zero,
-              onChanged: (selected) => setState(() {
-                if (selected == true) {
-                  _classes.add(item.code);
-                  _subjects.putIfAbsent(
-                    item.code,
-                    () => item.subjects.map((s) => s.code).toSet(),
-                  );
-                } else {
-                  _classes.remove(item.code);
-                }
-              }),
+              onChanged: (selected) =>
+                  _setClassSelected(item, selected == true),
             ),
             if (_classes.contains(item.code))
               Padding(
@@ -341,17 +394,11 @@ class _TeachingSettingsScreenState extends State<TeachingSettingsScreen> {
                         ),
                         title: Text(subject.name),
                         contentPadding: EdgeInsets.zero,
-                        onChanged: (selected) => setState(() {
-                          final values = _subjects.putIfAbsent(
-                            item.code,
-                            () => <String>{},
-                          );
-                          if (selected == true) {
-                            values.add(subject.code);
-                          } else {
-                            values.remove(subject.code);
-                          }
-                        }),
+                        onChanged: (selected) => _setSubjectSelected(
+                          item,
+                          subject,
+                          selected == true,
+                        ),
                       ),
                   ],
                 ),
@@ -360,7 +407,7 @@ class _TeachingSettingsScreenState extends State<TeachingSettingsScreen> {
           ],
           const SizedBox(height: AppSpacing.md),
           FilledButton(
-            onPressed: _saving || _classes.isEmpty ? null : _save,
+            onPressed: _saving || !_canSave ? null : _save,
             child: Text(_saving ? 'Saving…' : 'Save'),
           ),
         ],
