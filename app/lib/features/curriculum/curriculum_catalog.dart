@@ -38,6 +38,24 @@ abstract final class CurriculumCatalog {
         ),
       ],
     ),
+    CurriculumClass(
+      code: '7',
+      name: 'Class 7',
+      subjects: [
+        CurriculumSubject(
+          code: 'general_science',
+          name: 'General Science',
+          moduleId: 'curriculum.pk.class7.general_science',
+          description: 'Verified offline lessons and assessment items.',
+        ),
+        CurriculumSubject(
+          code: 'history',
+          name: 'History',
+          moduleId: 'curriculum.pk.class7.history',
+          description: 'Verified offline lessons and assessment items.',
+        ),
+      ],
+    ),
   ];
 
   static CurriculumClass? classByCode(String code) {
