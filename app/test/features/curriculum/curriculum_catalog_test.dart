@@ -2,17 +2,32 @@ import 'package:bayaz_ai/features/curriculum/curriculum_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('catalog exposes only real supported class and subject modules', () {
-    final curriculumClass = CurriculumCatalog.classByCode('6');
+  test('catalog exposes the three real supported class and subject modules', () {
+    final class6 = CurriculumCatalog.classByCode('6');
+    final class7 = CurriculumCatalog.classByCode('7');
 
-    expect(curriculumClass, isNotNull);
-    expect(curriculumClass!.name, 'Class 6');
-    expect(curriculumClass.subjects.single.code, 'general_science');
+    expect(class6, isNotNull);
+    expect(class6!.name, 'Class 6');
+    expect(class6.subjects, hasLength(1));
+    expect(class6.subjects.single.code, 'general_science');
     expect(
-      curriculumClass.subjects.single.moduleId,
+      class6.subjects.single.moduleId,
       'curriculum.pk.class6.general_science',
     );
-    expect(CurriculumCatalog.classByCode('7'), isNull);
+
+    expect(class7, isNotNull);
+    expect(class7!.name, 'Class 7');
+    expect(
+      class7.subjects.map((subject) => subject.code).toList(),
+      ['general_science', 'history'],
+    );
+    expect(
+      class7.subjects.map((subject) => subject.moduleId).toList(),
+      [
+        'curriculum.pk.class7.general_science',
+        'curriculum.pk.class7.history',
+      ],
+    );
   });
 
   test('class, subject, and module identifiers are unique', () {
