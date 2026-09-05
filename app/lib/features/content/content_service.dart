@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../curriculum/curriculum_module_registry.dart';
+import '../curriculum/teaching_context.dart';
 import '../generation/lesson_plan.dart';
 import '../generation/mcq_parser.dart';
 import 'mcq_option_balancer.dart';
@@ -67,25 +69,48 @@ class InsufficientUnusedItemsException implements Exception {
 /// variants, not generated. The on-device SLM keeps the tail: short open-ended chat, and
 /// an escape hatch for topics outside the pack.
 class ContentService {
+  ContentService({TeachingContext? teachingContext})
+    : _teachingContext = teachingContext;
+
   Database? _db;
+  CurriculumModuleAssets? _module;
+  TeachingContext? _teachingContext;
   final _rng = Random();
 
   bool get isReady => _db != null;
+  String? get activeModuleId => _module?.moduleId;
 
-  /// Copy the read-only asset out of the bundle so sqlite3 can open it. Same pattern as
-  /// [RagService.init].
-  Future<void> init() async {
-    if (isReady) return;
+  /// Copy the selected read-only asset out of the bundle so sqlite3 can open it.
+  Future<void> init() => switchContext(_teachingContext);
+
+  /// Open [teachingContext]'s content pack before releasing the current database.
+  /// This keeps context changes atomic: a failed asset load can never leave a new
+  /// class/subject label backed by the previous module's data.
+  Future<void> switchContext(TeachingContext? teachingContext) async {
+    final module = CurriculumModuleRegistry.resolve(teachingContext);
+    if (_db != null && _module?.moduleId == module.moduleId) {
+      _teachingContext = teachingContext;
+      return;
+    }
+
     final support = await getApplicationSupportDirectory();
-    final path = p.join(support.path, 'content_pack.db');
-    final bytes = await rootBundle.load('assets/content/content_pack.db');
+    final safeModuleId = module.moduleId.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final path = p.join(support.path, 'content_pack.$safeModuleId.db');
+    final bytes = await rootBundle.load(module.contentAsset);
     await File(path).writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-    _db = sqlite3.open(path, mode: OpenMode.readOnly);
+    final next = sqlite3.open(path, mode: OpenMode.readOnly);
+
+    final previous = _db;
+    _db = next;
+    _module = module;
+    _teachingContext = teachingContext;
+    previous?.close();
   }
 
   void dispose() {
     _db?.close();
     _db = null;
+    _module = null;
   }
 
   String get packVersion {

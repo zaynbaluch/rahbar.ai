@@ -72,12 +72,12 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
   @override
   void initState() {
     super.initState();
+    _context = widget.teachingContext;
     _ownsContent = widget.content == null;
-    _content = widget.content ?? ContentService();
+    _content = widget.content ?? ContentService(teachingContext: _context);
     _onboardingStore = widget.onboardingStore ?? OnboardingStore();
     _workflowContexts = widget.workflowContextStore ?? WorkflowContextStore();
     _library = widget.libraryStore ?? LibraryStore();
-    _context = widget.teachingContext;
     _load();
   }
 
@@ -375,9 +375,28 @@ class _TopicPickerScreenState extends State<TopicPickerScreen> {
       initial: _context,
     );
     if (next == null || !mounted) return;
-    await _workflowContexts.save(_workflowKey, next);
-    if (!mounted) return;
-    setState(() => _context = next);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await _content.switchContext(next);
+      final topics = _content.listTopics();
+      await _workflowContexts.save(_workflowKey, next);
+      if (!mounted) return;
+      _search.clear();
+      setState(() {
+        _context = next;
+        _all = topics;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$error';
+        _loading = false;
+      });
+    }
   }
 
   Widget _errorView() => Center(
