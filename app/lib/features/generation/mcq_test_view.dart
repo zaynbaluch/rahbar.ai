@@ -12,6 +12,7 @@ import '../curriculum/teaching_context.dart';
 import '../export/pdf_export.dart';
 import '../omr/grading_screen.dart';
 import '../resources/offline_ai_navigation.dart';
+import '../resources/offline_ai_policy.dart';
 import 'mcq_parser.dart';
 
 typedef McqSharePdfCallback =
@@ -33,6 +34,7 @@ class McqTestScreen extends StatelessWidget {
     this.showReadyAnimation = false,
     this.sharePdf,
     this.openGrading,
+    this.offlineAiPolicy,
   });
 
   final McqTest test;
@@ -42,6 +44,7 @@ class McqTestScreen extends StatelessWidget {
   final bool showReadyAnimation;
   final McqSharePdfCallback? sharePdf;
   final OpenGradingCallback? openGrading;
+  final OfflineAiPolicy? offlineAiPolicy;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +58,9 @@ class McqTestScreen extends StatelessWidget {
               context,
               (_) => ClarificationScreen(
                 contextMaterial: ClarificationContext.test(test),
+                teachingContext: teachingContext,
               ),
+              policy: offlineAiPolicy,
             ),
             icon: const Icon(Icons.forum_outlined),
           ),

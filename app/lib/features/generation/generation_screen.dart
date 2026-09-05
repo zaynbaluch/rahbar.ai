@@ -593,6 +593,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
                   const SizedBox(height: AppSpacing.lg),
                   McqTestView(
                     test: _test!,
+                    teachingContext: widget.teachingContext,
                     onSave: _save,
                     saved: _saved,
                     showReadyAnimation: true,
@@ -616,6 +617,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
                             contextMaterial: ClarificationContext.lesson(
                               _lessonPlan!,
                             ),
+                            teachingContext: widget.teachingContext,
                           ),
                           policy: _offlineAiPolicy,
                         ),
@@ -645,7 +647,10 @@ class _GenerationScreenState extends State<GenerationScreen> {
                   const SizedBox(height: AppSpacing.sm),
                   SizedBox(
                     height: MediaQuery.sizeOf(context).height * 0.72,
-                    child: LessonPlanDocument(plan: _lessonPlan!),
+                    child: LessonPlanDocument(
+                      plan: _lessonPlan!,
+                      teachingContext: widget.teachingContext,
+                    ),
                   ),
                 ] else if (_output.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.lg),
