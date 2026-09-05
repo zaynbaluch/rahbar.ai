@@ -74,6 +74,8 @@ flutter:
     - assets/prompts/ # grounded templates for the on-device escape hatch
     - assets/ui/ # metadata files stored directly in the UI asset root
     - assets/config/ # runtime resource manifest and module metadata
+    - assets/curricula/pk/class7/general_science/
+    - assets/curricula/pk/class7/history/
     - assets/ui/branding/
     - assets/ui/illustrations/
     - assets/ui/grading/
