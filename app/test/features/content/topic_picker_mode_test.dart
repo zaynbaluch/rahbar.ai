@@ -1,6 +1,8 @@
 import 'package:bayaz_ai/features/content/content_service.dart';
 import 'package:bayaz_ai/features/content/topic_picker_screen.dart';
 import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
+import 'package:bayaz_ai/features/curriculum/workflow_context_store.dart';
+import 'package:bayaz_ai/features/onboarding/onboarding_store.dart';
 import 'package:bayaz_ai/features/generation/lesson_plan.dart';
 import 'package:bayaz_ai/features/generation/lesson_plan_view.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +52,55 @@ class _Content extends ContentService {
 
   @override
   void dispose() {}
+}
+
+
+
+class _Onboarding extends OnboardingStore {
+  @override
+  Future<OnboardingState> read() async => const OnboardingState(
+    selectedClasses: ['6', '7'],
+    selectedSubjectsByClass: {
+      '6': ['general_science'],
+      '7': ['history'],
+    },
+  );
+}
+
+class _WorkflowContexts extends WorkflowContextStore {
+  TeachingContext? saved;
+
+  @override
+  Future<void> save(String workflow, TeachingContext context) async {
+    saved = context;
+  }
+}
+
+class _SwitchingContent extends _Content {
+  final switches = <TeachingContext?>[];
+  bool history = false;
+
+  @override
+  Future<void> switchContext(TeachingContext? teachingContext) async {
+    switches.add(teachingContext);
+    history = teachingContext?.classCode == '7' &&
+        teachingContext?.subjectCode == 'history';
+  }
+
+  @override
+  List<Topic> get topics => history
+      ? const [
+          Topic(
+            id: 'middle-ages',
+            chapter: 1,
+            sectionNo: '1.1',
+            title: 'Middle Ages in Europe',
+            summary: 'A Class 7 History topic.',
+            slos: [],
+            nItems: 18,
+          ),
+        ]
+      : super.topics;
 }
 
 class _GroupedContent extends _Content {
@@ -251,4 +302,42 @@ void main() {
     final setupScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
     expect(setupScaffold.bottomNavigationBar, isNotNull);
   });
+
+  testWidgets('changing teaching context switches the content module before refreshing topics', (
+    tester,
+  ) async {
+    final content = _SwitchingContent();
+    final workflow = _WorkflowContexts();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TopicPickerScreen(
+          mode: TopicPickerMode.lesson,
+          teachingContext: _context,
+          showContextChange: true,
+          content: content,
+          onboardingStore: _Onboarding(),
+          workflowContextStore: workflow,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cells'), findsOneWidget);
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Class 7'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(content.switches, hasLength(1));
+    expect(content.switches.single?.classCode, '7');
+    expect(content.switches.single?.subjectCode, 'history');
+    expect(workflow.saved?.classCode, '7');
+    expect(workflow.saved?.subjectCode, 'history');
+    expect(find.text('Class 7 · History'), findsOneWidget);
+    expect(find.text('Middle Ages in Europe'), findsOneWidget);
+    expect(find.text('Cells'), findsNothing);
+  });
+
 }
