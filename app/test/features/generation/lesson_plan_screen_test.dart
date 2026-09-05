@@ -1,12 +1,15 @@
 import 'dart:typed_data';
 
 import 'package:bayaz_ai/core/storage/local_store_load.dart';
+import 'package:bayaz_ai/features/chat/clarification_screen.dart';
 import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
 import 'package:bayaz_ai/features/generation/lesson_plan.dart';
 import 'package:bayaz_ai/features/generation/lesson_plan_view.dart';
 import 'package:bayaz_ai/features/library/library_store.dart';
 import 'package:bayaz_ai/features/library/library_screen.dart';
 import 'package:bayaz_ai/features/library/saved_test.dart';
+import 'package:bayaz_ai/features/onboarding/onboarding_store.dart';
+import 'package:bayaz_ai/features/resources/offline_ai_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,6 +43,13 @@ const _context = TeachingContext(
   className: 'Class 8',
   subjectCode: 'biology',
   subjectName: 'Biology',
+);
+
+const _historyContext = TeachingContext(
+  classCode: '7',
+  className: 'Class 7',
+  subjectCode: 'history',
+  subjectName: 'History',
 );
 
 void main() {
@@ -106,4 +116,30 @@ void main() {
     expect(find.text('Share'), findsOneWidget);
     expect(find.text('Save in Bayaz'), findsNothing);
   });
+
+  testWidgets('Ask Bayaz from a lesson carries its teaching context', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LessonPlanScreen(
+          plan: _plan,
+          teachingContext: _historyContext,
+          offlineAiPolicy: OfflineAiPolicy(
+            readState: () async => const OnboardingState(offlineAiEnabled: true),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Ask Bayaz'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final chat = tester.widget<ClarificationScreen>(
+      find.byType(ClarificationScreen),
+    );
+    expect(chat.teachingContext?.classCode, '7');
+    expect(chat.teachingContext?.subjectCode, 'history');
+  });
+
 }

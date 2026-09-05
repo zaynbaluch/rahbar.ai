@@ -19,6 +19,7 @@ import '../export/pdf_export.dart';
 import '../library/library_store.dart';
 import '../library/saved_test.dart';
 import '../resources/offline_ai_navigation.dart';
+import '../resources/offline_ai_policy.dart';
 import 'lesson_plan.dart';
 
 typedef SharePdfCallback =
@@ -35,6 +36,7 @@ class LessonPlanScreen extends StatefulWidget {
     this.libraryStore,
     this.onSave,
     this.sharePdf,
+    this.offlineAiPolicy,
   });
 
   final ContentService? content;
@@ -45,6 +47,7 @@ class LessonPlanScreen extends StatefulWidget {
   final LibraryStore? libraryStore;
   final Future<void> Function()? onSave;
   final SharePdfCallback? sharePdf;
+  final OfflineAiPolicy? offlineAiPolicy;
 
   @override
   State<LessonPlanScreen> createState() => _LessonPlanScreenState();
@@ -166,7 +169,9 @@ class _LessonPlanScreenState extends State<LessonPlanScreen> {
               context,
               (_) => ClarificationScreen(
                 contextMaterial: ClarificationContext.lesson(_plan),
+                teachingContext: widget.teachingContext,
               ),
+              policy: widget.offlineAiPolicy,
             ),
             icon: const Icon(Icons.forum_outlined),
           ),

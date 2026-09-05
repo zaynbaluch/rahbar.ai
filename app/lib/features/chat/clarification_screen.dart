@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../design_system/components/bayaz_card.dart';
 import '../../design_system/theme/app_colors.dart';
 import '../../design_system/theme/app_spacing.dart';
+import '../curriculum/teaching_context.dart';
 import '../generation/generated_output_sanitizer.dart';
 import '../generation/llama_cpp_service.dart';
 import '../generation/local_ai_route_lifecycle.dart';
@@ -45,6 +46,7 @@ class ClarificationScreen extends StatefulWidget {
   const ClarificationScreen({
     super.key,
     required this.contextMaterial,
+    this.teachingContext,
     this.offlineAiPolicy,
     this.policyEnabledOverride,
     this.readinessOverride,
@@ -52,6 +54,7 @@ class ClarificationScreen extends StatefulWidget {
     this.onReportIssue,
   });
   final ClarificationContext contextMaterial;
+  final TeachingContext? teachingContext;
   final OfflineAiPolicy? offlineAiPolicy;
   final Future<bool> Function()? policyEnabledOverride;
   final Future<bool> Function()? readinessOverride;
@@ -64,7 +67,7 @@ class ClarificationScreen extends StatefulWidget {
 class _ClarificationScreenState extends State<ClarificationScreen> {
   final _question = TextEditingController();
   final _scroll = ScrollController();
-  final _rag = RagService();
+  late final RagService _rag;
   final _llama = LlamaCppService();
   final _modelHandoff = const LocalModelHandoff();
   final _routeLifecycle = LocalAiRouteLifecycle();
@@ -84,6 +87,7 @@ class _ClarificationScreenState extends State<ClarificationScreen> {
   @override
   void initState() {
     super.initState();
+    _rag = RagService(teachingContext: widget.teachingContext);
     _offlineAiPolicy = widget.offlineAiPolicy ?? OfflineAiPolicy();
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_checkReadiness()),

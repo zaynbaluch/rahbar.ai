@@ -1,8 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:bayaz_ai/features/curriculum/teaching_context.dart';
+import 'package:bayaz_ai/features/chat/clarification_screen.dart';
 import 'package:bayaz_ai/features/generation/mcq_parser.dart';
 import 'package:bayaz_ai/features/generation/mcq_test_view.dart';
+import 'package:bayaz_ai/features/onboarding/onboarding_store.dart';
+import 'package:bayaz_ai/features/resources/offline_ai_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,7 +28,7 @@ McqTest _paper([int count = 5]) => McqTest(
 const _context = TeachingContext(
   classCode: '6',
   className: 'Class 6',
-  subjectCode: 'science',
+  subjectCode: 'general_science',
   subjectName: 'Science',
 );
 
@@ -113,4 +116,30 @@ void main() {
     expect(saves, 1);
     expect(gradingOpens, 1);
   });
+
+  testWidgets('Ask Bayaz from a test carries its teaching context', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: McqTestScreen(
+          test: _paper(),
+          teachingContext: _context,
+          offlineAiPolicy: OfflineAiPolicy(
+            readState: () async => const OnboardingState(offlineAiEnabled: true),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Ask Bayaz'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final chat = tester.widget<ClarificationScreen>(
+      find.byType(ClarificationScreen),
+    );
+    expect(chat.teachingContext?.classCode, '6');
+    expect(chat.teachingContext?.subjectCode, 'general_science');
+  });
+
 }
