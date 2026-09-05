@@ -70,6 +70,9 @@ class InsufficientUnusedItemsException implements Exception {
 /// an escape hatch for topics outside the pack.
 class ContentService {
   ContentService({TeachingContext? teachingContext})
+    // Keep the public named argument `teachingContext`; an initializing formal
+    // would expose the private backing-field name as the constructor API.
+    // ignore: prefer_initializing_formals
     : _teachingContext = teachingContext;
 
   Database? _db;
