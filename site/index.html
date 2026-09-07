@@ -1,0 +1,213 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#003CFF" />
+  <meta name="description" content="Bayaz AI is an offline AI app for teachers. Once its AI resources are downloaded, it can run on-device without an internet connection for lesson planning, assessment creation, phone-based OMR grading, and class results." />
+  <meta property="og:title" content="Bayaz AI | Offline AI for teachers" />
+  <meta property="og:description" content="An offline teacher workflow for lesson planning, assessment creation, phone-based OMR grading, and class results." />
+  <title>Bayaz AI | Offline AI for teachers</title>
+  <link rel="icon" href="assets/bayaz-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="scroll-progress" aria-hidden="true"><span data-progress></span></div>
+
+  <header class="header" data-header>
+    <a class="brand" href="#top" aria-label="Bayaz AI home">
+      <img src="assets/bayaz-icon.png" alt="" />
+      <b>Bayaz AI</b>
+    </a>
+    <button class="menu" data-menu aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" data-nav>
+      <a href="#workflow" data-nav-link>Workflow</a>
+      <a href="#grading" data-nav-link>Grading</a>
+      <a href="#results" data-nav-link>Results</a>
+      <a href="#technology" data-nav-link>Technology</a>
+      <a href="#screens" data-nav-link>Screens</a>
+      <a class="nav-cta" href="https://github.com/zaynbaluch/rahbar.ai">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero shell" data-section>
+      <div class="hero-copy reveal">
+        <p class="eyebrow">Offline AI for teachers</p>
+        <h1>AI for teachers.<br><em class="paper-line">Paper for students.</em></h1>
+        <p class="lede">Once its AI resources are downloaded, Bayaz runs on-device without an internet connection. Teachers can plan lessons, create tests, print them, grade answer sheets from a phone, and review class results in one app.</p>
+        <div class="actions">
+          <a class="btn primary" href="#workflow">See how it works</a>
+          <a class="btn secondary" href="https://github.com/zaynbaluch/rahbar.ai">Browse the code</a>
+        </div>
+      </div>
+
+      <div class="hero-visual reveal" data-hero-visual>
+        <div class="hero-orbit one" aria-hidden="true"></div>
+        <div class="hero-orbit two" aria-hidden="true"></div>
+        <figure class="phone back" data-parallax="back"><img src="assets/screens/class-results.png" alt="Bayaz class results screen" /></figure>
+        <figure class="phone front" data-parallax="front"><img src="assets/screens/home.png" alt="Bayaz teacher home screen" /></figure>
+        <div class="float-card review" data-parallax="card"><span class="status-dot"></span><span><b>Teacher review</b><small>Only for an uncertain answer</small></span></div>
+        <div class="float-card paper" data-parallax="card"><span class="paper-icon" aria-hidden="true">▤</span><span><b>Paper stays</b><small>The phone is a teacher tool</small></span></div>
+      </div>
+    </section>
+
+    <section id="workflow" class="shell section" data-section>
+      <header class="section-head reveal">
+        <p class="eyebrow">The workflow</p>
+        <h2>Planning, testing and grading live in the same app.</h2>
+        <p>Each step uses the class and curriculum context the teacher has already chosen, so work can move from preparation to results without rebuilding the context each time.</p>
+      </header>
+
+      <div class="workflow" data-workflow>
+        <article class="flow-card reveal">
+          <span class="step">01</span>
+          <h3>Guided lesson planning</h3>
+          <p>Pick the class and curriculum topic, work from the structured lesson guidance, and save the plan in My Work.</p>
+          <img src="assets/screens/custom-lesson.png" alt="Bayaz custom lesson setup" />
+        </article>
+        <article class="flow-card reveal">
+          <span class="step">02</span>
+          <h3>Create a test</h3>
+          <p>Choose a topic and question count. Bayaz generates the MCQs, then the teacher can review and export a printable PDF.</p>
+          <img src="assets/screens/create-test.png" alt="Bayaz assessment setup" />
+        </article>
+        <article class="flow-card dark reveal">
+          <span class="step">03</span>
+          <h3>Grade the answer sheet</h3>
+          <p>Take a photo or choose an image. Bayaz aligns its answer sheet, reads the marked bubbles, and checks the saved key.</p>
+          <img src="assets/screens/human-review.png" alt="Bayaz asking for teacher review of an unclear answer" />
+        </article>
+        <article class="flow-card reveal">
+          <span class="step">04</span>
+          <h3>Open the results</h3>
+          <p>Save the score, open the class view, and inspect questions that several students answered incorrectly.</p>
+          <img src="assets/screens/class-results.png" alt="Bayaz class results" />
+        </article>
+      </div>
+      <p class="swipe-note" aria-hidden="true">Swipe through the workflow on smaller screens.</p>
+    </section>
+
+    <section id="grading" class="grading" data-section>
+      <div class="shell grading-grid">
+        <div class="grading-copy reveal">
+          <p class="eyebrow pale">OMR with teacher review</p>
+          <h2>When a mark is unclear, Bayaz asks the teacher.</h2>
+          <p class="light-copy">The grading pipeline scores answers it can read confidently. If a bubble is ambiguous, the app stops on that question and waits for the teacher to choose the answer before the result is saved.</p>
+          <div class="grading-points">
+            <div><span>Clear marks</span><p>Read automatically and checked against the saved answer key.</p></div>
+            <div><span>Uncertain marks</span><p>Shown in context so the teacher can make the final call.</p></div>
+          </div>
+        </div>
+        <figure class="review-shot reveal">
+          <div class="capture-tag">Android capture</div>
+          <img src="assets/screens/human-review.png" alt="Bayaz asking the teacher to resolve an uncertain OMR answer" />
+          <figcaption>In this scan, Question 3 needs review. The other readable answers are already graded.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="results" class="shell section" data-section>
+      <div class="split reveal">
+        <div>
+          <p class="eyebrow">Class results</p>
+          <h2>See which questions caused trouble.</h2>
+        </div>
+        <p>Bayaz keeps each saved result tied to the assessment and class. The teacher can move from the class summary to a question or an individual student result.</p>
+      </div>
+
+      <div class="result-cards">
+        <article class="result-card reveal">
+          <span>Question-level insight</span>
+          <h3>Find repeated mistakes.</h3>
+          <p>Open a question to see how many students missed it and how answers were distributed.</p>
+        </article>
+        <article class="result-card reveal">
+          <span>Student results</span>
+          <h3>Check the paper behind the score.</h3>
+          <p>Open an individual result and review the recorded answer for each question.</p>
+        </article>
+      </div>
+      <figure class="board reveal"><img src="assets/boards/insights.png" alt="Bayaz class results, question insight, and individual result screens" /></figure>
+    </section>
+
+    <section class="paper-first">
+      <div class="shell paper-grid">
+        <div class="paper-visual reveal">
+          <img src="assets/boards/assessment.png" alt="Bayaz assessment creation and printable PDF workflow" />
+        </div>
+        <div class="reveal">
+          <p class="eyebrow brown">Paper-first classrooms</p>
+          <h2>Built around the way the classroom already works.</h2>
+          <p>Teachers can prepare the assessment digitally while students receive an ordinary printed paper. The phone comes back into the workflow when the teacher is ready to grade.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="technology" class="shell section" data-section>
+      <header class="section-head reveal">
+        <p class="eyebrow">Under the hood</p>
+        <h2>A small stack for the teacher workflow.</h2>
+        <p>The Android app combines Flutter, packaged curriculum content, optional local AI resources, PDF export, and a custom OMR pipeline.</p>
+      </header>
+      <div class="tech">
+        <article class="reveal"><h3>Flutter and Dart</h3><p>The teacher app and its classroom workflow run on Android.</p></article>
+        <article class="reveal"><h3>Curriculum context</h3><p>Packaged content gives lesson and assessment workflows the class and topic context they need.</p></article>
+        <article class="reveal"><h3>Optional local AI</h3><p>Downloaded model resources support custom lesson and test features plus Ask Bayaz.</p></article>
+        <article class="reveal"><h3>Custom OMR</h3><p>Alignment, bubble analysis and confidence checks are built around Bayaz answer sheets.</p></article>
+      </div>
+    </section>
+
+    <section id="screens" class="shell section gallery" data-section>
+      <div class="split reveal">
+        <div>
+          <p class="eyebrow">From the Android build</p>
+          <h2>See the workflows in full.</h2>
+        </div>
+        <p>These boards use screenshots captured from the Bayaz build used during hackathon testing. Open any board to inspect it at full size.</p>
+      </div>
+      <div class="gallery-grid">
+        <button class="gallery-card reveal" type="button" data-lightbox="assets/boards/guided-lessons.png" data-alt="Guided lesson planning workflow">
+          <img src="assets/boards/guided-lessons.png" alt="Guided lesson planning workflow" />
+          <span>Guided lesson planning</span>
+        </button>
+        <button class="gallery-card reveal" type="button" data-lightbox="assets/boards/assessment.png" data-alt="Assessment creation workflow">
+          <img src="assets/boards/assessment.png" alt="Assessment creation workflow" />
+          <span>Assessment creation</span>
+        </button>
+        <button class="gallery-card reveal" type="button" data-lightbox="assets/boards/omr.png" data-alt="Confidence-aware OMR workflow">
+          <img src="assets/boards/omr.png" alt="Confidence-aware OMR workflow" />
+          <span>OMR grading</span>
+        </button>
+        <button class="gallery-card reveal" type="button" data-lightbox="assets/boards/insights.png" data-alt="Class insights workflow">
+          <img src="assets/boards/insights.png" alt="Class insights workflow" />
+          <span>Class insights</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="shell final">
+      <div class="cta reveal">
+        <p class="eyebrow pale">Bayaz AI</p>
+        <h2>The code is on GitHub.</h2>
+        <p>Read the Flutter app, curriculum pipeline, OMR implementation, and project notes in the repository.</p>
+        <div class="actions"><a class="btn white" href="https://github.com/zaynbaluch/rahbar.ai">Open GitHub</a></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell footer">
+    <a class="brand" href="#top"><img src="assets/bayaz-icon.png" alt="" /><b>Bayaz AI</b></a>
+    <p>Built for teachers.</p>
+    <span>Hackathon build, 2026</span>
+  </footer>
+
+  <dialog class="lightbox" data-lightbox-dialog aria-label="Workflow screenshot">
+    <button class="lightbox-close" type="button" data-lightbox-close aria-label="Close image">Close</button>
+    <img data-lightbox-image src="" alt="" />
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
